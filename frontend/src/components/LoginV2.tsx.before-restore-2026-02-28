@@ -1,0 +1,235 @@
+// ENTERPRISE FIX: Exact Legacy UI Restoration - 2026-02-27
+// ENTERPRISE FIX: Router Context Fixed - 2026-02-26
+// ENTERPRISE FIX: Safe Arabic Encoding Repair - 2026-02-28
+
+import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { Eye, EyeOff, Lock, User } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { login } from '@services/authService';
+import type { AuthLoginResponse } from '@services/authService';
+
+const ROLE_REDIRECT_MAP: Record<string, string> = {
+  admin: '/',
+  SuperAdmin: '/',
+  general_supervisor: '/users',
+  special_supervisor: '/users',
+  manager: '/operations',
+  operator: '/operations',
+  storekeeper: '/items',
+  production_manager: '/items',
+  dispatch_officer: '/orders',
+  dispatch_manager: '/orders',
+  customer: '/orders',
+  default: '/dashboard',
+};
+
+const ERROR_MESSAGES: Record<number, string> = {
+  400: 'اسم المستخدم أو كلمة المرور غير صحيحة. يرجى التأكد من صحة البيانات.',
+  422: 'اسم المستخدم أو كلمة المرور غير صحيحة. يرجى التأكد من صحة البيانات.',
+  401: 'بيانات الاعتماد غير صالحة أو منتهية الصلاحية.',
+  403: 'ليس لديك صلاحية الوصول لهذه الوحدة.',
+  500: 'حدث خطأ غير متوقع في الخادم. يرجى المحاولة لاحقاً.',
+};
+
+const getErrorMessage = (status?: number, defaultMessage?: string): string => {
+  if (status && ERROR_MESSAGES[status]) {
+    return ERROR_MESSAGES[status];
+  }
+  return defaultMessage || 'حدث خطأ غير معروف. يرجى المحاولة مرة أخرى أو الاتصال بالدعم الفني.';
+};
+
+interface LoginV2Props {
+  users?: any[];
+  onAuthenticated?: (user: any, redirectTo: string) => void;
+}
+
+const LoginV2: React.FC<LoginV2Props> = ({ users = [], onAuthenticated }) => {
+  const navigate = useNavigate();
+
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = useState<{ username?: string; password?: string }>({});
+
+  useEffect(() => {
+    if (users && users.length > 0) {
+      console.log('[LoginV2] Demo users available:', users.length);
+    }
+  }, [users]);
+
+  const validateForm = (): boolean => {
+    const errors: { username?: string; password?: string } = {};
+
+    if (!username || username.trim().length === 0) {
+      errors.username = 'اسم المستخدم مطلوب';
+    }
+
+    if (!password || password.length === 0) {
+      errors.password = 'كلمة المرور مطلوبة';
+    } else if (password.length < 4) {
+      errors.password = 'كلمة المرور يجب أن تكون 4 أحرف على الأقل';
+    }
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setValidationErrors({});
+
+    if (!validateForm()) {
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const result = await login(username, password);
+
+      if (result) {
+        const redirectPath = ROLE_REDIRECT_MAP[result.user.role] || ROLE_REDIRECT_MAP.default;
+        
+        if (onAuthenticated) {
+          onAuthenticated(result.user, redirectPath);
+        } else {
+          navigate(redirectPath, { replace: true });
+        }
+      } else {
+        setError('فشل تسجيل الدخول. يرجى التحقق من بيانات الاعتماد.');
+      }
+    } catch (err: any) {
+      const status = err?.status || err?.response?.status;
+      const message = getErrorMessage(status, err?.message);
+      setError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDemoLogin = (role: string) => {
+    const demoUser = users?.find(u => u.role === role);
+    if (demoUser) {
+      setUsername(demoUser.username);
+      setPassword('password123');
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-emerald-900 to-slate-900 flex items-center justify-center p-4">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-md"
+      >
+        <div className="bg-white/10 backdrop-blur-lg rounded-3xl shadow-2xl p-8 border border-white/20">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-white mb-2">مصنع الأعلاف</h1>
+            <p className="text-emerald-200">نظام إدارة المخازن المتكامل</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-6">
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-red-500/20 border border-red-500/50 rounded-xl p-4 text-red-200 text-sm"
+              >
+                {error}
+              </motion.div>
+            )}
+
+            <div>
+              <label className="block text-emerald-100 text-sm font-medium mb-2">
+                اسم المستخدم
+              </label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-300 w-5 h-5" />
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className={`w-full bg-white/5 border ${
+                    validationErrors.username ? 'border-red-500' : 'border-white/20'
+                  } rounded-xl py-3 pl-10 pr-4 text-white placeholder-emerald-300/50 focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+                  placeholder="أدخل اسم المستخدم"
+                  disabled={isLoading}
+                />
+              </div>
+              {validationErrors.username && (
+                <p className="text-red-400 text-xs mt-1">{validationErrors.username}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-emerald-100 text-sm font-medium mb-2">
+                كلمة المرور
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-300 w-5 h-5" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className={`w-full bg-white/5 border ${
+                    validationErrors.password ? 'border-red-500' : 'border-white/20'
+                  } rounded-xl py-3 pl-10 pr-12 text-white placeholder-emerald-300/50 focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+                  placeholder="أدخل كلمة المرور"
+                  disabled={isLoading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-300 hover:text-white transition-colors"
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+              {validationErrors.password && (
+                <p className="text-red-400 text-xs mt-1">{validationErrors.password}</p>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-600/50 text-white font-semibold py-3 rounded-xl transition-all duration-200 shadow-lg hover:shadow-emerald-500/25 disabled:cursor-not-allowed"
+            >
+              {isLoading ? 'جاري تسجيل الدخول...' : 'تسجيل الدخول'}
+            </button>
+          </form>
+
+          {users && users.length > 0 && (
+            <div className="mt-8 pt-6 border-t border-white/10">
+              <p className="text-emerald-200 text-sm text-center mb-4">دخول سريع للتجربة:</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => handleDemoLogin('admin')}
+                  className="bg-white/5 hover:bg-white/10 border border-white/20 rounded-lg py-2 text-emerald-200 text-sm transition-all"
+                >
+                  مدير النظام
+                </button>
+                <button
+                  onClick={() => handleDemoLogin('operator')}
+                  className="bg-white/5 hover:bg-white/10 border border-white/20 rounded-lg py-2 text-emerald-200 text-sm transition-all"
+                >
+                  مشغل
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <p className="text-center text-emerald-300/60 text-xs mt-6">
+          © 2026 مصنع الأعلاف - نظام إدارة المخازن
+        </p>
+      </motion.div>
+    </div>
+  );
+};
+
+export default LoginV2;

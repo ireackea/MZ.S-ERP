@@ -1,0 +1,551 @@
+// ENTERPRISE FIX: Legacy Migration Phase 5 - Final Stabilization & Production - 2026-02-27
+// ENTERPRISE FIX: Legacy Migration Phase 4 - Stocktaking + Themes + Backup - 2026-02-27
+import React, { useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { create } from 'zustand';
+import { CheckCircle2, ClipboardCheck, Loader2, Plus, RefreshCcw, Search, ShieldAlert, X } from 'lucide-react';
+import { toast } from '@services/toastService';
+import apiClient from '@api/client';
+import { getItems, type ItemDto } from '@services/itemsService';
+import { usePermissions } from '@hooks/usePermissions';
+import { useSession } from '@hooks/useSession';
+import type { Item } from '../types';
+
+type StocktakingEntry = {
+  id: string;
+  date: string;
+  itemId: string;
+  itemName: string;
+  systemStock: number;
+  countedStock: number;
+  difference: number;
+  notes?: string;
+  createdBy?: string;
+  createdAt: string;
+};
+
+type StocktakingStore = {
+  items: Item[];
+  entries: StocktakingEntry[];
+  loading: boolean;
+  isSubmitting: boolean;
+  error: string | null;
+  loadData: () => Promise<void>;
+  createEntry: (entry: Omit<StocktakingEntry, 'id' | 'createdAt'>) => Promise<StocktakingEntry>;
+};
+
+type NewEntryForm = {
+  date: string;
+  itemId: string;
+  countedStock: string;
+  notes: string;
+};
+
+const toNumber = (value: unknown, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const mapItemDtoToItem = (row: ItemDto): Item => ({
+  id: String(row.publicId || row.id),
+  code: row.code || undefined,
+  barcode: row.barcode || undefined,
+  name: row.name,
+  englishName: row.description || undefined,
+  category: row.category || '7�"�7�"�7�"�7�"�7�"�7�"�7�"�#�⬑"�7��7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�',
+  unit: row.unit || '7�"�7�"�7�"�7�"�7�"�7�"�7�"�#�⬑"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�',
+  minLimit: toNumber(row.minLimit, 0),
+  maxLimit: toNumber(row.maxLimit, 1000),
+  orderLimit: row.orderLimit == null ? undefined : toNumber(row.orderLimit, 0),
+  currentStock: toNumber(row.currentStock, 0),
+  lastUpdated: new Date().toISOString(),
+});
+
+const fetchEntriesFromApi = async (): Promise<StocktakingEntry[]> => {
+  const response = await apiClient.get('/stocktaking');
+  const payload = response.data;
+  const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
+  return rows.map((row: any) => ({
+    id: String(row?.id || crypto.randomUUID()),
+    date: String(row?.date || new Date().toISOString().split('T')[0]),
+    itemId: String(row?.itemId || ''),
+    itemName: String(row?.itemName || ''),
+    systemStock: toNumber(row?.systemStock, 0),
+    countedStock: toNumber(row?.countedStock, 0),
+    difference: toNumber(row?.difference, 0),
+    notes: row?.notes ? String(row.notes) : undefined,
+    createdBy: row?.createdBy ? String(row.createdBy) : undefined,
+    createdAt: String(row?.createdAt || new Date().toISOString()),
+  })) as StocktakingEntry[];
+};
+
+const createEntryInApi = async (entry: StocktakingEntry): Promise<StocktakingEntry> => {
+  const response = await apiClient.post('/stocktaking', entry);
+  const payload = response.data || {};
+  return {
+    id: String(payload.id || entry.id),
+    date: String(payload.date || entry.date),
+    itemId: String(payload.itemId || entry.itemId),
+    itemName: String(payload.itemName || entry.itemName),
+    systemStock: toNumber(payload.systemStock, entry.systemStock),
+    countedStock: toNumber(payload.countedStock, entry.countedStock),
+    difference: toNumber(payload.difference, entry.difference),
+    notes: payload.notes ?? entry.notes,
+    createdBy: payload.createdBy ?? entry.createdBy,
+    createdAt: String(payload.createdAt || entry.createdAt),
+  };
+};
+
+const useInventoryStore = create<StocktakingStore>((set, get) => ({
+  items: [],
+  entries: [],
+  loading: false,
+  isSubmitting: false,
+  error: null,
+
+  loadData: async () => {
+    set({ loading: true, error: null });
+    try {
+      const [itemRows, entryRows] = await Promise.all([getItems(), fetchEntriesFromApi()]);
+      set({
+        items: itemRows.map(mapItemDtoToItem),
+        entries: entryRows.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
+        loading: false,
+      });
+    } catch (error: any) {
+      set({
+        loading: false,
+        error: error?.response?.data?.message || error?.message || 'Failed to load stocktaking data.',
+      });
+    }
+  },
+
+  createEntry: async (entryInput) => {
+    set({ isSubmitting: true });
+    try {
+      const entry: StocktakingEntry = {
+        ...entryInput,
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+      };
+
+      const saved = await createEntryInApi(entry);
+      set((state) => {
+        const next = [saved, ...state.entries];
+        return { entries: next };
+      });
+      return saved;
+    } finally {
+      set({ isSubmitting: false });
+    }
+  },
+}));
+
+const StocktakingPage: React.FC = () => {
+  const { data: session } = useSession();
+  const { hasPermission } = usePermissions();
+  const { items, entries, loading, isSubmitting, error, loadData, createEntry } = useInventoryStore();
+
+  const [search, setSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [diffOnly, setDiffOnly] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState<NewEntryForm>({
+    date: new Date().toISOString().split('T')[0],
+    itemId: '',
+    countedStock: '',
+    notes: '',
+  });
+
+  const canView = hasPermission('*') || hasPermission('stocktaking.view') || hasPermission('inventory.view.stock');
+  const canCreate = hasPermission('*') || hasPermission('stocktaking.create') || hasPermission('inventory.view.stock');
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
+  const itemMap = useMemo(() => new Map(items.map((item) => [String(item.id), item])), [items]);
+
+  const filteredRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const from = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : null;
+    const to = dateTo ? new Date(`${dateTo}T23:59:59.999`).getTime() : null;
+
+    return entries.filter((row) => {
+      const rowTime = new Date(row.date).getTime();
+      if (from != null && rowTime < from) return false;
+      if (to != null && rowTime > to) return false;
+      if (diffOnly && Math.abs(toNumber(row.difference, 0)) < 0.0001) return false;
+      if (!q) return true;
+      return (
+        String(row.itemName || '').toLowerCase().includes(q) ||
+        String(row.itemId || '').toLowerCase().includes(q) ||
+        String(row.createdBy || '').toLowerCase().includes(q) ||
+        String(row.notes || '').toLowerCase().includes(q)
+      );
+    });
+  }, [entries, search, dateFrom, dateTo, diffOnly]);
+
+  const stats = useMemo(() => {
+    const rows = filteredRows;
+    const withDiff = rows.filter((row) => Math.abs(toNumber(row.difference, 0)) > 0.0001).length;
+    const surplus = rows
+      .filter((row) => toNumber(row.difference, 0) > 0)
+      .reduce((sum, row) => sum + toNumber(row.difference, 0), 0);
+    const shortage = rows
+      .filter((row) => toNumber(row.difference, 0) < 0)
+      .reduce((sum, row) => sum + Math.abs(toNumber(row.difference, 0)), 0);
+    return {
+      total: rows.length,
+      withDiff,
+      surplus,
+      shortage,
+    };
+  }, [filteredRows]);
+
+  const selectedItem = form.itemId ? itemMap.get(String(form.itemId)) : undefined;
+  const systemStock = toNumber(selectedItem?.currentStock, 0);
+  const countedStock = toNumber(form.countedStock, NaN);
+  const difference = Number.isFinite(countedStock) ? countedStock - systemStock : 0;
+
+  const resetForm = () => {
+    setForm({
+      date: new Date().toISOString().split('T')[0],
+      itemId: '',
+      countedStock: '',
+      notes: '',
+    });
+  };
+
+  const onCreateEntry = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!canCreate) return toast.error('7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�#�⬑"�#��"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�.');
+    if (!form.itemId.trim()) return toast.error('7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#�⬑"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�7�"�.');
+    if (!Number.isFinite(countedStock)) return toast.error('7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠ 7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#���9�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�.');
+
+    const item = itemMap.get(String(form.itemId));
+    if (!item) return toast.error('7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�#�⬑"�7��7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#�⬑"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#�⬑"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�.');
+
+    try {
+      await createEntry({
+        date: form.date,
+        itemId: String(item.id),
+        itemName: item.name,
+        systemStock,
+        countedStock,
+        difference,
+        notes: form.notes.trim() || undefined,
+        createdBy: String(session?.user?.name || session?.user?.username || session?.user?.id || 'system'),
+      });
+      toast.success('7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�.');
+      setModalOpen(false);
+      resetForm();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || '7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠ 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�.');
+    }
+  };
+
+  if (!canView) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+        <div className="mb-2 flex items-center gap-2 text-base font-bold">
+          <ShieldAlert size={18} />
+          <span>7�"�7�"�7�"�7�"�7�"�7�"�7�"�#�⬑"�7��7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�#�⬑"�#��"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�</span>
+        </div>
+        <p className="text-sm">7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� <code>stocktaking.view</code> 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#�⬑"�7�"� <code>inventory.view.stock</code>.</p>
+      </div>
+    );
+  }
+
+  return (
+    <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+      <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="inline-flex items-center gap-2 text-2xl font-bold text-slate-900 dark:text-slate-100">
+              <ClipboardCheck size={20} />
+              Stocktaking
+            </h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠ 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#���9� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#���9�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#���9�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�7�"�.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void loadData()}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <RefreshCcw size={15} />
+              7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�
+            </button>
+            {canCreate && (
+              <button
+                type="button"
+                onClick={() => setModalOpen(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+              >
+                <Plus size={15} />
+                7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+          <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
+            <p className="text-xs text-slate-500 dark:text-slate-400">Total Rows</p>
+            <p className="text-xl font-bold text-slate-900 dark:text-slate-100">{stats.total}</p>
+          </div>
+          <div className="rounded-xl bg-amber-50 p-3 dark:bg-amber-950/30">
+            <p className="text-xs text-amber-600 dark:text-amber-300">With Difference</p>
+            <p className="text-xl font-bold text-amber-700 dark:text-amber-300">{stats.withDiff}</p>
+          </div>
+          <div className="rounded-xl bg-emerald-50 p-3 dark:bg-emerald-950/30">
+            <p className="text-xs text-emerald-600 dark:text-emerald-300">Surplus</p>
+            <p className="text-xl font-bold text-emerald-700 dark:text-emerald-300">{stats.surplus.toFixed(3)}</p>
+          </div>
+          <div className="rounded-xl bg-red-50 p-3 dark:bg-red-950/30">
+            <p className="text-xs text-red-600 dark:text-red-300">Shortage</p>
+            <p className="text-xl font-bold text-red-700 dark:text-red-300">{stats.shortage.toFixed(3)}</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_160px_160px_auto]">
+          <div className="relative">
+            <Search size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#�⬑"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#�⬑"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�7�"�..."
+              className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-3 pr-8 text-sm outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+            />
+          </div>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(event) => setDateFrom(event.target.value)}
+            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+          />
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(event) => setDateTo(event.target.value)}
+            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+          />
+          <button
+            type="button"
+            onClick={() => setDiffOnly((value) => !value)}
+            className={`rounded-xl border px-3 py-2 text-sm font-semibold ${
+              diffOnly
+                ? 'border-amber-400 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300'
+                : 'border-slate-300 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200'
+            }`}
+          >
+            {diffOnly ? '7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�#�⬑"�#��"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠' : '7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#���9�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#�⬑"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#���9�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�'}
+          </button>
+        </div>
+      </header>
+
+      <section className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <table className="min-w-full text-sm">
+          <thead className="bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+            <tr>
+              <th className="px-3 py-2 text-right">Date</th>
+              <th className="px-3 py-2 text-right">Item</th>
+              <th className="px-3 py-2 text-right">System</th>
+              <th className="px-3 py-2 text-right">Counted</th>
+              <th className="px-3 py-2 text-right">Difference</th>
+              <th className="px-3 py-2 text-right">Status</th>
+              <th className="px-3 py-2 text-right">User</th>
+              <th className="px-3 py-2 text-right">Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && (
+              <tr>
+                <td colSpan={8} className="px-4 py-10 text-center text-slate-500">
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 size={16} className="animate-spin" />
+                    7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠ 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�...
+                  </span>
+                </td>
+              </tr>
+            )}
+            {!loading && error && (
+              <tr>
+                <td colSpan={8} className="px-4 py-8 text-center text-red-600">{error}</td>
+              </tr>
+            )}
+            {!loading && !error && filteredRows.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-4 py-8 text-center text-slate-500">7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#�⬑"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#���9�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�.</td>
+              </tr>
+            )}
+            {!loading && !error && filteredRows.map((row) => {
+              const diff = toNumber(row.difference, 0);
+              const status =
+                diff > 0 ? 'surplus' : diff < 0 ? 'shortage' : 'match';
+              return (
+                <tr key={row.id} className="border-t border-slate-200 dark:border-slate-700">
+                  <td className="px-3 py-2">{new Date(row.date).toLocaleDateString()}</td>
+                  <td className="px-3 py-2 font-medium text-slate-900 dark:text-slate-100">{row.itemName}</td>
+                  <td className="px-3 py-2">{toNumber(row.systemStock, 0).toFixed(3)}</td>
+                  <td className="px-3 py-2">{toNumber(row.countedStock, 0).toFixed(3)}</td>
+                  <td className={`px-3 py-2 font-semibold ${diff > 0 ? 'text-emerald-600' : diff < 0 ? 'text-red-600' : 'text-slate-700 dark:text-slate-300'}`}>
+                    {diff.toFixed(3)}
+                  </td>
+                  <td className="px-3 py-2">
+                    {status === 'match' && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                        <CheckCircle2 size={12} />
+                        Match
+                      </span>
+                    )}
+                    {status === 'surplus' && (
+                      <span className="inline-flex items-center rounded-full bg-teal-100 px-2 py-1 text-xs font-semibold text-teal-700 dark:bg-teal-900/40 dark:text-teal-300">
+                        Surplus
+                      </span>
+                    )}
+                    {status === 'shortage' && (
+                      <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-1 text-xs font-semibold text-red-700 dark:bg-red-900/40 dark:text-red-300">
+                        Shortage
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">{row.createdBy || '-'}</td>
+                  <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{row.notes || '-'}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </section>
+
+      <AnimatePresence>
+        {modalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setModalOpen(false);
+            }}
+          >
+            <motion.form
+              initial={{ opacity: 0, y: 24, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 24, scale: 0.98 }}
+              onSubmit={onCreateEntry}
+              className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+            >
+              <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-700">
+                <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�</h2>
+                <button
+                  type="button"
+                  onClick={() => setModalOpen(false)}
+                  className="rounded-lg border border-slate-300 p-1.5 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 p-5 md:grid-cols-2">
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Date *</span>
+                  <input
+                    type="date"
+                    value={form.date}
+                    onChange={(event) => setForm((prev) => ({ ...prev, date: event.target.value }))}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                    required
+                  />
+                </label>
+
+                <label className="space-y-1 md:col-span-2">
+                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Item *</span>
+                  <select
+                    value={form.itemId}
+                    onChange={(event) => setForm((prev) => ({ ...prev, itemId: event.target.value }))}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                    required
+                  >
+                    <option value="">7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"� 7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�</option>
+                    {items.map((item) => (
+                      <option key={String(item.id)} value={String(item.id)}>
+                        {item.name} ({item.unit})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">System Stock</span>
+                  <input
+                    value={systemStock.toFixed(3)}
+                    disabled
+                    className="w-full rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                  />
+                </label>
+
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Counted Stock *</span>
+                  <input
+                    type="number"
+                    step="0.001"
+                    value={form.countedStock}
+                    onChange={(event) => setForm((prev) => ({ ...prev, countedStock: event.target.value }))}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                    required
+                  />
+                </label>
+
+                <div className="md:col-span-2">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-700 dark:bg-slate-800">
+                    <p className="text-slate-600 dark:text-slate-300">Auto Difference</p>
+                    <p className={`text-xl font-bold ${difference > 0 ? 'text-emerald-600' : difference < 0 ? 'text-red-600' : 'text-slate-700 dark:text-slate-200'}`}>
+                      {Number.isFinite(difference) ? difference.toFixed(3) : '-'}
+                    </p>
+                  </div>
+                </div>
+
+                <label className="space-y-1 md:col-span-2">
+                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Notes</span>
+                  <textarea
+                    rows={3}
+                    value={form.notes}
+                    onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  />
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => setModalOpen(false)}
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#���97�"�7�"�#�⬑"�7�⬠7�"�7�"�7�"�7�"�7�"�7�"�7�"�#�⬑"�7��7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�#�����
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+                >
+                  {isSubmitting && <Loader2 size={14} className="animate-spin" />}
+                  7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�
+                </button>
+              </div>
+            </motion.form>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.section>
+  );
+};
+
+export default StocktakingPage;
+

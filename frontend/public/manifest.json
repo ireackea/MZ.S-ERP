@@ -1,0 +1,78 @@
+{
+  "// ENTERPRISE FIX: Phase 1.6 - Final Cleanup Pass - 2026-03-02": "تحسين PWA Manifest - أيقونات PNG حقيقية",
+  "name": "Feed Factory Enterprise Production System",
+  "short_name": "FeedFactory",
+  "description": "نظام إدارة المخازن المتقدم والحديث - Feed Factory Enterprise Production System for warehouse management, inventory control, and production operations",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1e293b",
+  "theme_color": "#10b981",
+  "categories": ["business", "productivity", "finance"],
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192x192-maskable.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "splash_pages": null,
+  "prefer_related_applications": false,
+  "shortcuts": [
+    {
+      "name": "لوحة التحكم",
+      "short_name": "لوحة التحكم",
+      "description": "الانتقال إلى لوحة التحكم الرئيسية",
+      "url": "/",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "الأصناف",
+      "short_name": "الأصناف",
+      "description": "إدارة الأصناف والمواد",
+      "url": "/items",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "أرصدة المخازن",
+      "short_name": "الأرصدة",
+      "description": "عرض أرصدة المخازن",
+      "url": "/balances",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    }
+  ],
+  "screenshots": [],
+  "related_applications": [],
+  "share_target": {
+    "action": "/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
+}

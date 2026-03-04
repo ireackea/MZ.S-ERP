@@ -1,0 +1,12 @@
+/* Fiori-inspired theme */
+:root.fiori {
+  --ff-base: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Arial;
+  --theme-accent: #0070f2;
+  --theme-surface: #f5f7fb;
+  --theme-bg: #fbfdff;
+}
+
+.fiori body { font-family: var(--ff-base); background-color: var(--theme-bg); }
+.fiori header, .fiori .report-head { background: var(--theme-surface); }
+.fiori .report-main-title { color: var(--theme-accent); font-weight:700; }
+.fiori .btn-theme-accent { background: var(--theme-accent); color: #fff; }

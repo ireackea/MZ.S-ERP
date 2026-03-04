@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json.schemastore.org/nest-cli",
+  "collection": "@nestjs/schematics",
+  "sourceRoot": "backend/src",
+  "entryFile": "main",
+  "compilerOptions": {
+    "deleteOutDir": true,
+    "webpack": false,
+    "tsConfigPath": "backend/tsconfig.json"
+  },
+  "enterpriseFixPhase5": "Legacy Migration Phase 5 - Final Stabilization & Production - 2026-02-27"
+}

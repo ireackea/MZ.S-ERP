@@ -1,0 +1,112 @@
+# // ENTERPRISE FIX: Final One-Click Production Launch v3 - 2026-02-27
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.prod
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-3001}
+      DATABASE_URL: ${DATABASE_URL:-file:./prisma/dev.db}
+      PM2_INSTANCES: ${PM2_INSTANCES:-max}
+    restart: unless-stopped
+    volumes:
+      - prisma-data:/app/prisma
+      - backups-data:/app/backups
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+    command: >
+      sh -lc "
+      set -e;
+      npx prisma generate;
+      npx prisma migrate deploy;
+      pm2-runtime /app/backend/dist/main.js --name feedfactory-backend -i ${PM2_INSTANCES:-max} --time
+      "
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost/ >/dev/null 2>&1 || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  nginx:
+    image: nginx:alpine
+    profiles: ["nginx"]
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.prod.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost/ >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["caddy"]
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    command: |-
+      sh -lc '
+      cat > /etc/caddy/Caddyfile << "EOF"
+      :80 {
+        encode gzip zstd
+        header {
+          X-Content-Type-Options nosniff
+          X-Frame-Options DENY
+          Referrer-Policy strict-origin-when-cross-origin
+          Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        }
+        @api path /api/* /socket.io/*
+        handle @api {
+          reverse_proxy backend:3001
+        }
+        handle {
+          reverse_proxy frontend:80
+        }
+      }
+      EOF
+      caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+      '
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost/ >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+volumes:
+  prisma-data:
+  backups-data:

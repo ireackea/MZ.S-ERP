@@ -1,0 +1,59 @@
+
+name: FeedFactory CI/CD
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18.x]
+
+    steps:
+    # 1. Checkout the code
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    # 2. Setup Node.js
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+
+    # 3. Install Dependencies
+    - name: Install dependencies
+      run: npm ci --legacy-peer-deps
+
+    # 4. Linting (Check code quality)
+    # Assuming "lint" script exists in package.json, otherwise we can skip or use npx eslint
+    - name: Lint code
+      continue-on-error: true 
+      run: npm run lint
+      
+    # 5. Type Checking (TypeScript)
+    - name: TypeScript Check
+      run: npx tsc --noEmit
+
+    # 6. Run Tests
+    - name: Run Tests
+      run: npx vitest run
+
+    # 7. Build the Application
+    - name: Build Project
+      run: npm run build
+
+    # 8. (Optional) Deploy to GitHub Pages
+    # Only runs on push to main, not on PRs
+    - name: Deploy to GitHub Pages
+      if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+      uses: JamesIves/github-pages-deploy-action@v4
+      with:
+        folder: dist # The build output folder
+        branch: gh-pages # The branch to deploy to

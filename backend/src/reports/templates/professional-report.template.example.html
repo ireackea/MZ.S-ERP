@@ -1,0 +1,72 @@
+<!-- ENTERPRISE FIX: Legacy Migration Phase 3 - Professional PDF Reporting - 2026-02-27 -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{title}}</title>
+    <style>
+      :root { --ink:#0f172a; --muted:#64748b; --line:#cbd5e1; --soft:#f8fafc; }
+      * { box-sizing: border-box; }
+      body { margin:0; font:12px/1.45 "Segoe UI", Tahoma, Arial, sans-serif; color:var(--ink); }
+      .sheet { padding:24px 8px 0; }
+      .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; }
+      .brand { display:flex; gap:10px; align-items:center; }
+      .logo { width:34px; height:34px; border-radius:8px; background:linear-gradient(135deg,#0f766e,#0891b2); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; }
+      .meta { text-align:right; color:var(--muted); font-size:11px; }
+      .title { margin:0 0 5px; font-size:16px; font-weight:700; }
+      .subtitle { margin:0 0 12px; color:var(--muted); }
+      .summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-bottom:12px; }
+      .card { border:1px solid var(--line); border-radius:8px; padding:8px; background:var(--soft); }
+      table { width:100%; border-collapse:collapse; }
+      th, td { border:1px solid var(--line); padding:7px; }
+      thead th { background:#e2e8f0; font-size:11px; }
+      tbody tr:nth-child(even) td { background:#f8fafc; }
+      .footer-note { margin-top:10px; color:var(--muted); font-size:10px; }
+    </style>
+  </head>
+  <body>
+    <main class="sheet">
+      <header class="header">
+        <div class="brand">
+          <div class="logo">FF</div>
+          <div>
+            <h1>FeedFactory Pro</h1>
+            <p>Professional Reporting Suite</p>
+          </div>
+        </div>
+        <div class="meta">
+          <div><strong>Generated:</strong> {{generated_at}}</div>
+          <div><strong>By:</strong> {{generated_by}}</div>
+        </div>
+      </header>
+
+      <h2 class="title">{{title}}</h2>
+      <p class="subtitle">{{subtitle}}</p>
+
+      <section class="summary">
+        <div class="card"><strong>{{summary_label_1}}</strong><div>{{summary_value_1}}</div></div>
+        <div class="card"><strong>{{summary_label_2}}</strong><div>{{summary_value_2}}</div></div>
+        <div class="card"><strong>{{summary_label_3}}</strong><div>{{summary_value_3}}</div></div>
+      </section>
+
+      <table>
+        <thead>
+          <tr>
+            <th>{{col_1}}</th>
+            <th>{{col_2}}</th>
+            <th>{{col_3}}</th>
+            <th>{{col_4}}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>{{r1c1}}</td><td>{{r1c2}}</td><td>{{r1c3}}</td><td>{{r1c4}}</td></tr>
+          <tr><td>{{r2c1}}</td><td>{{r2c2}}</td><td>{{r2c3}}</td><td>{{r2c4}}</td></tr>
+        </tbody>
+      </table>
+
+      <p class="footer-note">Confidential report generated for operational use only.</p>
+    </main>
+  </body>
+</html>
+

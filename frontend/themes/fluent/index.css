@@ -1,0 +1,12 @@
+/* Fluent-inspired theme */
+:root.fluent {
+  --ff-base: 'Segoe UI', Inter, system-ui, -apple-system, Roboto, Arial;
+  --theme-accent: #0078D4;
+  --theme-surface: #ffffff;
+  --theme-bg: #f6fbff;
+}
+
+.fluent body { font-family: var(--ff-base); background-color: var(--theme-bg); }
+.fluent header, .fluent .report-head { background: var(--theme-surface); box-shadow: 0 6px 20px rgba(3,132,252,0.04); }
+.fluent .report-main-title { color: var(--theme-accent); }
+.fluent .btn-theme-accent { background: var(--theme-accent); color: #fff; }

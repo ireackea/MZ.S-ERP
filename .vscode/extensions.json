@@ -1,0 +1,9 @@
+{
+    "recommendations": [
+        "continue.continue",
+        "googlecloudtools.cloudcode",
+        "openai.chatgpt",
+        "github.copilot-chat",
+        "qwenlm.qwen-code-vscode-ide-companion"
+    ]
+}

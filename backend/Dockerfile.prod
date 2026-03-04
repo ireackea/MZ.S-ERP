@@ -1,0 +1,25 @@
+# // ENTERPRISE FIX: Final One-Click Production Launch v3 - 2026-02-27
+FROM node:20-bookworm-slim
+
+WORKDIR /app
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY package*.json ./
+COPY prisma ./prisma
+RUN npm ci
+
+COPY . .
+
+ENV NODE_ENV=production
+ENV PORT=3001
+ENV DATABASE_URL=file:./prisma/dev.db
+
+RUN npm run backend:build
+RUN npm install -g pm2
+
+EXPOSE 3001
+
+CMD ["pm2-runtime", "/app/backend/dist/main.js", "--name", "feedfactory-backend", "-i", "max", "--time"]

@@ -1,0 +1,42 @@
+{
+  "name": "feedfactory-pro",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "npm run dev:frontend",
+    "postinstall": "npm run prisma:generate",
+    "check:encoding": "node scripts/check-text-encoding.mjs",
+    "validate:phase1": "node scripts/validation-phase1.mjs",
+    "validate:phase3": "node scripts/validation-phase3.mjs",
+    "validate:all": "npm run validate:phase1 && npm run validate:phase3",
+    "build": "npm run frontend:build",
+    "build:prod": "npm run frontend:build && npm run backend:build",
+    "preview": "npm run frontend:preview",
+    "frontend:dev": "npm run dev --workspace=frontend",
+    "frontend:build": "npm run build --workspace=frontend",
+    "frontend:preview": "npm run preview --workspace=frontend",
+    "backend:dev": "npm run start:dev --workspace=backend",
+    "backend:build": "npm run build --workspace=backend",
+    "backend:start": "npm run start:prod --workspace=backend",
+    "start:prod": "npm run backend:start",
+    "prisma:generate": "npm run prisma:generate --workspace=backend",
+    "prisma:migrate:dev": "npm run prisma:migrate:dev --workspace=backend",
+    "prisma:migrate:prod": "npm run prisma:migrate:prod --workspace=backend",
+    "prisma:seed": "npm run prisma:seed --workspace=backend",
+    "health-check": "node scripts/health-check.mjs",
+    "deploy:prod": "bash scripts/deploy.sh",
+    "test": "npm run test --workspace=frontend",
+    "dev:full": "concurrently -n \"BACKEND,FRONTEND\" -c \"bgBlue,bgGreen\" \"npm run backend:dev\" \"npm run frontend:dev\"",
+    "start:backend": "npm run backend:dev",
+    "start:frontend": "npm run frontend:dev",
+    "db:sync": "npm run prisma:generate && npm run prisma:migrate:dev"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

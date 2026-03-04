@@ -1,0 +1,12 @@
+/* Classic theme - neutral Tailwind-like adjustments */
+:root.classic {
+  --ff-base: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+  --theme-accent: #0f172a; /* slate-900 */
+  --theme-surface: #ffffff;
+  --theme-bg: #f8fafc;
+}
+
+.classic body { font-family: var(--ff-base); background-color: var(--theme-bg); }
+.classic header, .classic .report-head { background: var(--theme-surface); }
+.classic .report-main-title { color: var(--theme-accent); }
+.classic .btn-theme-accent { background: var(--theme-accent); color: #fff; }

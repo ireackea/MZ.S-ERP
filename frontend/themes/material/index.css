@@ -1,0 +1,12 @@
+/* Material 3 inspired theme */
+:root.material {
+  --ff-base: Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --theme-accent: #6200ee;
+  --theme-surface: #ffffff;
+  --theme-bg: #fbf8ff;
+}
+
+.material body { font-family: var(--ff-base); background-color: var(--theme-bg); }
+.material header, .material .report-head { background: var(--theme-surface); box-shadow: 0 2px 8px rgba(98,0,238,0.06); }
+.material .report-main-title { color: var(--theme-accent); }
+.material .btn-theme-accent { background: var(--theme-accent); color: #fff; }
