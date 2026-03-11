@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 2 - Full Single Source of Truth & Legacy Cleanup - 2026-03-05
 // ENTERPRISE FIX: Phase 1 - Single Source of Truth & Integration - 2026-03-05
 // ENTERPRISE FIX: Phase 0 - Stabilization & UTF-8 Lockdown - 2026-03-05
 // ENTERPRISE FIX: Phase 7 - Single Source of Truth for Items - 2026-03-01
@@ -14,6 +15,12 @@ import {
   type ItemDto,
   type SyncItemPayload,
 } from '@services/itemsService';
+import {
+  getFinancialYearFromDate,
+  getOpeningBalances as getOpeningBalancesFromApi,
+  getOpeningBalancesByYear,
+  upsertOpeningBalances,
+} from '@services/openingBalanceService';
 import { getTransactionsFromApi } from '@services/transactionsService';
 import { fetchRoles, fetchUsers, type RoleDto, type UserDto } from '@services/usersService';
 import {
@@ -37,11 +44,17 @@ type ItemForm = { id?: string; name: string; code: string; category: string; uni
 type BulkForm = { category: string; unit: string; minLimit: string; maxLimit: string; orderLimit: string };
 type InventoryAction = 'add' | 'remove' | 'update';
 type ActorInfo = { id: string; name: string };
+type OpeningBalanceMap = Record<string, number>;
+type OpeningBalanceRow = { itemId: string; quantity: number };
 
 type Store = {
   items: Item[];
   balances: Record<string, number>;
   transactions: Transaction[];
+  openingBalances: OpeningBalanceMap;
+  openingBalancesYear: number | null;
+  openingBalancesLoading: boolean;
+  openingBalancesError: string | null;
   users: User[];
   roles: RoleDefinition[];
   units: string[];
@@ -55,8 +68,10 @@ type Store = {
   manualOrder: string[];
   load: () => Promise<void>;
   loadAll: () => Promise<void>;
+  loadOpeningBalances: (financialYear?: number) => Promise<void>;
   syncFromServer: () => Promise<void>;
   setTransactions: (transactions: Transaction[]) => void;
+  setOpeningBalances: (financialYear: number, rows: OpeningBalanceRow[]) => void;
   setUsers: (users: User[]) => void;
   setRoles: (roles: RoleDefinition[]) => void;
   setReferenceData: (data: { units?: string[]; categories?: string[] }) => void;
@@ -251,6 +266,26 @@ const mapRoleDto = (row: RoleDto): RoleDefinition => {
   };
 };
 
+const normalizeOpeningBalanceRows = (rows: Array<{ item_id?: string; itemId?: string; quantity?: number }>) =>
+  rows.reduce<OpeningBalanceMap>((acc, row) => {
+    const itemId = String(row.itemId || row.item_id || '').trim();
+    const quantity = Number(row.quantity || 0);
+    if (!itemId || !Number.isFinite(quantity)) return acc;
+    acc[itemId] = quantity;
+    return acc;
+  }, {});
+
+const mapApiOpeningBalances = (rows: any[]) =>
+  rows.reduce<OpeningBalanceMap>((acc, row) => {
+    const itemId = String(row?.itemPublicId ?? row?.item?.publicId ?? row?.itemId ?? '').trim();
+    const quantity = Number(row?.quantity ?? 0);
+    if (!itemId || !Number.isFinite(quantity)) return acc;
+    acc[itemId] = quantity;
+    return acc;
+  }, {});
+
+const currentFinancialYear = () => getFinancialYearFromDate();
+
 const initialSort = read<SortState>(SORT_KEY, { mode: 'manual_locked', manualOrder: [] });
 
 export const useInventoryStore = create<Store>()(
@@ -259,6 +294,10 @@ export const useInventoryStore = create<Store>()(
       items: [],
       balances: {},
       transactions: [],
+      openingBalances: {},
+      openingBalancesYear: null,
+      openingBalancesLoading: false,
+      openingBalancesError: null,
       users: [],
       roles: [],
       units: [],
@@ -299,6 +338,8 @@ export const useInventoryStore = create<Store>()(
 
       loadAll: async () => {
         const localTransactions = getTransactions();
+        const localOpeningBalancesYear = currentFinancialYear();
+        const localOpeningBalances = normalizeOpeningBalanceRows(getOpeningBalancesByYear(localOpeningBalancesYear));
         const localUsers = normalizeUsers(getUsers());
         const localRoles = getIamConfig().roles;
         const localCategories = uniqueStrings(getCategories() || []);
@@ -308,6 +349,9 @@ export const useInventoryStore = create<Store>()(
           loading: true,
           error: null,
           transactions: localTransactions,
+          openingBalances: localOpeningBalances,
+          openingBalancesYear: localOpeningBalancesYear,
+          openingBalancesError: null,
           users: localUsers,
           roles: localRoles,
           categories: uniqueStrings([...state.categories, ...localCategories]),
@@ -321,19 +365,55 @@ export const useInventoryStore = create<Store>()(
         }
       },
 
+      loadOpeningBalances: async (financialYear = currentFinancialYear()) => {
+        set({ openingBalancesLoading: true, openingBalancesError: null });
+
+        try {
+          const rows = await getOpeningBalancesFromApi(financialYear);
+          const nextOpeningBalances = Array.isArray(rows) ? mapApiOpeningBalances(rows) : {};
+
+          set({
+            openingBalances: nextOpeningBalances,
+            openingBalancesYear: financialYear,
+            openingBalancesLoading: false,
+            openingBalancesError: null,
+          });
+
+          if (Object.keys(nextOpeningBalances).length > 0) {
+            upsertOpeningBalances(
+              financialYear,
+              Object.entries(nextOpeningBalances).map(([item_id, quantity]) => ({ item_id, quantity }))
+            );
+          }
+        } catch {
+          const fallback = normalizeOpeningBalanceRows(getOpeningBalancesByYear(financialYear));
+          set({
+            openingBalances: fallback,
+            openingBalancesYear: financialYear,
+            openingBalancesLoading: false,
+            openingBalancesError: 'تعذر مزامنة أرصدة بداية المدة من الخادم. تم استخدام النسخة المحلية.',
+          });
+        }
+      },
+
       syncFromServer: async () => {
         set({ syncing: true, error: null });
 
         const deletedIds = getPendingDeletedIds();
+        const openingBalanceYear = get().openingBalancesYear ?? currentFinancialYear();
         const fallbackTransactions = get().transactions.length > 0 ? get().transactions : getTransactions();
+        const fallbackOpeningBalances = Object.keys(get().openingBalances).length > 0
+          ? get().openingBalances
+          : normalizeOpeningBalanceRows(getOpeningBalancesByYear(openingBalanceYear));
         const fallbackUsers = get().users.length > 0 ? get().users : normalizeUsers(getUsers());
         const fallbackRoles = get().roles.length > 0 ? get().roles : getIamConfig().roles;
         const fallbackCategories = uniqueStrings([...(getCategories() || []), ...get().categories]);
         const fallbackUnits = uniqueStrings([...(getUnits() || []), ...get().units]);
 
-        const [itemsResult, transactionsResult, usersResult, rolesResult] = await Promise.allSettled([
+        const [itemsResult, transactionsResult, openingBalancesResult, usersResult, rolesResult] = await Promise.allSettled([
           getItemsFromApi(),
           getTransactionsFromApi(),
+          getOpeningBalancesFromApi(openingBalanceYear),
           fetchUsers({ page: 1, limit: 500 }),
           fetchRoles(),
         ]);
@@ -342,16 +422,31 @@ export const useInventoryStore = create<Store>()(
           ? itemsResult.value.map(dto).filter((item) => !deletedIds.has(String(item.id)))
           : get().items;
         const nextTransactions = transactionsResult.status === 'fulfilled' ? transactionsResult.value : fallbackTransactions;
+        const nextOpeningBalances = openingBalancesResult.status === 'fulfilled' && Array.isArray(openingBalancesResult.value)
+          ? mapApiOpeningBalances(openingBalancesResult.value)
+          : fallbackOpeningBalances;
         const nextUsers = usersResult.status === 'fulfilled' ? normalizeUsers(usersResult.value.data.map(mapUserDto)) : fallbackUsers;
         const nextRoles = rolesResult.status === 'fulfilled' ? rolesResult.value.map(mapRoleDto) : fallbackRoles;
 
         const normalized = normalizeCollections(nextItems, get().sortMode, get().manualOrder, fallbackCategories, fallbackUnits);
-        const failures = [itemsResult, transactionsResult, usersResult, rolesResult].filter((result) => result.status === 'rejected');
+        const failures = [itemsResult, transactionsResult, openingBalancesResult, usersResult, rolesResult].filter((result) => result.status === 'rejected');
+
+        if (openingBalancesResult.status === 'fulfilled' && Object.keys(nextOpeningBalances).length > 0) {
+          upsertOpeningBalances(
+            openingBalanceYear,
+            Object.entries(nextOpeningBalances).map(([item_id, quantity]) => ({ item_id, quantity }))
+          );
+        }
 
         set({
           items: normalized.items,
           balances: normalized.balances,
           transactions: nextTransactions,
+          openingBalances: nextOpeningBalances,
+          openingBalancesYear: openingBalanceYear,
+          openingBalancesError: openingBalancesResult.status === 'rejected'
+            ? 'تعذر مزامنة أرصدة بداية المدة من الخادم. تم استخدام النسخة المحلية.'
+            : null,
           users: nextUsers,
           roles: nextRoles,
           categories: normalized.categories,
@@ -369,6 +464,23 @@ export const useInventoryStore = create<Store>()(
 
       setTransactions: (transactions) => {
         set({ transactions: [...transactions] });
+      },
+
+      setOpeningBalances: (financialYear, rows) => {
+        const nextOpeningBalances = normalizeOpeningBalanceRows(
+          rows.map((row) => ({ item_id: row.itemId, quantity: row.quantity }))
+        );
+
+        set({
+          openingBalances: nextOpeningBalances,
+          openingBalancesYear: financialYear,
+          openingBalancesError: null,
+        });
+
+        upsertOpeningBalances(
+          financialYear,
+          rows.map((row) => ({ item_id: row.itemId, quantity: row.quantity }))
+        );
       },
 
       setUsers: (users) => {

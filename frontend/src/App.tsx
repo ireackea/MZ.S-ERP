@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 2 - Full Single Source of Truth & Legacy Cleanup - 2026-03-05
 // ENTERPRISE FIX: Phase 1 - Single Source of Truth & Integration - 2026-03-05
 // ENTERPRISE FIX: Phase 0 - Stabilization & UTF-8 Lockdown - 2026-03-05
 // ENTERPRISE FIX: Exact Legacy UI Restoration - 2026-02-27
@@ -11,7 +12,6 @@ import { toast } from '@services/toastService';
 import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
 import EnterpriseLoading from './components/EnterpriseLoading';
-import { InventoryProvider } from './contexts/InventoryContext';
 import { useInventoryStore } from './store/useInventoryStore';
 import { Transaction, Partner, Order, User, Tag, SystemSettings, OperationAppearance, ReportColumnConfig, UnloadingRule, Formula, AuditLog } from './types';
 import { v4 as uuidv4 } from 'uuid';
@@ -209,7 +209,7 @@ const AppContent = () => {
         console.log('[App.tsx] Auth initialization complete, authReady = true');
 
         // ENTERPRISE FIX: Server-First Items Sync - Clear LocalStorage items to prevent stale data
-        // Items will be loaded from API by InventoryContext sync mechanism
+        // Inventory hydration is now owned بالكامل بواسطة Zustand store.
         localStorage.removeItem('feed_factory_items');
         console.log('[App.tsx] LocalStorage items cleared (Server-First strategy)');
 
@@ -655,11 +655,11 @@ const AppContent = () => {
       <Routes>
         <Route path="/" element={renderProtectedRoute('inventory.view.stock', 'dashboard', withLazyFallback(<Dashboard />))} />
         <Route path="/dashboard" element={renderProtectedRoute('inventory.view.stock', 'dashboard', withLazyFallback(<Dashboard />))} />
-        <Route path="/balances" element={renderProtectedRoute('inventory.view.stock', 'balances', withLazyFallback(<StockBalances settings={systemSettings} transactions={scopedTransactions} />))} />
-        <Route path="/operations" element={renderProtectedRoute('inventory.view.operations', 'operations', withLazyFallback(<DailyOperations items={scopedItems} transactions={scopedTransactions} partners={partners} settings={systemSettings} unloadingRules={unloadingRules} onAddTransaction={handleAddTransactions} onUpdateTransaction={handleUpdateTransaction} onDeleteTransactions={handleDeleteTransactions} currentUserId={currentUser?.id} canExport={canExportInventory} canImport={canImportOperations} onExport={(rowCount) => logDataExport('operations', rowCount)} onImport={(rowCount) => logDataImport('operations', rowCount)} />))} />
-        <Route path="/transactions" element={renderProtectedRoute('inventory.view.operations', 'operations', withLazyFallback(<DailyOperations items={scopedItems} transactions={scopedTransactions} partners={partners} settings={systemSettings} unloadingRules={unloadingRules} onAddTransaction={handleAddTransactions} onUpdateTransaction={handleUpdateTransaction} onDeleteTransactions={handleDeleteTransactions} currentUserId={currentUser?.id} canExport={canExportInventory} canImport={canImportOperations} onExport={(rowCount) => logDataExport('operations', rowCount)} onImport={(rowCount) => logDataImport('operations', rowCount)} />))} />
+        <Route path="/balances" element={renderProtectedRoute('inventory.view.stock', 'balances', withLazyFallback(<StockBalances settings={systemSettings} />))} />
+        <Route path="/operations" element={renderProtectedRoute('inventory.view.operations', 'operations', withLazyFallback(<DailyOperations partners={partners} settings={systemSettings} unloadingRules={unloadingRules} onAddTransaction={handleAddTransactions} onUpdateTransaction={handleUpdateTransaction} onDeleteTransactions={handleDeleteTransactions} currentUserId={currentUser?.id} canExport={canExportInventory} canImport={canImportOperations} onExport={(rowCount) => logDataExport('operations', rowCount)} onImport={(rowCount) => logDataImport('operations', rowCount)} />))} />
+        <Route path="/transactions" element={renderProtectedRoute('inventory.view.operations', 'operations', withLazyFallback(<DailyOperations partners={partners} settings={systemSettings} unloadingRules={unloadingRules} onAddTransaction={handleAddTransactions} onUpdateTransaction={handleUpdateTransaction} onDeleteTransactions={handleDeleteTransactions} currentUserId={currentUser?.id} canExport={canExportInventory} canImport={canImportOperations} onExport={(rowCount) => logDataExport('operations', rowCount)} onImport={(rowCount) => logDataImport('operations', rowCount)} />))} />
         <Route path="/items" element={renderProtectedRoute('inventory.view.items', 'items', withLazyFallback(<ItemManagement transactions={scopedTransactions} availableTags={tags} />))} />
-        <Route path="/stocktaking" element={renderProtectedRoute('inventory.view.stocktaking', 'stocktaking', withLazyFallback(<Stocktaking items={scopedItems} transactions={scopedTransactions} currentUserName={currentUser?.name} companyName={systemSettings.companyName} />))} />
+        <Route path="/stocktaking" element={renderProtectedRoute('inventory.view.stocktaking', 'stocktaking', withLazyFallback(<Stocktaking currentUserName={currentUser?.name} companyName={systemSettings.companyName} />))} />
         <Route path="/stock-card" element={renderProtectedRoute('inventory.reports.stock_card', 'stock-card', withLazyFallback(<StockCardReport items={scopedItems} transactions={scopedTransactions} canExport={canExportInventory} onExport={(rowCount) => logDataExport('stock-card', rowCount)} />))} />
         <Route
           path="/statement"
@@ -682,7 +682,7 @@ const AppContent = () => {
         <Route path="/partners" element={renderProtectedRoute('partners.view', 'partners', withLazyFallback(<Partners partners={partners} onAddPartner={handleAddPartner} onUpdatePartner={handleUpdatePartner} onDeletePartner={handleDeletePartner} transactions={scopedTransactions} orders={scopedOrders} />))} />
         <Route path="/orders" element={renderProtectedRoute('sales.view.orders', 'orders', withLazyFallback(<Orders orders={scopedOrders} partners={partners} items={scopedItems} onAddOrder={handleAddOrder} onUpdateOrder={handleUpdateOrder} onCompleteOrder={handleCompleteOrder} canExport={hasPermission(currentUser, 'sales.export.orders')} onExport={(rowCount) => logDataExport('orders', rowCount)} />))} />
         <Route path="/reports" element={renderProtectedRoute('reports.view', 'reports', withLazyFallback(<Reports />))} />
-        <Route path="/formulation" element={renderProtectedRoute('formulation.view', 'formulation', withLazyFallback(<Formulation formulas={formulas} items={scopedItems} onAddFormula={handleAddFormula} onUpdateFormula={handleUpdateFormula} onDeleteFormula={handleDeleteFormula} />))} />
+        <Route path="/formulation" element={renderProtectedRoute('formulation.view', 'formulation', withLazyFallback(<Formulation formulas={formulas} onAddFormula={handleAddFormula} onUpdateFormula={handleUpdateFormula} onDeleteFormula={handleDeleteFormula} />))} />
         <Route path="/opening-balance" element={renderProtectedRoute('inventory.view.opening_balances', 'opening-balance', withLazyFallback(<OpeningBalancePage items={scopedItems} />))} />
         <Route
           path="/settings"
@@ -743,12 +743,10 @@ const AppContent = () => {
 
 const App: React.FC = () => {
   return (
-    <InventoryProvider>
-      <ErrorBoundary>
-        <AppContent />
-        <Toaster position="top-left" richColors closeButton />
-      </ErrorBoundary>
-    </InventoryProvider>
+    <ErrorBoundary>
+      <AppContent />
+      <Toaster position="top-left" richColors closeButton />
+    </ErrorBoundary>
   );
 };
 

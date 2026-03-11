@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 2 - Full Single Source of Truth & Legacy Cleanup - 2026-03-05
 // ENTERPRISE FIX: Phase 1 - Single Source of Truth & Integration - 2026-03-05
 // ENTERPRISE FIX: Arabic Encoding Restoration - Full Components Folder - 2026-03-04
 // Arabic text encoding verified and corrected
@@ -20,8 +21,6 @@ import {
 import { differenceInHours } from 'date-fns';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useInventoryStore } from '../store/useInventoryStore';
-import { getOpeningBalances as getOpeningBalancesFromApi } from '@services/openingBalanceService';
-import { upsertOpeningBalances } from '../services/openingBalanceService';
 import { useInventoryCalculations } from '@hooks/useInventoryCalculations';
 
 interface StockBalancesProps {
@@ -54,6 +53,11 @@ const StockBalances: React.FC<StockBalancesProps> = ({ settings, transactions })
   const items = useInventoryStore((state) => state.items);
   const categories = useInventoryStore((state) => state.categories);
   const storeTransactions = useInventoryStore((state) => state.transactions);
+  const openingBalances = useInventoryStore((state) => state.openingBalances);
+  const openingBalancesYear = useInventoryStore((state) => state.openingBalancesYear);
+  const loadOpeningBalances = useInventoryStore((state) => state.loadOpeningBalances);
+  const loadingOpeningBalances = useInventoryStore((state) => state.openingBalancesLoading);
+  const openingBalancesError = useInventoryStore((state) => state.openingBalancesError);
   const balances = useInventoryStore((state) => state.balances);
   const loadAll = useInventoryStore((state) => state.loadAll);
   const itemsLoading = useInventoryStore((state) => state.loading || state.syncing);
@@ -65,11 +69,13 @@ const StockBalances: React.FC<StockBalancesProps> = ({ settings, transactions })
   const [manualCategoryOrder, setManualCategoryOrder] = useState<string[]>(categories);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
-  const [openingQuantities, setOpeningQuantities] = useState<Map<string, number> | null>(null);
-  const [loadingOpeningBalances, setLoadingOpeningBalances] = useState(false);
-  const [apiSyncError, setApiSyncError] = useState<string | null>(null);
 
   const printRef = useRef<HTMLDivElement>(null);
+  const currentYear = new Date().getFullYear();
+  const openingQuantities = useMemo(
+    () => (openingBalancesYear === currentYear ? new Map<string, number>(Object.entries(openingBalances)) : null),
+    [currentYear, openingBalances, openingBalancesYear]
+  );
 
   const { financialYear, balanceMap, stockStatusMap, formatBalanceNumber } = useInventoryCalculations({
     items,
@@ -99,51 +105,8 @@ const StockBalances: React.FC<StockBalancesProps> = ({ settings, transactions })
   }, [searchTerm]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    const syncOpeningFromApi = async () => {
-      setLoadingOpeningBalances(true);
-      setApiSyncError(null);
-      try {
-        const rows = await getOpeningBalancesFromApi(financialYear);
-        if (!Array.isArray(rows)) {
-          if (!cancelled) setOpeningQuantities(null);
-          return;
-        }
-
-        const openingMap = new Map<string, number>();
-        rows.forEach((row: any) => {
-          const itemPublicId = row?.itemPublicId ?? row?.item?.publicId;
-          if (!itemPublicId) return;
-          const quantity = Number(row?.quantity ?? 0);
-          if (!Number.isFinite(quantity)) return;
-          openingMap.set(String(itemPublicId), quantity);
-        });
-
-        if (cancelled) return;
-        setOpeningQuantities(openingMap);
-
-        if (openingMap.size > 0) {
-          upsertOpeningBalances(
-            financialYear,
-            Array.from(openingMap.entries()).map(([item_id, quantity]) => ({ item_id, quantity }))
-          );
-        }
-      } catch {
-        if (!cancelled) {
-          setOpeningQuantities(null);
-          setApiSyncError('تعذر مزامنة أرصدة بداية المدة من الخادم. تم استخدام النسخة المحلية.');
-        }
-      } finally {
-        if (!cancelled) setLoadingOpeningBalances(false);
-      }
-    };
-
-    void syncOpeningFromApi();
-    return () => {
-      cancelled = true;
-    };
-  }, [financialYear]);
+    void loadOpeningBalances(financialYear);
+  }, [financialYear, loadOpeningBalances]);
 
   const getHoursSinceUpdate = (dateString?: string) => {
     if (!dateString) return 'جديد';
@@ -267,9 +230,9 @@ const StockBalances: React.FC<StockBalancesProps> = ({ settings, transactions })
             <p className="text-slate-500 text-sm">
               عرض رصيد المخزن لكل صنف وفق رصيد بداية المدة والحركات التشغيلية.
             </p>
-            {apiSyncError && (
+            {openingBalancesError && (
               <p className="mt-2 inline-block text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1">
-                {apiSyncError}
+                {openingBalancesError}
               </p>
             )}
           </div>
