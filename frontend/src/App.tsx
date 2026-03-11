@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 4 - Production Polish & Final Integration - 2026-03-05
 // ENTERPRISE FIX: Phase 3 - Full Legacy Removal & Complete Single Source of Truth - 2026-03-05
 // ENTERPRISE FIX: Phase 2 - Full Single Source of Truth & Legacy Cleanup - 2026-03-05
 // ENTERPRISE FIX: Phase 1 - Single Source of Truth & Integration - 2026-03-05
@@ -661,7 +662,7 @@ const AppContent = () => {
         <Route path="/transactions" element={renderProtectedRoute('inventory.view.operations', 'operations', withLazyFallback(<DailyOperations partners={partners} settings={systemSettings} unloadingRules={unloadingRules} onAddTransaction={handleAddTransactions} onUpdateTransaction={handleUpdateTransaction} onDeleteTransactions={handleDeleteTransactions} currentUserId={currentUser?.id} canExport={canExportInventory} canImport={canImportOperations} onExport={(rowCount) => logDataExport('operations', rowCount)} onImport={(rowCount) => logDataImport('operations', rowCount)} />))} />
         <Route path="/items" element={renderProtectedRoute('inventory.view.items', 'items', withLazyFallback(<ItemManagement transactions={scopedTransactions} availableTags={tags} />))} />
         <Route path="/stocktaking" element={renderProtectedRoute('inventory.view.stocktaking', 'stocktaking', withLazyFallback(<Stocktaking currentUserName={currentUser?.name} companyName={systemSettings.companyName} />))} />
-        <Route path="/stock-card" element={renderProtectedRoute('inventory.reports.stock_card', 'stock-card', withLazyFallback(<StockCardReport items={scopedItems} transactions={scopedTransactions} canExport={canExportInventory} onExport={(rowCount) => logDataExport('stock-card', rowCount)} />))} />
+        <Route path="/stock-card" element={renderProtectedRoute('inventory.reports.stock_card', 'stock-card', withLazyFallback(<StockCardReport items={scopedItems} transactions={scopedTransactions} companyName={systemSettings.companyName} companyAddress={systemSettings.address} companyPhone={systemSettings.phone} canExport={canExportInventory} onExport={(rowCount) => logDataExport('stock-card', rowCount)} />))} />
         <Route
           path="/statement"
           element={renderProtectedRoute(

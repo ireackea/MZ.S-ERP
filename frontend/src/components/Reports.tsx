@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 4 - Production Polish & Final Integration - 2026-03-05
 // ENTERPRISE FIX: Arabic Encoding Restoration - Full Components Folder - 2026-03-04
 // Arabic text encoding verified and corrected
 
@@ -17,7 +18,6 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import * as XLSX from 'xlsx';
 import {
   CalendarDays,
   Database,
@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { toast } from '@services/toastService';
 import apiClient from '@api/client';
+import { useInventoryStore } from '../store/useInventoryStore';
 
 type ReportType = 'inventory' | 'movements';
 
@@ -87,6 +88,8 @@ const numberFormatter = new Intl.NumberFormat('en-US', {
 });
 
 const Reports: React.FC = () => {
+  const exportRowsToExcel = useInventoryStore((state) => state.exportRowsToExcel);
+  const exportPdfReport = useInventoryStore((state) => state.exportPdfReport);
   const [items, setItems] = useState<ItemRecord[]>([]);
   const [reportType, setReportType] = useState<ReportType>('movements');
   const [dateFrom, setDateFrom] = useState<Date | null>(null);
@@ -213,10 +216,11 @@ const Reports: React.FC = () => {
             '7�87�7�8~': row.supplierOrReceiver || '-',
           }));
 
-      const ws = XLSX.utils.json_to_sheet(normalizedRows);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Reports');
-      XLSX.writeFile(wb, `reports-${reportType}-${new Date().toISOString().split('T')[0]}.xlsx`);
+      await exportRowsToExcel({
+        fileName: `reports-${reportType}-${new Date().toISOString().split('T')[0]}.xlsx`,
+        sheetName: 'Reports',
+        rows: normalizedRows,
+      });
       toast.success('7�8& 7�7�7�8y7� 7�87�87�8y7� 7�8 7�7�7�');
     } finally {
       setIsExportingExcel(false);
@@ -232,16 +236,7 @@ const Reports: React.FC = () => {
         return;
       }
 
-      const generatedBy = (() => {
-        try {
-          const raw = localStorage.getItem('feed_factory_jwt_user');
-          if (!raw) return 'Reports User';
-          const parsed = JSON.parse(raw) as { name?: string; username?: string; email?: string };
-          return parsed?.name || parsed?.username || parsed?.email || 'Reports User';
-        } catch {
-          return 'Reports User';
-        }
-      })();
+      const generatedBy = 'MZ.S-ERP Reports';
 
       const columns = reportType === 'inventory'
         ? [
@@ -274,16 +269,11 @@ const Reports: React.FC = () => {
         rows,
       };
 
-      const response = await apiClient.post('/reports/print', payload, { responseType: 'blob' });
-      const blob = new Blob([response.data], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${payload.filename}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      await exportPdfReport({
+        endpoint: '/reports/print',
+        payload,
+        fileName: `${payload.filename}.pdf`,
+      });
       toast.success('7�8& 7�8 7�7�7 8&88~ PDF 7�8 7�7�7�');
     } finally {
       setIsExportingPdf(false);

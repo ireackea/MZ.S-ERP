@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 4 - Production Polish & Final Integration - 2026-03-05
 // ENTERPRISE FIX: Arabic Encoding Restoration - Settings.tsx Complete - 2026-03-04
 // تم إصلاح جميع النصوص العربية المشوهة - الملف كامل 950 سطر
 // الأقسام المُصلحة: General, Appearance, Reports, Grid, Logistics, Users-Backup, Categories, Tags, Units, Modals
@@ -15,7 +16,6 @@ import UniversalColumnManager from './UniversalColumnManager';
 import { Settings as SettingsIcon, Users, Tags, Ruler, Database, Save, Plus, Trash2, Building, Palette, TableProperties, Truck, Layers, AlertTriangle, Shield, Package, ShieldAlert, X, CheckCircle, Loader2, TriangleAlert, ShieldCheck } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { GRID_MODULE_DEFINITIONS, getGridModuleDefinition } from '../services/gridModules';
-import { getGridDisplayPolicy, upsertGridDisplayPolicy, getGridPreferenceForUser, resetGridPreferenceForUser, resetGridPreferencesForModule } from '../services/storage';
 import { systemResetService } from '../services/systemResetService';
 import { useInventoryStore } from '../store/useInventoryStore';
 import { usePermissions } from '../hooks/usePermissions';
@@ -87,7 +87,14 @@ const Settings: React.FC<SettingsProps> = ({
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { sortMode: itemSortMode, setSortMode: setItemSortMode, move: lockCurrentItemOrder } = useInventoryStore();
+  const itemSortMode = useInventoryStore((state) => state.sortMode);
+  const setItemSortMode = useInventoryStore((state) => state.setSortMode);
+  const lockCurrentItemOrder = useInventoryStore((state) => state.lockCurrentItemOrder);
+  const getGridPreferences = useInventoryStore((state) => state.getGridPreferences);
+  const setGridPreferences = useInventoryStore((state) => state.setGridPreferences);
+  const resetGridPreferences = useInventoryStore((state) => state.resetGridPreferences);
+  const getGridDisplayPolicy = useInventoryStore((state) => state.getGridDisplayPolicy);
+  const setGridDisplayPolicy = useInventoryStore((state) => state.setGridDisplayPolicy);
   const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'reports' | 'grid' | 'logistics' | 'users-backup' | 'units' | 'tags' | 'categories'>(
     location.pathname === '/users' ? 'users-backup' : 'general'
   );
@@ -181,11 +188,11 @@ const Settings: React.FC<SettingsProps> = ({
       setForceUnifiedView(false);
       return;
     }
-    const loaded = getGridPreferenceForUser('0', selectedGridModule, module.columns);
+    const loaded = getGridPreferences(selectedGridModule, module.columns);
     const policy = getGridDisplayPolicy(selectedGridModule);
     setGridColumns(loaded);
     setForceUnifiedView(!!policy.forceUnified);
-  }, [selectedGridModule]);
+  }, [getGridDisplayPolicy, getGridPreferences, selectedGridModule]);
 
   const handleSaveGeneral = (e: React.FormEvent) => {
     e.preventDefault();
@@ -268,11 +275,8 @@ const Settings: React.FC<SettingsProps> = ({
   const handleSaveGridConfig = () => {
     if (!guardSettingsWrite()) return;
     if (!selectedGridModule) return;
-    upsertGridPreferenceForUser('0', selectedGridModule, gridColumns);
-    upsertGridDisplayPolicy(selectedGridModule, { forceUnified: forceUnifiedView });
-    if (applyToAllUsers) {
-      resetGridPreferencesForModule(selectedGridModule, true);
-    }
+    setGridPreferences(selectedGridModule, gridColumns);
+    setGridDisplayPolicy(selectedGridModule, { forceUnified: forceUnifiedView });
     toast.success(
       applyToAllUsers
         ? 'تم حفظ إعدادات الشبكة لجميع مستخدمي النظام.'
@@ -284,21 +288,17 @@ const Settings: React.FC<SettingsProps> = ({
     if (!guardSettingsWrite()) return;
     const module = getGridModuleDefinition(selectedGridModule);
     if (!module) return;
-    resetGridPreferenceForUser('0', selectedGridModule);
-    upsertGridDisplayPolicy(selectedGridModule, { forceUnified: false });
-    if (applyToAllUsers) {
-      resetGridPreferencesForModule(selectedGridModule, true);
-    }
-    setGridColumns(module.columns);
+    resetGridPreferences(selectedGridModule, module.columns);
+    setGridDisplayPolicy(selectedGridModule, { forceUnified: false });
+    setGridColumns(getGridPreferences(selectedGridModule, module.columns));
     setForceUnifiedView(false);
   };
 
   const handleApplyUnifiedNow = () => {
     if (!guardSettingsWrite()) return;
     if (!selectedGridModule) return;
-    upsertGridPreferenceForUser('0', selectedGridModule, gridColumns);
-    upsertGridDisplayPolicy(selectedGridModule, { forceUnified: true });
-    resetGridPreferencesForModule(selectedGridModule, true);
+    setGridPreferences(selectedGridModule, gridColumns);
+    setGridDisplayPolicy(selectedGridModule, { forceUnified: true });
     setForceUnifiedView(true);
     toast.success('تم تفعيل العرض الموحد لجميع المستخدمين.');
   };
@@ -436,7 +436,7 @@ const Settings: React.FC<SettingsProps> = ({
     if (!guardSettingsWrite()) return;
     let count = 0;
 
-    switch(type) {
+    switch (type) {
       case 'category':
         count = allItems.filter(i => i.category === targetId).length;
         break;
@@ -460,7 +460,7 @@ const Settings: React.FC<SettingsProps> = ({
     if (!guardSettingsWrite()) return;
     const { type, targetId } = deleteModal;
 
-    switch(type) {
+    switch (type) {
       case 'category':
         onDeleteCategory(targetId);
         break;
@@ -535,22 +535,22 @@ const Settings: React.FC<SettingsProps> = ({
                 <div>
                   <label htmlFor="companyName" className="block text-sm font-medium text-slate-700 mb-1">اسم الشركة</label>
                   <input id="companyName" type="text" className="w-full p-2 border border-slate-200 rounded-lg outline-none focus:border-emerald-500"
-                    value={generalForm.companyName} onChange={e => setGeneralForm({...generalForm, companyName: e.target.value})} />
+                    value={generalForm.companyName} onChange={e => setGeneralForm({ ...generalForm, companyName: e.target.value })} />
                 </div>
                 <div>
                   <label htmlFor="companyPhone" className="block text-sm font-medium text-slate-700 mb-1">رقم الهاتف</label>
                   <input id="companyPhone" type="text" className="w-full p-2 border border-slate-200 rounded-lg outline-none focus:border-emerald-500"
-                    value={generalForm.phone || ''} onChange={e => setGeneralForm({...generalForm, phone: e.target.value})} />
+                    value={generalForm.phone || ''} onChange={e => setGeneralForm({ ...generalForm, phone: e.target.value })} />
                 </div>
                 <div>
                   <label htmlFor="companyAddress" className="block text-sm font-medium text-slate-700 mb-1">العنوان</label>
                   <input id="companyAddress" type="text" className="w-full p-2 border border-slate-200 rounded-lg outline-none focus:border-emerald-500"
-                    value={generalForm.address} onChange={e => setGeneralForm({...generalForm, address: e.target.value})} />
+                    value={generalForm.address} onChange={e => setGeneralForm({ ...generalForm, address: e.target.value })} />
                 </div>
                 <div>
                   <label htmlFor="companyCurrency" className="block text-sm font-medium text-slate-700 mb-1">العملة الافتراضية</label>
                   <input id="companyCurrency" type="text" className="w-full p-2 border border-slate-200 rounded-lg outline-none focus:border-emerald-500"
-                    value={generalForm.currency} onChange={e => setGeneralForm({...generalForm, currency: e.target.value})} />
+                    value={generalForm.currency} onChange={e => setGeneralForm({ ...generalForm, currency: e.target.value })} />
                 </div>
                 <button type="submit" className="bg-emerald-600 text-white px-6 py-2 rounded-xl hover:bg-emerald-700 flex items-center gap-2 shadow-md">
                   <Save size={18} /> حفظ التغييرات
@@ -640,7 +640,7 @@ const Settings: React.FC<SettingsProps> = ({
                     </h3>
                     <p className="text-sm text-slate-500">التحكم في طريقة ترتيب الأصناف على واجهة النظام.</p>
                   </div>
-                  <button type="button" onClick={lockCurrentItemOrder} className="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 text-sm font-bold">
+                  <button type="button" onClick={() => lockCurrentItemOrder()} className="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 text-sm font-bold">
                     حفظ الترتيب الحالي
                   </button>
                 </div>
@@ -735,15 +735,15 @@ const Settings: React.FC<SettingsProps> = ({
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">اسم القاعدة</label>
-                      <input type="text" className="w-full p-2 border border-slate-300 rounded-lg" value={editingRuleId ? editingRuleForm.rule_name : newUnloadingRule.rule_name} onChange={(e) => editingRuleId ? setEditingRuleForm({...editingRuleForm, rule_name: e.target.value}) : setNewUnloadingRule({...newUnloadingRule, rule_name: e.target.value})} />
+                      <input type="text" className="w-full p-2 border border-slate-300 rounded-lg" value={editingRuleId ? editingRuleForm.rule_name : newUnloadingRule.rule_name} onChange={(e) => editingRuleId ? setEditingRuleForm({ ...editingRuleForm, rule_name: e.target.value }) : setNewUnloadingRule({ ...newUnloadingRule, rule_name: e.target.value })} />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">مدة السماح (دقائق)</label>
-                      <input type="number" className="w-full p-2 border border-slate-300 rounded-lg" value={editingRuleId ? editingRuleForm.allowed_duration_minutes : newUnloadingRule.allowed_duration_minutes} onChange={(e) => editingRuleId ? setEditingRuleForm({...editingRuleForm, allowed_duration_minutes: Number(e.target.value)}) : setNewUnloadingRule({...newUnloadingRule, allowed_duration_minutes: Number(e.target.value)})} />
+                      <input type="number" className="w-full p-2 border border-slate-300 rounded-lg" value={editingRuleId ? editingRuleForm.allowed_duration_minutes : newUnloadingRule.allowed_duration_minutes} onChange={(e) => editingRuleId ? setEditingRuleForm({ ...editingRuleForm, allowed_duration_minutes: Number(e.target.value) }) : setNewUnloadingRule({ ...newUnloadingRule, allowed_duration_minutes: Number(e.target.value) })} />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">معدل الغرامة (د.ل/دقيقة)</label>
-                      <input type="number" step="0.001" className="w-full p-2 border border-slate-300 rounded-lg" value={editingRuleId ? editingRuleForm.penalty_rate_per_minute : newUnloadingRule.penalty_rate_per_minute} onChange={(e) => editingRuleId ? setEditingRuleForm({...editingRuleForm, penalty_rate_per_minute: Number(e.target.value)}) : setNewUnloadingRule({...newUnloadingRule, penalty_rate_per_minute: Number(e.target.value)})} />
+                      <input type="number" step="0.001" className="w-full p-2 border border-slate-300 rounded-lg" value={editingRuleId ? editingRuleForm.penalty_rate_per_minute : newUnloadingRule.penalty_rate_per_minute} onChange={(e) => editingRuleId ? setEditingRuleForm({ ...editingRuleForm, penalty_rate_per_minute: Number(e.target.value) }) : setNewUnloadingRule({ ...newUnloadingRule, penalty_rate_per_minute: Number(e.target.value) })} />
                     </div>
                   </div>
                   <div className="flex gap-2 mt-4">
@@ -775,13 +775,20 @@ const Settings: React.FC<SettingsProps> = ({
                 {securityTab === 'iam' && (
                   <div>
                     <h3 className="text-lg font-bold text-slate-800 mb-4">إدارة المستخدمين والصلاحيات</h3>
-                    <UnifiedIAM currentUser={currentUser} onSwitchUser={onSwitchUser} />
+                    <UnifiedIAM />
                   </div>
                 )}
                 {securityTab === 'audit' && (
                   <div>
                     <h3 className="text-lg font-bold text-slate-800 mb-4">سجل تدقيق المستخدمين</h3>
-                    <AuditLogViewer auditLogs={auditLogs} />
+                    <AuditLogViewer fallbackLogs={auditLogs.map((entry) => ({
+                      id: entry.id,
+                      userId: entry.userId,
+                      userName: entry.userName,
+                      action: entry.action,
+                      details: entry.details,
+                      timestamp: entry.timestamp,
+                    }))} />
                   </div>
                 )}
               </div>
@@ -834,8 +841,8 @@ const Settings: React.FC<SettingsProps> = ({
                 <Tags size={20} className="text-emerald-600" /> علامات التصنيف
               </h3>
               <div className="flex gap-2 mb-4">
-                <input type="text" value={newTag.name} onChange={(e) => setNewTag({...newTag, name: e.target.value})} placeholder="اسم العلامة" className="flex-1 p-2 border border-slate-300 rounded-lg" />
-                <input type="color" value={newTag.color} onChange={(e) => setNewTag({...newTag, color: e.target.value})} className="h-10 w-20 border border-slate-300 rounded" />
+                <input type="text" value={newTag.name} onChange={(e) => setNewTag({ ...newTag, name: e.target.value })} placeholder="اسم العلامة" className="flex-1 p-2 border border-slate-300 rounded-lg" />
+                <input type="color" value={newTag.color} onChange={(e) => setNewTag({ ...newTag, color: e.target.value })} className="h-10 w-20 border border-slate-300 rounded" />
                 <button onClick={handleAddTag} className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 flex items-center gap-2">
                   <Plus size={16} /> إضافة
                 </button>
@@ -922,10 +929,10 @@ const Settings: React.FC<SettingsProps> = ({
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-2">كلمة التأكيد</label>
-                <input type="text" value={resetModal.confirmationCode} onChange={(e) => setResetModal({...resetModal, confirmationCode: e.target.value})} className="w-full p-3 border border-slate-300 rounded-lg font-mono" placeholder="CONFIRM_SYSTEM_RESET_2026" />
+                <input type="text" value={resetModal.confirmationCode} onChange={(e) => setResetModal({ ...resetModal, confirmationCode: e.target.value })} className="w-full p-3 border border-slate-300 rounded-lg font-mono" placeholder="CONFIRM_SYSTEM_RESET_2026" />
               </div>
               <label className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-xl cursor-pointer">
-                <input type="checkbox" checked={resetModal.checkboxConfirmed} onChange={(e) => setResetModal({...resetModal, checkboxConfirmed: e.target.checked})} className="w-5 h-5 mt-0.5 accent-red-600" />
+                <input type="checkbox" checked={resetModal.checkboxConfirmed} onChange={(e) => setResetModal({ ...resetModal, checkboxConfirmed: e.target.checked })} className="w-5 h-5 mt-0.5 accent-red-600" />
                 <span className="text-sm text-red-800 font-bold">أؤكد أنني أفهم أن هذه العملية ستحذف جميع البيانات ولا يمكن التراجع عنها.</span>
               </label>
             </div>

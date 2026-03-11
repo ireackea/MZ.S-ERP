@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 4 - Production Polish & Final Integration - 2026-03-05
 // ENTERPRISE FIX: Phase 3 - Full Legacy Removal & Complete Single Source of Truth - 2026-03-05
 // ENTERPRISE FIX: Phase 2 - Full Single Source of Truth & Legacy Cleanup - 2026-03-05
 // ENTERPRISE FIX: Arabic Encoding Restoration - Full Components Folder - 2026-03-04
@@ -9,7 +10,6 @@ import { Item, Transaction, OperationType, Partner, SystemSettings, UnloadingRul
 import { OPERATION_TYPES } from '../constants';
 import UniversalColumnManager from './UniversalColumnManager';
 import { getGridModuleDefinition } from '../services/gridModules';
-import { getGridPreferenceForUser, resetGridPreferenceForUser, upsertGridPreferenceForUser } from '../services/storage';
 import {
     Trash2, Save, Download, Upload,
     FileSpreadsheet, Truck, Clock, Scale,
@@ -104,6 +104,7 @@ type OperationPrintMargins = 'narrow' | 'normal' | 'wide';
 type OperationPrintGrouping = 'none' | 'day' | 'type';
 type OperationPrintTab = 'layout' | 'content' | 'branding';
 type InvoiceSortMode = 'invoice_asc_date_desc' | 'invoice_desc_date_desc' | 'invoice_asc_type_then_date' | 'invoice_asc_partner_then_date';
+type ExcelPaperSizeValue = 5 | 8 | 9;
 
 interface OperationPrintableRow {
     id: string;
@@ -162,9 +163,6 @@ interface OperationPrintTemplate {
     config: OperationPrintConfig;
     updatedAt: number;
 }
-
-const OPERATION_PRINT_CONFIG_STORAGE_KEY = 'operation_log_print_config';
-const OPERATION_PRINT_TEMPLATES_STORAGE_KEY = 'operation_log_print_templates';
 
 const OPERATION_PRINT_COLUMNS: { key: keyof OperationPrintableRow; label: string }[] = [
     { key: 'invoiceCounter', label: '#' },
@@ -331,6 +329,14 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
     const storeTransactions = useInventoryStore((state) => state.transactions);
     const loadAll = useInventoryStore((state) => state.loadAll);
     const lastLoadedAt = useInventoryStore((state) => state.lastLoadedAt);
+    const storedOperationPrintConfig = useInventoryStore((state) => state.operationPrintConfig);
+    const setOperationPrintConfig = useInventoryStore((state) => state.setOperationPrintConfig);
+    const storedOperationPrintTemplates = useInventoryStore((state) => state.operationPrintTemplates);
+    const setOperationPrintTemplates = useInventoryStore((state) => state.setOperationPrintTemplates);
+    const getGridPreferences = useInventoryStore((state) => state.getGridPreferences);
+    const setGridPreferences = useInventoryStore((state) => state.setGridPreferences);
+    const resetGridPreferences = useInventoryStore((state) => state.resetGridPreferences);
+    const exportElementToPdf = useInventoryStore((state) => state.exportElementToPdf);
     const items = storeItems.length > 0 ? storeItems : (itemsProp || []);
     const transactions = storeTransactions.length > 0 ? storeTransactions : (transactionsProp || []);
 
@@ -446,6 +452,8 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
     const [printStatusMessage, setPrintStatusMessage] = useState('');
     const printSheetRef = useRef<HTMLDivElement | null>(null);
     const printPageRef = useRef<HTMLDivElement | null>(printSheetRef.current);
+    const hasHydratedPrintConfigRef = useRef(false);
+    const hasHydratedPrintTemplatesRef = useRef(false);
 
     useEffect(() => {
         const statePayload = (location.state as { drilldown?: InventoryDrilldownFilter } | null)?.drilldown;
@@ -458,38 +466,39 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
     }, [location.state]);
 
     useEffect(() => {
-        try {
-            const rawConfig = localStorage.getItem(OPERATION_PRINT_CONFIG_STORAGE_KEY);
-            if (rawConfig) {
-                const parsed = JSON.parse(rawConfig) as Partial<OperationPrintConfig>;
-                setPrintConfig(prev => ({
-                    ...prev,
-                    ...parsed,
-                    selectedColumns: Array.isArray(parsed.selectedColumns)
-                        ? parsed.selectedColumns.filter((key): key is string => OPERATION_PRINT_COLUMNS.some(column => column.key === key))
-                        : prev.selectedColumns,
-                }));
-            }
+        if (hasHydratedPrintConfigRef.current) return;
 
-            const rawTemplates = localStorage.getItem(OPERATION_PRINT_TEMPLATES_STORAGE_KEY);
-            if (rawTemplates) {
-                const parsedTemplates = JSON.parse(rawTemplates) as OperationPrintTemplate[];
-                if (Array.isArray(parsedTemplates)) {
-                    setPrintTemplates(parsedTemplates);
-                }
-            }
-        } catch {
-            // ignore invalid local cache
+        const parsed = storedOperationPrintConfig as Partial<OperationPrintConfig> | undefined;
+        if (parsed && Object.keys(parsed).length > 0) {
+            setPrintConfig(prev => ({
+                ...prev,
+                ...parsed,
+                selectedColumns: Array.isArray(parsed.selectedColumns)
+                    ? parsed.selectedColumns.filter((key): key is string => OPERATION_PRINT_COLUMNS.some(column => column.key === key))
+                    : prev.selectedColumns,
+            }));
         }
-    }, []);
+
+        hasHydratedPrintConfigRef.current = true;
+    }, [storedOperationPrintConfig]);
 
     useEffect(() => {
-        localStorage.setItem(OPERATION_PRINT_CONFIG_STORAGE_KEY, JSON.stringify(printConfig));
-    }, [printConfig]);
+        if (hasHydratedPrintTemplatesRef.current) return;
+
+        if (Array.isArray(storedOperationPrintTemplates) && storedOperationPrintTemplates.length > 0) {
+            setPrintTemplates(storedOperationPrintTemplates as unknown as OperationPrintTemplate[]);
+        }
+
+        hasHydratedPrintTemplatesRef.current = true;
+    }, [storedOperationPrintTemplates]);
 
     useEffect(() => {
-        localStorage.setItem(OPERATION_PRINT_TEMPLATES_STORAGE_KEY, JSON.stringify(printTemplates));
-    }, [printTemplates]);
+        setOperationPrintConfig(printConfig as unknown as Record<string, unknown>);
+    }, [printConfig, setOperationPrintConfig]);
+
+    useEffect(() => {
+        setOperationPrintTemplates(printTemplates.map((template) => ({ ...template })));
+    }, [printTemplates, setOperationPrintTemplates]);
 
     const inventoryLogDefaultColumns = useMemo(() => {
         const module = getGridModuleDefinition('inventory_log');
@@ -499,19 +508,16 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
         const module = getGridModuleDefinition('inventory_batch');
         return module?.columns || [];
     }, []);
-    const [historyColumns, setHistoryColumns] = useState<GridColumnPreference[]>(inventoryLogDefaultColumns);
-    const [batchColumns, setBatchColumns] = useState<GridColumnPreference[]>(inventoryBatchDefaultColumns);
-    const effectiveUserId = currentUserId || '0';
+    const [historyColumns, setHistoryColumns] = useState<GridColumnPreference[]>(() => getGridPreferences('inventory_log', inventoryLogDefaultColumns));
+    const [batchColumns, setBatchColumns] = useState<GridColumnPreference[]>(() => getGridPreferences('inventory_batch', inventoryBatchDefaultColumns));
 
     useEffect(() => {
-        const loaded = getGridPreferenceForUser(effectiveUserId, 'inventory_log', inventoryLogDefaultColumns);
-        setHistoryColumns(loaded);
-    }, [effectiveUserId, inventoryLogDefaultColumns]);
+        setHistoryColumns(getGridPreferences('inventory_log', inventoryLogDefaultColumns));
+    }, [getGridPreferences, inventoryLogDefaultColumns]);
 
     useEffect(() => {
-        const loaded = getGridPreferenceForUser(effectiveUserId, 'inventory_batch', inventoryBatchDefaultColumns);
-        setBatchColumns(loaded);
-    }, [effectiveUserId, inventoryBatchDefaultColumns]);
+        setBatchColumns(getGridPreferences('inventory_batch', inventoryBatchDefaultColumns));
+    }, [getGridPreferences, inventoryBatchDefaultColumns]);
 
     // --- Delete Modal State ---
     const [deleteModal, setDeleteModal] = useState<{
@@ -1699,28 +1705,15 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
         setIsPrintingPdf(true);
         setPrintStatusMessage('جاري إنشاء ملف PDF يرجى الانتظار...');
         try {
-            const html2pdfModule = await import('html2pdf.js');
-            const html2pdf = (html2pdfModule as { default?: any }).default || html2pdfModule;
-
-            await html2pdf()
-                .set({
-                    margin: 0,
-                    filename: `operation-log-${new Date().toISOString().slice(0, 10)}.pdf`,
-                    html2canvas: {
-                        scale: 2,
-                        useCORS: true,
-                        backgroundColor: '#ffffff',
-                    },
-                    image: { type: 'jpeg', quality: 0.98 },
-                    jsPDF: {
-                        unit: 'mm',
-                        format: printConfig.paperSize,
-                        orientation: printConfig.orientation,
-                    },
-                    pagebreak: { mode: ['css', 'legacy'] },
-                })
-                .from(printPageRef.current)
-                .save();
+            await exportElementToPdf({
+                element: printPageRef.current,
+                fileName: `operation-log-${new Date().toISOString().slice(0, 10)}.pdf`,
+                jsPdfOptions: {
+                    unit: 'mm',
+                    format: printConfig.paperSize,
+                    orientation: printConfig.orientation,
+                },
+            });
 
             setPrintStatusMessage('تم تصدير ملف PDF بنجاح.');
         } catch {
@@ -1749,9 +1742,10 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
             const workbook = new ExcelJS.Workbook();
             const worksheet = workbook.addWorksheet('سجل العمليات');
             worksheet.views = [{ rightToLeft: true }];
+            const paperSize: ExcelPaperSizeValue = printConfig.paperSize === 'a3' ? 8 : printConfig.paperSize === 'legal' ? 5 : 9;
             worksheet.pageSetup = {
                 orientation: printConfig.orientation,
-                paperSize: printConfig.paperSize === 'a3' ? 8 : printConfig.paperSize === 'legal' ? 5 : 9,
+                paperSize: paperSize as any,
                 fitToPage: true,
                 fitToWidth: 1,
                 fitToHeight: 0,
@@ -2399,22 +2393,22 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
     };
 
     const handleSaveHistoryColumns = () => {
-        upsertGridPreferenceForUser(effectiveUserId, 'inventory_log', historyColumns);
+        setGridPreferences('inventory_log', historyColumns);
         setShowHistoryColumnSettings(false);
     };
 
     const handleResetHistoryColumns = () => {
-        resetGridPreferenceForUser(effectiveUserId, 'inventory_log');
+        resetGridPreferences('inventory_log', inventoryLogDefaultColumns);
         setHistoryColumns(inventoryLogDefaultColumns);
     };
 
     const handleSaveBatchColumns = () => {
-        upsertGridPreferenceForUser(effectiveUserId, 'inventory_batch', batchColumns);
+        setGridPreferences('inventory_batch', batchColumns);
         setShowBatchColumnSettings(false);
     };
 
     const handleResetBatchColumns = () => {
-        resetGridPreferenceForUser(effectiveUserId, 'inventory_batch');
+        resetGridPreferences('inventory_batch', inventoryBatchDefaultColumns);
         setBatchColumns(inventoryBatchDefaultColumns);
     };
 

@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 4 - Production Polish & Final Integration - 2026-03-05
 // ENTERPRISE FIX: Phase 3 - Full Legacy Removal & Complete Single Source of Truth - 2026-03-05
 // ENTERPRISE FIX: Phase 2 - Full Single Source of Truth & Legacy Cleanup - 2026-03-05
 // ENTERPRISE FIX: Phase 1 - Single Source of Truth & Integration - 2026-03-05
@@ -24,6 +25,7 @@ import {
 } from '@services/openingBalanceService';
 import { getTransactionsFromApi } from '@services/transactionsService';
 import { fetchRoles, fetchUsers, type RoleDto, type UserDto } from '@services/usersService';
+import apiClient from '@api/client';
 import {
   addAuditLog,
   getCategories,
@@ -34,7 +36,7 @@ import {
   saveUnits,
 } from '../services/storage';
 import { getIamConfig, normalizeUsers } from '../services/iamService';
-import type { Item, ItemSortMode, RoleDefinition, Transaction, User } from '../types';
+import type { GridColumnPreference, Item, ItemSortMode, RoleDefinition, Transaction, User } from '../types';
 
 const SOFT_KEY = 'ff_items_soft_v1';
 const SORT_KEY = 'ff_items_sort_v1';
@@ -47,6 +49,14 @@ type InventoryAction = 'add' | 'remove' | 'update';
 type ActorInfo = { id: string; name: string };
 type OpeningBalanceMap = Record<string, number>;
 type OpeningBalanceRow = { itemId: string; quantity: number };
+type GridDisplayPolicy = { forceUnified: boolean };
+type GridPreferenceMap = Record<string, GridColumnPreference[]>;
+type GridDisplayPolicyMap = Record<string, GridDisplayPolicy>;
+type ExportSheet = {
+  name: string;
+  rows: unknown[][];
+  columns?: Array<{ wch: number }>;
+};
 type OpeningBalanceStoreRow = {
   id: number;
   itemId: string;
@@ -70,6 +80,10 @@ type Store = {
   roles: RoleDefinition[];
   units: string[];
   categories: string[];
+  gridPreferences: GridPreferenceMap;
+  gridDisplayPolicies: GridDisplayPolicyMap;
+  operationPrintConfig: Record<string, unknown>;
+  operationPrintTemplates: Array<Record<string, unknown>>;
   loading: boolean;
   syncing: boolean;
   error: string | null;
@@ -87,6 +101,17 @@ type Store = {
   setUsers: (users: User[]) => void;
   setRoles: (roles: RoleDefinition[]) => void;
   setReferenceData: (data: { units?: string[]; categories?: string[] }) => void;
+  getGridPreferences: (moduleKey: string, defaults: GridColumnPreference[]) => GridColumnPreference[];
+  setGridPreferences: (moduleKey: string, columns: GridColumnPreference[]) => void;
+  resetGridPreferences: (moduleKey: string, defaults: GridColumnPreference[]) => void;
+  getGridDisplayPolicy: (moduleKey: string) => GridDisplayPolicy;
+  setGridDisplayPolicy: (moduleKey: string, policy: GridDisplayPolicy) => void;
+  setOperationPrintConfig: (config: Record<string, unknown>) => void;
+  setOperationPrintTemplates: (templates: Array<Record<string, unknown>>) => void;
+  exportRowsToExcel: (options: { fileName: string; sheetName?: string; rows: Array<Record<string, unknown>> }) => Promise<void>;
+  exportSheetsToExcel: (options: { fileName: string; sheets: ExportSheet[] }) => Promise<void>;
+  exportPdfReport: (options: { endpoint: string; payload: unknown; fileName: string }) => Promise<void>;
+  exportElementToPdf: (options: { element: HTMLElement; fileName: string; jsPdfOptions?: Record<string, unknown> }) => Promise<void>;
   addUnit: (unit: string) => void;
   deleteUnit: (unit: string) => void;
   addCategory: (category: string) => void;
@@ -336,6 +361,32 @@ const mapApiOpeningBalances = (rows: any[]) =>
 
 const currentFinancialYear = () => getFinancialYearFromDate();
 
+const normalizeGridPreferences = (defaults: GridColumnPreference[], stored: GridColumnPreference[] = []) => {
+  if (!defaults.length) return [...stored];
+
+  const storedMap = new Map(stored.map((column) => [column.key, column]));
+  return defaults.map((column, index) => {
+    const persisted = storedMap.get(column.key);
+    return {
+      ...column,
+      ...persisted,
+      order: persisted?.order ?? column.order ?? index,
+    };
+  });
+};
+
+const triggerBlobDownload = (blob: Blob, fileName: string) => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+};
+
 const initialSort = read<SortState>(SORT_KEY, { mode: 'manual_locked', manualOrder: [] });
 
 export const useInventoryStore = create<Store>()(
@@ -353,6 +404,10 @@ export const useInventoryStore = create<Store>()(
       roles: [],
       units: [],
       categories: [],
+      gridPreferences: {},
+      gridDisplayPolicies: {},
+      operationPrintConfig: {},
+      operationPrintTemplates: [],
       loading: false,
       syncing: false,
       error: null,
@@ -595,6 +650,107 @@ export const useInventoryStore = create<Store>()(
         set({ roles: [...roles] });
       },
 
+      getGridPreferences: (moduleKey, defaults) => {
+        const stored = get().gridPreferences[moduleKey] || [];
+        return normalizeGridPreferences(defaults, stored);
+      },
+
+      setGridPreferences: (moduleKey, columns) => {
+        const normalizedColumns = columns.map((column, index) => ({
+          ...column,
+          order: Number.isFinite(Number(column.order)) ? Number(column.order) : index,
+        }));
+        set((state) => ({
+          gridPreferences: {
+            ...state.gridPreferences,
+            [moduleKey]: normalizedColumns,
+          },
+        }));
+      },
+
+      resetGridPreferences: (moduleKey, defaults) => {
+        set((state) => ({
+          gridPreferences: {
+            ...state.gridPreferences,
+            [moduleKey]: normalizeGridPreferences(defaults, defaults),
+          },
+        }));
+      },
+
+      getGridDisplayPolicy: (moduleKey) => get().gridDisplayPolicies[moduleKey] || { forceUnified: false },
+
+      setGridDisplayPolicy: (moduleKey, policy) => {
+        set((state) => ({
+          gridDisplayPolicies: {
+            ...state.gridDisplayPolicies,
+            [moduleKey]: { forceUnified: !!policy.forceUnified },
+          },
+        }));
+      },
+
+      setOperationPrintConfig: (config) => {
+        set({ operationPrintConfig: { ...config } });
+      },
+
+      setOperationPrintTemplates: (templates) => {
+        set({ operationPrintTemplates: [...templates] });
+      },
+
+      exportRowsToExcel: async ({ fileName, sheetName = 'Sheet1', rows }) => {
+        const XLSX = await import('xlsx');
+        const worksheet = XLSX.utils.json_to_sheet(rows);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, sheetName.slice(0, 31));
+        XLSX.writeFile(workbook, fileName);
+      },
+
+      exportSheetsToExcel: async ({ fileName, sheets }) => {
+        const XLSX = await import('xlsx');
+        const workbook = XLSX.utils.book_new();
+
+        sheets.forEach((sheet, index) => {
+          const worksheet = XLSX.utils.aoa_to_sheet(sheet.rows);
+          if (sheet.columns) {
+            worksheet['!cols'] = sheet.columns;
+          }
+          XLSX.utils.book_append_sheet(
+            workbook,
+            worksheet,
+            (sheet.name || `Sheet${index + 1}`).slice(0, 31)
+          );
+        });
+
+        XLSX.writeFile(workbook, fileName);
+      },
+
+      exportPdfReport: async ({ endpoint, payload, fileName }) => {
+        const response = await apiClient.post(endpoint, payload, { responseType: 'blob' });
+        const blob = response.data instanceof Blob ? response.data : new Blob([response.data], { type: 'application/pdf' });
+        triggerBlobDownload(blob, fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`);
+      },
+
+      exportElementToPdf: async ({ element, fileName, jsPdfOptions = {} }) => {
+        const html2pdfModule = await import('html2pdf.js');
+        const html2pdf = (html2pdfModule as { default?: any }).default || html2pdfModule;
+
+        await html2pdf()
+          .set({
+            margin: 8,
+            filename: fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true },
+            jsPDF: {
+              unit: 'mm',
+              format: 'a4',
+              orientation: 'landscape',
+              ...jsPdfOptions,
+            },
+            pagebreak: { mode: ['css', 'legacy'] },
+          })
+          .from(element)
+          .save();
+      },
+
       setReferenceData: ({ units, categories }) => {
         set((state) => {
           const nextUnits = units ? uniqueStrings(units) : state.units;
@@ -826,6 +982,10 @@ export const useInventoryStore = create<Store>()(
         soft: state.soft,
         sortMode: state.sortMode,
         manualOrder: state.manualOrder,
+        gridPreferences: state.gridPreferences,
+        gridDisplayPolicies: state.gridDisplayPolicies,
+        operationPrintConfig: state.operationPrintConfig,
+        operationPrintTemplates: state.operationPrintTemplates,
       }),
     }
   )
