@@ -1,63 +1,11 @@
-// ENTERPRISE FIX: Phase 0 - Stabilization & UTF-8 Lockdown - 2026-03-05
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
-import {
-  getCategories,
-  getItemSortSettings,
-  getItems as getStoredItems,
-  getUnits,
-  saveCategories,
-  saveItemSortSettings,
-  saveItems,
-  saveUnits,
-} from '../services/storage';
-import { SORT_KEY, normOrder, sortItems, useInventoryStore, write } from '../store/useInventoryStore';
-import type { Item, ItemSortMode, Transaction } from '../types';
-
-type InventoryAction = 'add' | 'remove' | 'update';
-
-interface InventoryContextType {
-  items: Item[];
-  units: string[];
-  categories: string[];
-  isLoading: boolean;
-  addUnit: (unit: string) => void;
-  deleteUnit: (unit: string) => void;
-  addCategory: (category: string) => void;
-  deleteCategory: (category: string) => void;
-  addItems: (items: Item[]) => Promise<void>;
-  updateItems: (items: Item[]) => Promise<void>;
-  deleteItems: (ids: string[]) => Promise<void>;
-  itemSortMode: ItemSortMode;
-  setItemSortMode: (mode: ItemSortMode) => void;
-  lockCurrentItemOrder: () => void;
-  moveItemManually: (id: string, direction: 'up' | 'down') => void;
-  updateStockFromTransaction: (
-    transaction: Transaction,
-    action: InventoryAction,
-    oldTransaction?: Transaction,
-  ) => void;
-}
-
-const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
-
-// ENTERPRISE FIX: Phase 1 - Single Source of Truth & Integration - 2026-03-05
-// ENTERPRISE FIX: Phase 0 - Stabilization & UTF-8 Lockdown - 2026-03-05
+// ENTERPRISE FIX: Phase 2 - Full Single Source of Truth & Legacy Cleanup - 2026-03-05
 import React, { type ReactNode } from 'react';
 import { useInventoryStore } from '../store/useInventoryStore';
 import type { Item, ItemSortMode, Transaction } from '../types';
 
 type InventoryAction = 'add' | 'remove' | 'update';
 
-interface InventoryContextType {
+export interface InventoryContextType {
   items: Item[];
   units: string[];
   categories: string[];
@@ -109,9 +57,9 @@ export const useInventory = (): InventoryContextType => {
     deleteUnit,
     addCategory,
     deleteCategory,
-    addItems: (rows) => addItems(rows),
-    updateItems: (rows) => updateItems(rows),
-    deleteItems: (ids) => deleteItems(ids),
+    addItems,
+    updateItems,
+    deleteItems,
     itemSortMode,
     setItemSortMode,
     lockCurrentItemOrder,
@@ -119,4 +67,3 @@ export const useInventory = (): InventoryContextType => {
     updateStockFromTransaction,
   };
 };
-  'صرف',
