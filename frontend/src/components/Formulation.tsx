@@ -1,262 +1,266 @@
-// ENTERPRISE FIX: Arabic Encoding Restoration - Full Components Folder - 2026-03-04
-// Arabic text encoding verified and corrected
-
-
-import React, { useState } from 'react';
-import { Formula, FormulaItem, Item } from '../types';
-import { Beaker, Plus, Save, Trash2, AlertTriangle, CheckCircle, Percent } from 'lucide-react';
-import { v4 as uuidv4 } from 'uuid';
-import { useInventoryStore } from '../store/useInventoryStore';
+// ENTERPRISE FIX: Phase 1 - Single Source of Truth & Integration - 2026-03-05
+import React, { useEffect, useMemo, useState } from 'react';
+import { Beaker, Edit2, Plus, Search, Trash2 } from 'lucide-react';
 import { toast } from '@services/toastService';
+import FormulationForm from './FormulationForm';
+import type { Formula, Item } from '../types';
+import { useInventoryStore } from '../store/useInventoryStore';
 
 interface FormulationProps {
   formulas: Formula[];
-  onAddFormula: (f: Formula) => void;
-  onUpdateFormula: (f: Formula) => void;
-  onDeleteFormula: (id: string) => void;
+  items?: Item[];
+  onAddFormula: (formula: Formula) => void | Promise<void>;
+  onUpdateFormula: (formula: Formula) => void | Promise<void>;
+  onDeleteFormula: (id: string) => void | Promise<void>;
 }
 
-const Formulation: React.FC<FormulationProps> = ({ formulas, onAddFormula, onUpdateFormula, onDeleteFormula }) => {
-  const { items } = useInventoryStore();
-  const [view, setView] = useState<'list' | 'create'>('list');
-  const [activeFormula, setActiveFormula] = useState<Partial<Formula>>({ items: [] });
-  const [selectedRawItem, setSelectedRawItem] = useState('');
-  const [selectedPercentage, setSelectedPercentage] = useState<number>(0);
+const percentageTotal = (formula: Formula) =>
+  formula.items.reduce((sum, item) => sum + Number(item.percentage || 0), 0);
 
-  // Filter items: Raw Materials vs Finished Products
-  // Assuming '8&8�7�7� 7�8�88y7�', '8&7�8�7�7�7�' are raw, and we might add a category for '8&8 7�7� 7�7�8&'
-  const rawMaterials = items.filter(i => ['8&8�7�7� 7�8�88y7�', '8&7�8�7�7�7�', '7�7�7�8~7�7�'].includes(i.category) || true); // Allow all for now
-  const finishedProducts = items; // Ideally filter by category '8&8 7�7� 7�7�8&' if it exists
+const Formulation: React.FC<FormulationProps> = ({
+  formulas,
+  items: itemsProp,
+  onAddFormula,
+  onUpdateFormula,
+  onDeleteFormula,
+}) => {
+  const storeItems = useInventoryStore((state) => state.items);
+  const loadAll = useInventoryStore((state) => state.loadAll);
+  const lastLoadedAt = useInventoryStore((state) => state.lastLoadedAt);
+  const items = itemsProp && itemsProp.length > 0 ? itemsProp : storeItems;
+  const [search, setSearch] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingFormula, setEditingFormula] = useState<Formula | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleAddItem = () => {
-    if (!selectedRawItem || selectedPercentage <= 0) return;
-    
-    // Check if total percentage exceeds 100%
-    const currentTotal = activeFormula.items?.reduce((sum, i) => sum + i.percentage, 0) || 0;
-    if (currentTotal + selectedPercentage > 100) {
-        toast.error(`7�7�7�: 7�88 7�7�7� 7�87�7�8&7�88y7� 7�7�7�7�7�8�7� 100% (7�87�7�88y: ${currentTotal}%)`);
-        return;
+  useEffect(() => {
+    if (!lastLoadedAt) {
+      void loadAll();
     }
+  }, [lastLoadedAt, loadAll]);
 
-    const newItem: FormulaItem = {
-        itemId: selectedRawItem,
-        percentage: selectedPercentage,
-        weightPerTon: selectedPercentage * 10 // 1% = 10kg in a Ton
-    };
+  const itemMap = useMemo(() => new Map(items.map((item) => [String(item.id), item])), [items]);
 
-    setActiveFormula(prev => ({
-        ...prev,
-        items: [...(prev.items || []), newItem]
-    }));
-    setSelectedRawItem('');
-    setSelectedPercentage(0);
+  const filteredFormulas = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return formulas;
+    return formulas.filter((formula) => {
+      const targetName = itemMap.get(String(formula.targetProductId))?.name || '';
+      return (
+        formula.name.toLowerCase().includes(query) ||
+        formula.code.toLowerCase().includes(query) ||
+        targetName.toLowerCase().includes(query)
+      );
+    });
+  }, [formulas, itemMap, search]);
+
+  const activeCount = formulas.filter((formula) => formula.isActive !== false).length;
+
+  const openCreate = () => {
+    setEditingFormula(null);
+    setIsModalOpen(true);
   };
 
-  const handleRemoveItem = (idx: number) => {
-      setActiveFormula(prev => ({
-          ...prev,
-          items: prev.items?.filter((_, i) => i !== idx)
-      }));
+  const openEdit = (formula: Formula) => {
+    setEditingFormula(formula);
+    setIsModalOpen(true);
   };
 
-  const handleSave = () => {
-      if (!activeFormula.name || !activeFormula.targetProductId || (activeFormula.items?.length || 0) === 0) {
-          toast.error('8y7�7�80 7�8�8&7�8 7�87�8y7�8 7�7� 7�87�7�7�7�8y7� 8�7�7�7�8~7� 8&8�8�8 7�7� 887�87�7�');
-          return;
+  const handleSave = async (formula: Formula) => {
+    setIsSubmitting(true);
+    try {
+      if (editingFormula) {
+        await onUpdateFormula(formula);
+        toast.success('تم تحديث التركيبة بنجاح.');
+      } else {
+        await onAddFormula(formula);
+        toast.success('تمت إضافة التركيبة بنجاح.');
       }
-      
-      const currentTotal = activeFormula.items?.reduce((sum, i) => sum + i.percentage, 0) || 0;
-      if (Math.abs(currentTotal - 100) > 0.1) {
-          toast.error(`7�8 7�8y8!: 8&7�8&8�7� 7�88 7�7� 8!8� ${currentTotal}%7R 8y7�7� 7�8  8y8�8�8  100% 87�8&7�8  7�87� 7�87�8 7�7�7�.`);
-          // We allow saving but warn
-      }
+      setIsModalOpen(false);
+      setEditingFormula(null);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
-      const formula: Formula = {
-          id: activeFormula.id || uuidv4(),
-          code: activeFormula.code || `FORM-${Date.now().toString().slice(-4)}`,
-          name: activeFormula.name!,
-          targetProductId: activeFormula.targetProductId!,
-          items: activeFormula.items!,
-          isActive: true,
-          notes: activeFormula.notes
-      };
-
-      if (activeFormula.id) onUpdateFormula(formula);
-      else onAddFormula(formula);
-
-      setView('list');
-      setActiveFormula({ items: [] });
+  const handleDelete = async (formula: Formula) => {
+    const confirmed = window.confirm(`سيتم حذف التركيبة "${formula.name}". هل تريد المتابعة؟`);
+    if (!confirmed) return;
+    await onDeleteFormula(formula.id);
+    toast.success('تم حذف التركيبة.');
   };
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex justify-between items-center">
-        <div>
-           <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-               <Beaker className="text-purple-600" /> 8!8 7�7�7� 7�87�8 7�7�7� 8�7�87�7�8�8y7�7�7�
-           </h2>
-           <p className="text-slate-500">7�7�7�7�7� 7�87�7�7� 7�87�7�87�8~ (Recipes) 8�7�7�7�7� 7�88&8�8�8 7�7�</p>
+    <div className="space-y-6" dir="rtl">
+      <div className="grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
+        <div className="rounded-3xl bg-[linear-gradient(135deg,_#0f172a,_#14532d)] p-6 text-white shadow-xl">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="space-y-3">
+              <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10">
+                <Beaker className="h-7 w-7" />
+              </div>
+              <div>
+                <h2 className="text-3xl font-black">إدارة التركيبات</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-200">
+                  أنشئ وصفات الإنتاج وحدد نسب المكوّنات لكل منتج نهائي مع مراجعة سريعة لمجموع النسب والمكونات.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={openCreate}
+              className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-slate-900 transition hover:bg-emerald-50"
+            >
+              <Plus className="h-4 w-4" />
+              إضافة تركيبة
+            </button>
+          </div>
         </div>
-        <button onClick={() => { setActiveFormula({ items: [] }); setView('create'); }} className="bg-purple-600 text-white px-6 py-3 rounded-xl hover:bg-purple-700 transition shadow-lg flex items-center gap-2 font-bold">
-            <Plus size={20} /> 7�7�8�8y7�7� 7�7�8y7�7�
-        </button>
+
+        <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-xs font-semibold text-slate-500">إجمالي التركيبات</p>
+            <p className="mt-2 text-3xl font-black text-slate-900">{formulas.length}</p>
+          </div>
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-xs font-semibold text-slate-500">التركيبات النشطة</p>
+            <p className="mt-2 text-3xl font-black text-emerald-700">{activeCount}</p>
+          </div>
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-xs font-semibold text-slate-500">الأصناف المتاحة</p>
+            <p className="mt-2 text-3xl font-black text-slate-900">{items.length}</p>
+          </div>
+        </div>
       </div>
 
-      {view === 'list' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {formulas.map(f => (
-                  <div key={f.id} className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 hover:shadow-md transition group relative overflow-hidden">
-                      <div className="absolute top-0 left-0 w-2 h-full bg-purple-500"></div>
-                      <div className="flex justify-between items-start mb-4 pl-4">
-                          <div>
-                              <span className="text-xs font-mono bg-slate-100 text-slate-600 px-2 py-1 rounded mb-2 inline-block">{f.code}</span>
-                              <h3 className="font-bold text-slate-800 text-lg">{f.name}</h3>
-                              <p className="text-xs text-slate-500">7�88&8 7�7� 7�88 8!7�7�8y: {items.find(i => i.id === f.targetProductId)?.name}</p>
-                          </div>
-                          {f.isActive ? <CheckCircle className="text-green-500" size={20} /> : <AlertTriangle className="text-amber-500" size={20} />}
-                      </div>
-                      
-                      <div className="space-y-2 mb-4">
-                          <p className="text-xs font-bold text-slate-400 uppercase">7�8!8& 7�88&8�8�8 7�7�:</p>
-                          <div className="flex flex-wrap gap-2">
-                              {f.items.slice(0, 3).map((item, idx) => (
-                                  <span key={idx} className="text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded border border-purple-100">
-                                      {items.find(i => i.id === item.itemId)?.name} ({item.percentage}%)
-                                  </span>
-                              ))}
-                              {f.items.length > 3 && <span className="text-xs text-slate-400">+{f.items.length - 3}</span>}
-                          </div>
-                      </div>
+      <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="relative">
+          <Search className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="ابحث باسم التركيبة أو الكود أو المنتج"
+            className="w-full rounded-2xl border border-slate-300 px-4 py-3 pr-12 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+          />
+        </div>
+      </div>
 
-                      <div className="pt-4 border-t border-slate-100 flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => { setActiveFormula(f); setView('create'); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg text-xs font-bold">7�7�7�8y8</button>
-                          <button onClick={() => {
-                            toast.warning('7�7�8~ 7�87�7�8�8y7�7�7�', {
-                              action: {
-                                label: '7�7�8�8y7� 7�87�7�8~',
-                                onClick: () => onDeleteFormula(f.id),
-                              },
-                            });
-                          }} className="p-2 text-red-600 hover:bg-red-50 rounded-lg text-xs font-bold">7�7�8~</button>
-                      </div>
+      {filteredFormulas.length === 0 ? (
+        <div className="rounded-3xl border-2 border-dashed border-slate-300 bg-slate-50 px-6 py-16 text-center">
+          <Beaker className="mx-auto h-12 w-12 text-slate-300" />
+          <h3 className="mt-4 text-xl font-black text-slate-800">لا توجد تركيبات مطابقة</h3>
+          <p className="mt-2 text-sm text-slate-500">
+            ابدأ بإضافة تركيبة جديدة أو عدّل نص البحث لإظهار النتائج المتاحة.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-5 xl:grid-cols-2">
+          {filteredFormulas.map((formula) => {
+            const total = percentageTotal(formula);
+            const targetItem = itemMap.get(String(formula.targetProductId));
+            return (
+              <div key={formula.id} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="space-y-2">
+                    <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+                      {formula.code}
+                    </span>
+                    <h3 className="text-2xl font-black text-slate-900">{formula.name}</h3>
+                    <p className="text-sm text-slate-500">
+                      المنتج المستهدف: <span className="font-semibold text-slate-800">{targetItem?.name || 'غير محدد'}</span>
+                    </p>
                   </div>
-              ))}
-              {formulas.length === 0 && (
-                  <div className="col-span-full py-12 text-center text-slate-400 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
-                      <Beaker size={48} className="mx-auto mb-4 text-slate-300" />
-                      <p>87� 7�8�7�7� 7�7�8�8y7�7�7� 8&7�8~8�7�7�. 7�7�7�7� 7�7�8 7�7�7 7�8�8 8&7�7�7�87� 7�8 7�7�7�.</p>
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-bold ${
+                      formula.isActive !== false ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {formula.isActive !== false ? 'نشطة' : 'غير نشطة'}
+                  </span>
+                </div>
+
+                <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs font-semibold text-slate-500">عدد المكونات</p>
+                    <p className="mt-2 text-xl font-black text-slate-900">{formula.items.length}</p>
                   </div>
-              )}
-          </div>
-      )}
-
-      {view === 'create' && (
-          <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
-              <div className="bg-slate-800 text-white p-6 flex justify-between items-center">
-                  <h3 className="font-bold text-lg">7�7�8&8y8& 7�7�8�8y7�7� 7�88~8y7�</h3>
-                  <button onClick={() => setView('list')} className="text-slate-400 hover:text-white">7�877�7</button>
-              </div>
-              
-              <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-8">
-                  {/* Left: Metadata */}
-                  <div className="space-y-4">
-                      <div>
-                          <label className="block text-sm font-bold text-slate-700 mb-1">7�7�8& 7�87�7�8�8y7�7�</label>
-                          <input type="text" className="w-full p-3 border rounded-xl" placeholder="8&7�7�8: 7�88~ 7�7�8&8y8  7�8�7�7�" 
-                              value={activeFormula.name || ''} onChange={e => setActiveFormula({...activeFormula, name: e.target.value})} />
-                      </div>
-                      <div>
-                          <label className="block text-sm font-bold text-slate-700 mb-1">7�88&8 7�7� 7�88 8!7�7�8y</label>
-                          <select className="w-full p-3 border rounded-xl" 
-                              value={activeFormula.targetProductId || ''} onChange={e => setActiveFormula({...activeFormula, targetProductId: e.target.value})}>
-                              <option value="">7�7�7�7� 7�88&8 7�7�...</option>
-                              {finishedProducts.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-                          </select>
-                      </div>
-                      <div>
-                          <label className="block text-sm font-bold text-slate-700 mb-1">8�8�7� 7�87�7�8�8y7�7�</label>
-                          <input type="text" className="w-full p-3 border rounded-xl" placeholder="AUTO-GEN" 
-                              value={activeFormula.code || ''} onChange={e => setActiveFormula({...activeFormula, code: e.target.value})} />
-                      </div>
-                      <div>
-                          <label className="block text-sm font-bold text-slate-700 mb-1">8&87�7�7�7�7� 8~8 8y7�</label>
-                          <textarea className="w-full p-3 border rounded-xl" rows={4} 
-                              value={activeFormula.notes || ''} onChange={e => setActiveFormula({...activeFormula, notes: e.target.value})} />
-                      </div>
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs font-semibold text-slate-500">إجمالي النسب</p>
+                    <p
+                      className={`mt-2 text-xl font-black ${
+                        Math.abs(total - 100) <= 0.001 ? 'text-emerald-700' : 'text-amber-700'
+                      }`}
+                    >
+                      {total.toFixed(3)}%
+                    </p>
                   </div>
-
-                  {/* Right: Items Builder */}
-                  <div className="lg:col-span-2 bg-slate-50 rounded-xl border border-slate-200 p-6">
-                      <div className="flex gap-4 mb-6 items-end">
-                          <div className="flex-1">
-                              <label className="block text-xs font-bold text-slate-500 mb-1">7�88&7�7�7� 7�87�7�8&</label>
-                              <select className="w-full p-3 border rounded-xl bg-white" 
-                                  value={selectedRawItem} onChange={e => setSelectedRawItem(e.target.value)}>
-                                  <option value="">7�7�7�7� 7�88&7�7�7�...</option>
-                                  {rawMaterials.map(i => <option key={i.id} value={i.id}>{i.name} ({i.unit})</option>)}
-                              </select>
-                          </div>
-                          <div className="w-32">
-                              <label className="block text-xs font-bold text-slate-500 mb-1">7�88 7�7�7� %</label>
-                              <div className="relative">
-                                  <input type="number" step="0.1" max="100" className="w-full p-3 border rounded-xl bg-white text-center font-bold" 
-                                      value={selectedPercentage || ''} onChange={e => setSelectedPercentage(Number(e.target.value))} />
-                                  <Percent size={14} className="absolute left-3 top-4 text-slate-400" />
-                              </div>
-                          </div>
-                          <button onClick={handleAddItem} className="bg-purple-600 text-white p-3 rounded-xl hover:bg-purple-700 shadow-md">
-                              <Plus size={24} />
-                          </button>
-                      </div>
-
-                      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                          <table className="w-full text-right text-sm">
-                              <thead className="bg-purple-50 text-purple-900 font-bold">
-                                  <tr>
-                                      <th className="p-4">7�88&8�8�8 </th>
-                                      <th className="p-4">7�88 7�7�7�</th>
-                                      <th className="p-4">7�88�7�8  / 7�8 </th>
-                                      <th className="p-4 w-10"></th>
-                                  </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100">
-                                  {activeFormula.items?.map((item, idx) => (
-                                      <tr key={idx}>
-                                          <td className="p-4 font-medium">{items.find(i => i.id === item.itemId)?.name}</td>
-                                          <td className="p-4 font-bold text-purple-700">{item.percentage}%</td>
-                                          <td className="p-4 text-slate-500">{item.weightPerTon} 8�7�8&</td>
-                                          <td className="p-4 text-center">
-                                              <button onClick={() => handleRemoveItem(idx)} className="text-slate-400 hover:text-red-500"><Trash2 size={16} /></button>
-                                          </td>
-                                      </tr>
-                                  ))}
-                              </tbody>
-                              <tfoot className="bg-slate-50 font-bold text-slate-700">
-                                  <tr>
-                                      <td className="p-4">7�87�7�8&7�88y</td>
-                                      <td className={`p-4 ${(activeFormula.items?.reduce((a,b)=>a+b.percentage,0) || 0) > 100 ? 'text-red-600' : 'text-green-600'}`}>
-                                          {activeFormula.items?.reduce((a,b)=>a+b.percentage,0)}%
-                                      </td>
-                                      <td className="p-4">{activeFormula.items?.reduce((a,b)=>a+b.weightPerTon,0)} 8�7�8&</td>
-                                      <td></td>
-                                  </tr>
-                              </tfoot>
-                          </table>
-                      </div>
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs font-semibold text-slate-500">الحالة</p>
+                    <p className="mt-2 text-xl font-black text-slate-900">
+                      {Math.abs(total - 100) <= 0.001 ? 'جاهزة' : 'تحتاج مراجعة'}
+                    </p>
                   </div>
-              </div>
+                </div>
 
-              <div className="p-6 border-t border-slate-200 flex justify-end gap-3 bg-slate-50">
-                  <button onClick={handleSave} className="bg-emerald-600 text-white px-8 py-3 rounded-xl hover:bg-emerald-700 font-bold shadow-lg flex items-center gap-2">
-                      <Save size={20} /> 7�8~7� 7�87�7�8�8y7�7�
+                <div className="mt-5 space-y-2">
+                  <p className="text-sm font-bold text-slate-700">المكونات</p>
+                  <div className="flex flex-wrap gap-2">
+                    {formula.items.map((ingredient) => (
+                      <span
+                        key={`${formula.id}-${ingredient.itemId}`}
+                        className="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700"
+                      >
+                        {(itemMap.get(String(ingredient.itemId))?.name || 'غير معروف') + ` - ${ingredient.percentage}%`}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {formula.notes && (
+                  <div className="mt-5 rounded-2xl bg-slate-50 p-4 text-sm leading-7 text-slate-600">
+                    {formula.notes}
+                  </div>
+                )}
+
+                <div className="mt-5 flex flex-wrap justify-end gap-3 border-t border-slate-200 pt-5">
+                  <button
+                    type="button"
+                    onClick={() => openEdit(formula)}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                  >
+                    <Edit2 className="h-4 w-4" />
+                    تعديل
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDelete(formula)}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-red-200 px-4 py-2.5 text-sm font-bold text-red-700 transition hover:bg-red-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    حذف
+                  </button>
+                </div>
               </div>
-          </div>
+            );
+          })}
+        </div>
       )}
+
+      <FormulationForm
+        isOpen={isModalOpen}
+        mode={editingFormula ? 'edit' : 'create'}
+        items={items}
+        initialValue={editingFormula}
+        isSubmitting={isSubmitting}
+        onSubmit={handleSave}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingFormula(null);
+        }}
+      />
     </div>
   );
 };
 
 export default Formulation;
-
-

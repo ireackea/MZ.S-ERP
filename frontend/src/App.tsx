@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 1 - Single Source of Truth & Integration - 2026-03-05
 // ENTERPRISE FIX: Phase 0 - Stabilization & UTF-8 Lockdown - 2026-03-05
 // ENTERPRISE FIX: Exact Legacy UI Restoration - 2026-02-27
 // ENTERPRISE FIX: Router Context Fixed - 2026-02-26
@@ -10,13 +11,13 @@ import { toast } from '@services/toastService';
 import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
 import EnterpriseLoading from './components/EnterpriseLoading';
-import { InventoryProvider, useInventory } from './contexts/InventoryContext';
+import { InventoryProvider } from './contexts/InventoryContext';
 import { useInventoryStore } from './store/useInventoryStore';
 import { Transaction, Partner, Order, User, Tag, SystemSettings, OperationAppearance, ReportColumnConfig, UnloadingRule, Formula, AuditLog } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { ensureAuthCredentialsSeeded, loginAsUser, logout, provisionInitialAdmin, resolveAuthenticatedUser } from './services/authController';
 import { getAuthToken, getAuthUser } from '@services/authService';
-import { filterByDataScope, hasPermission, logUserActivity, normalizeUsers, upsertCurrentSession } from './services/iamService';
+import { filterByDataScope, getIamConfig, hasPermission, logUserActivity, normalizeUsers, upsertCurrentSession } from './services/iamService';
 import {
   bulkCreateTransactions,
   deleteTransactionsInApi,
@@ -29,6 +30,8 @@ import {
   getPartners, savePartners,
   getOrders, saveOrders,
   getUsers, saveUsers,
+  getUnits,
+  getCategories,
   getTags, saveTags,
   getSettings, saveSettings,
   getAppearanceSettings, saveAppearanceSettings,
@@ -76,9 +79,18 @@ const RouteLoadingFallback: React.FC = () => (
 const AppContent = () => {
   const { isOffline, isSyncing } = useOfflineSync();
   const items = useInventoryStore((state) => state.items);
-  const loadInventoryStore = useInventoryStore((state) => state.load);
+  const units = useInventoryStore((state) => state.units);
+  const categories = useInventoryStore((state) => state.categories);
+  const addUnit = useInventoryStore((state) => state.addUnit);
+  const deleteUnit = useInventoryStore((state) => state.deleteUnit);
+  const addCategory = useInventoryStore((state) => state.addCategory);
+  const deleteCategory = useInventoryStore((state) => state.deleteCategory);
+  const updateStockFromTransaction = useInventoryStore((state) => state.updateStockFromTransaction);
+  const setInventoryTransactions = useInventoryStore((state) => state.setTransactions);
+  const setInventoryUsers = useInventoryStore((state) => state.setUsers);
+  const setInventoryRoles = useInventoryStore((state) => state.setRoles);
+  const setReferenceData = useInventoryStore((state) => state.setReferenceData);
   const inventoryStoreLoading = useInventoryStore((state) => state.loading);
-  const { units, categories, addUnit, deleteUnit, addCategory, deleteCategory, updateStockFromTransaction } = useInventory();
 
   // Core Data
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -122,11 +134,15 @@ const AppContent = () => {
         // Load local data first (for non-items data)
         const localTransactions = getTransactions();
         setTransactions(localTransactions);
+        setInventoryTransactions(localTransactions);
         setPartners(getPartners());
         setOrders(getOrders());
         const loadedUsers = normalizeUsers(getUsers());
         void ensureAuthCredentialsSeeded(loadedUsers);
         setUsers(loadedUsers);
+        setInventoryUsers(loadedUsers);
+        setInventoryRoles(getIamConfig().roles);
+        setReferenceData({ units: getUnits(), categories: getCategories() });
         setTags(getTags());
         setSystemSettings(getSettings());
         setAppearance(getAppearanceSettings());
@@ -208,7 +224,7 @@ const AppContent = () => {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [setInventoryRoles, setInventoryTransactions, setInventoryUsers, setReferenceData]);
 
   useEffect(() => {
     if (users.length > 0 && currentUser) {
@@ -230,7 +246,7 @@ const AppContent = () => {
 
     const syncInventoryAfterLogin = async () => {
       try {
-        await loadInventoryStore();
+        await useInventoryStore.getState().loadAll();
       } catch (error) {
         console.error('[App] Failed to reload inventory store after login:', error);
       } finally {
@@ -245,7 +261,19 @@ const AppContent = () => {
     return () => {
       active = false;
     };
-  }, [authReady, currentUser?.id, loadInventoryStore]);
+  }, [authReady, currentUser?.id]);
+
+  useEffect(() => {
+    setInventoryTransactions(transactions);
+  }, [transactions, setInventoryTransactions]);
+
+  useEffect(() => {
+    setInventoryUsers(users);
+  }, [users, setInventoryUsers]);
+
+  useEffect(() => {
+    setInventoryRoles(getIamConfig().roles);
+  }, [setInventoryRoles]);
 
   // Persist data
   useEffect(() => { if (!authReady) return; saveTransactions(transactions); }, [transactions, authReady]);

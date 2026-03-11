@@ -1,15 +1,17 @@
+// ENTERPRISE FIX: Phase 1 - Single Source of Truth & Integration - 2026-03-05
 // ENTERPRISE FIX: Arabic Encoding Restoration - Full Components Folder - 2026-03-04
 // Arabic text encoding verified and corrected
 
 // ENTERPRISE FIX: Exact Legacy UI Restoration - 2026-02-27
 // ENTERPRISE FIX: Dashboard Professional Redesign - Safe Version - 2026-02-27
 // ENTERPRISE FIX: Professional PDF Reporting - 2026-02-27
-// 88�7�7� 7�7�8�8& 7�7�7�7�7�8~8y7� 8&7� 7�7�8& 8�7�8&8 887�87�7�8y7� PDF 8�7�87�8y7�8 7�7� 7�887�7�8y7�
+// دعم كامل لتقارير PDF الاحترافية
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Package, AlertTriangle, TrendingUp, DollarSign, Activity, RefreshCw, AlertCircle, Printer } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from '@services/toastService';
+import { useInventoryStore } from '../store/useInventoryStore';
 
 interface DashboardStats {
   totalItems: number;
@@ -33,8 +35,12 @@ interface DashboardStats {
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const items = useInventoryStore((state) => state.items);
+  const transactions = useInventoryStore((state) => state.transactions);
+  const users = useInventoryStore((state) => state.users);
+  const loadAll = useInventoryStore((state) => state.loadAll);
+  const loading = useInventoryStore((state) => state.loading || state.syncing);
+  const lastLoadedAt = useInventoryStore((state) => state.lastLoadedAt);
   const [error, setError] = useState<string | null>(null);
 
   const fallbackStats: DashboardStats = {
@@ -43,45 +49,65 @@ const Dashboard: React.FC = () => {
     todayTransactions: 47,
     totalRevenue: 124500,
     recentActivity: [
-      { id: 'tx1', date: '2026-02-27 09:15', action: '7�7�7�8~7� 7�7�8�7� 8&7�7�8 ', user: '7�7�8&7� 8&7�8&7� - 8&7�8y7� 7�88&7�7�8 ', amount: 250, item: '7�7�7� 7�8~7�7�7 8&7�7�8�7�7�7�' },
-      { id: 'tx2', date: '2026-02-27 08:45', action: '7�7�7�8y8', user: '7�7�7�7� 7�7�8&7� - 8&7�7�8�87� 7�87�7�7�', amount: 1250, item: '8&7�8�7� 7�7�87�8~ 7�8�7�7�8 ' },
-      { id: 'tx3', date: '2026-02-27 08:30', action: '7�8 7�8y8! 7�8 7�8~7�7� 8&7�7�8�8 ', user: '8 7�7�8& 7�887�7�8y', amount: 0, item: '7�87�8�8y7� 7�8�7�7�' },
+      { id: 'tx1', date: '2026-02-27 09:15', action: 'صرف مواد خامة', user: 'محمد عبد الله - أمين المخزن', amount: 250, item: 'ذرة صفراء مجروشة' },
+      { id: 'tx2', date: '2026-02-27 08:45', action: 'استلام مواد', user: 'أحمد محمود - مسؤول المبيعات', amount: 1250, item: 'علف تسمين بادي' },
+      { id: 'tx3', date: '2026-02-27 08:30', action: 'إضافة رصيد افتتاحي', user: 'مدير النظام', amount: 0, item: 'فول صويا' },
     ],
     alerts: [
-      { id: 'al1', message: '7�8 8~ "7�7�7� 7�8~7�7�7 8&7�7�8�7�7�7�" 8y87�7�7� 8&8  7�87�7� 7�87�7�8 80 (18 7�8  8&7�7�88y)', severity: 'high' },
-      { id: 'al2', message: '7�7�7�8y7� 8~8y 7�8�7�8y7� "7�8y8�7�7�7� 8~7�7�77�"', severity: 'medium' },
+      { id: 'al1', message: 'تحذير: "ذرة صفراء مجروشة" وصلت للحد الأدنى (18 طن متبقي)', severity: 'high' },
+      { id: 'al2', message: 'ملاحظة: تم تحديث مكونات "علف التسمين"', severity: 'medium' },
     ]
   };
 
-  const fetchDashboardData = useCallback(async () => {
+  const fetchDashboardData = async () => {
     try {
-      setLoading(true);
       setError(null);
-
-      const response = await fetch('/api/dashboard/stats', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('feed_factory_jwt_token') || ''}`,
-        },
-      });
-
-      if (!response.ok) throw new Error('8~7�8 8~8y 7�87� 7�87�8y7�8 7�7� 8&8  7�87�7�7�8&');
-
-      const data: DashboardStats = await response.json();
-      setStats(data);
+      await loadAll();
     } catch (err: any) {
-      console.warn('[Dashboard] Fetch failed:', err);
-      setStats(fallbackStats);
-      setError('7�7�7�8y 7�7�7�7�7�7�8& 7�87�8y7�8 7�7� 7�87�7�7�8y7�7�8y7� - 8~7�8 7�87�7�7�7�8 7�7�87�7�7�8&');
-    } finally {
-      setLoading(false);
+      console.warn('[Dashboard] Store sync failed:', err);
+      setError('تعذر مزامنة البيانات من الخادم. تم عرض البيانات المحلية المتاحة.');
     }
-  }, []);
+  };
 
   useEffect(() => {
-    fetchDashboardData();
-  }, [fetchDashboardData]);
+    if (!lastLoadedAt) {
+      void fetchDashboardData();
+    }
+  }, [lastLoadedAt]);
 
-  const currentStats = stats || fallbackStats;
+  const currentStats = useMemo<DashboardStats>(() => {
+    if (items.length === 0 && transactions.length === 0) {
+      return fallbackStats;
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const todayTransactions = transactions.filter((transaction) => String(transaction.date || '').slice(0, 10) === today);
+    const lowStockItems = items.filter((item) => Number(item.currentStock || 0) <= Number(item.minLimit || 0));
+    const recentActivity = [...transactions]
+      .sort((left, right) => Number(right.timestamp || 0) - Number(left.timestamp || 0))
+      .slice(0, 5)
+      .map((transaction) => ({
+        id: transaction.id,
+        date: transaction.date,
+        action: transaction.type,
+        user: users.find((user) => user.id === transaction.createdByUserId)?.name || transaction.supplierOrReceiver || 'مستخدم النظام',
+        amount: Number(transaction.quantity || 0),
+        item: items.find((item) => String(item.id) === String(transaction.itemId))?.name || transaction.itemId,
+      }));
+
+    return {
+      totalItems: items.length,
+      lowStock: lowStockItems.length,
+      todayTransactions: todayTransactions.length,
+      totalRevenue: items.reduce((sum, item) => sum + Number(item.currentStock || 0) * Number(item.orderLimit || item.maxLimit || 0), 0),
+      recentActivity,
+      alerts: lowStockItems.slice(0, 4).map((item) => ({
+        id: String(item.id),
+        message: `تحذير: "${item.name}" وصل إلى الحد الأدنى أو دونه (${Number(item.currentStock || 0)} ${item.unit} متبقي)`,
+        severity: Number(item.currentStock || 0) <= Number(item.orderLimit || item.minLimit || 0) ? 'high' : 'medium',
+      })),
+    };
+  }, [items, transactions, users]);
 
   const resolveGeneratedBy = () => {
     try {
@@ -145,10 +171,10 @@ const Dashboard: React.FC = () => {
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
-      toast.success('7�8& 7�8 7�8y8 7�87�87�8y7� 7�8 7�7�7� PDF');
+      toast.success('تم إنشاء وتحميل تقرير PDF بنجاح');
     } catch (error: any) {
       console.error('[Dashboard] PDF print failed:', error);
-      toast.error(error?.message || '7�7�7� 7�7�7� 7�7�8 7�7 7�8�88y7� PDF.');
+      toast.error(error?.message || 'حدث خطأ غير متوقع، يرجى المحاولة مرة أخرى.');
     }
   };
 
@@ -159,18 +185,18 @@ const Dashboard: React.FC = () => {
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white">8 7�7�7� 7�7�8&7� 7�880 7�7�7�7 7�88&7�7�7�8 </h1>
-            <p className="text-slate-600 dark:text-slate-400 mt-1">7�7�7� 7�7�7�8y7�: {new Date().toLocaleDateString('ar-SA')}</p>
+            <h1 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white">لوحة تحكم مصنع الأعلاف</h1>
+            <p className="text-slate-600 dark:text-slate-400 mt-1">تاريخ اليوم: {new Date().toLocaleDateString('ar-SA')}</p>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={handlePrintDashboardPdf}
               disabled={loading}
               className="flex items-center gap-2 px-5 py-3 bg-slate-900 text-white rounded-2xl hover:bg-slate-800 transition disabled:opacity-60 disabled:cursor-not-allowed dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
-              aria-label="7�7�7�7�7� PDF"
+              aria-label="طباعة PDF"
             >
               <Printer className="w-5 h-5" />
-              7�7�7�7�7� PDF
+              طباعة PDF
             </button>
             <button
               onClick={fetchDashboardData}
@@ -178,7 +204,7 @@ const Dashboard: React.FC = () => {
               className="flex items-center gap-2 px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-700 transition disabled:opacity-60"
             >
               <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-              7�7�7�8y7� 7�87�8y7�8 7�7�
+              تحديث البيانات
             </button>
           </div>
         </div>
@@ -194,10 +220,10 @@ const Dashboard: React.FC = () => {
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {[
-            { label: '7�7�8&7�88y 7�7�7� 7�87�7�8 7�8~ 7�88&7�7�87�', value: currentStats.totalItems, icon: Package, color: 'emerald' },
-            { label: '7�87�7�8 7�8~ 8&8 7�8~7�7� 7�88&7�7�8�8 ', value: currentStats.lowStock, icon: AlertTriangle, color: 'amber' },
-            { label: '7�7�8�7�7� 7�88y8�8&', value: currentStats.todayTransactions, icon: TrendingUp, color: 'blue' },
-            { label: '7�7�8&7�88y 88y8&7� 7�88&7�7�8�8 ', value: currentStats.totalRevenue, icon: DollarSign, color: 'violet' },
+            { label: 'إجمالي عدد الأصناف', value: currentStats.totalItems, icon: Package, color: 'emerald' },
+            { label: 'أصناف وصلت الحد الأدنى', value: currentStats.lowStock, icon: AlertTriangle, color: 'amber' },
+            { label: 'حركات اليوم', value: currentStats.todayTransactions, icon: TrendingUp, color: 'blue' },
+            { label: 'إجمالي قيمة المخزون', value: currentStats.totalRevenue, icon: DollarSign, color: 'violet' },
           ].map((card, i) => (
             <div key={i} className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700">
               <div className="flex justify-between">
@@ -216,10 +242,10 @@ const Dashboard: React.FC = () => {
         {/* Quick Actions */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8">
           {[
-            { label: '7�7�7�8~7� 7�8 8~ 7�7�8y7�', path: '/items' },
-            { label: '7�7�8�7� 7�7�8y7�7�', path: '/transactions' },
-            { label: '7�87�8y7� 8&7�7�7�', path: '/reports' },
-            { label: '7�87�7�7�7�7�7�7� 7�87�7�8&7�', path: '/settings' },
+            { label: 'إضافة صنف جديد', path: '/items' },
+            { label: 'إجراء حركة مخزنية', path: '/operations' },
+            { label: 'التقارير الشاملة', path: '/reports' },
+            { label: 'إعدادات النظام', path: '/settings' },
           ].map((btn, i) => (
             <button
               key={i}

@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 1 - Single Source of Truth & Integration - 2026-03-05
 // ENTERPRISE FIX: Arabic Encoding Restoration - Full Components Folder - 2026-03-04
 // Arabic text encoding verified and corrected
 
@@ -19,7 +20,6 @@ import {
 import { differenceInHours } from 'date-fns';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useInventoryStore } from '../store/useInventoryStore';
-import { useInventory } from '../contexts/InventoryContext';
 import { getOpeningBalances as getOpeningBalancesFromApi } from '@services/openingBalanceService';
 import { upsertOpeningBalances } from '../services/openingBalanceService';
 import { useInventoryCalculations } from '@hooks/useInventoryCalculations';
@@ -51,8 +51,14 @@ const SectionSkeleton: React.FC = () => (
 );
 
 const StockBalances: React.FC<StockBalancesProps> = ({ settings, transactions }) => {
-  const { items, loading: itemsLoading } = useInventoryStore();
-  const { categories, isLoading: contextLoading } = useInventory();
+  const items = useInventoryStore((state) => state.items);
+  const categories = useInventoryStore((state) => state.categories);
+  const storeTransactions = useInventoryStore((state) => state.transactions);
+  const balances = useInventoryStore((state) => state.balances);
+  const loadAll = useInventoryStore((state) => state.loadAll);
+  const itemsLoading = useInventoryStore((state) => state.loading || state.syncing);
+  const lastLoadedAt = useInventoryStore((state) => state.lastLoadedAt);
+  const activeTransactions = transactions && transactions.length > 0 ? transactions : storeTransactions;
 
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [sectionOrderMode, setSectionOrderMode] = useState<SectionOrderMode>('default');
@@ -68,8 +74,14 @@ const StockBalances: React.FC<StockBalancesProps> = ({ settings, transactions })
   const { financialYear, balanceMap, stockStatusMap, formatBalanceNumber } = useInventoryCalculations({
     items,
     openingQuantities,
-    transactions,
+    transactions: activeTransactions,
   });
+
+  useEffect(() => {
+    if (!lastLoadedAt) {
+      void loadAll();
+    }
+  }, [lastLoadedAt, loadAll]);
 
   useEffect(() => {
     setManualCategoryOrder((prev) => {
@@ -240,7 +252,7 @@ const StockBalances: React.FC<StockBalancesProps> = ({ settings, transactions })
     printWindow.document.close();
   };
 
-  const showSkeleton = contextLoading || loadingOpeningBalances;
+  const showSkeleton = itemsLoading || loadingOpeningBalances;
 
   return (
     <div className="space-y-6">

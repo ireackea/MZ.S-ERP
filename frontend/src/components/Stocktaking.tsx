@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 1 - Single Source of Truth & Integration - 2026-03-05
 // ENTERPRISE FIX: Arabic Encoding Restoration - Full Components Folder - 2026-03-04
 // Arabic text encoding verified and corrected
 
@@ -31,10 +32,11 @@ import {
   upsertItemCount,
 } from '../services/monthlyStocktakingService';
 import { toast } from '@services/toastService';
+import { useInventoryStore } from '../store/useInventoryStore';
 
 interface StocktakingProps {
-  items: Item[];
-  transactions: Transaction[];
+  items?: Item[];
+  transactions?: Transaction[];
   currentUserName?: string;
   companyName?: string;
   companyLogoUrl?: string;
@@ -95,15 +97,15 @@ interface AuditCategoryCard {
 }
 
 const REPORT_CARD_CONFIG: Array<Omit<AuditCategoryCard, 'rows'>> = [
-  { key: 'concentrates', title: '8&7�8�7�7�7�', accentClass: 'border-blue-500' },
-  { key: 'rawMaterials', title: '8&8�7�7� 7�8�88y7�', accentClass: 'border-emerald-500' },
-  { key: 'bags', title: '7�8�8y7�7�', accentClass: 'border-amber-500' },
-  { key: 'bagThread', title: '7�8y7� 7�87�8�7�8', accentClass: 'border-cyan-500' },
-  { key: 'cards', title: '8�7�8�7�', accentClass: 'border-violet-500' },
+  { key: 'concentrates', title: 'مركّزات', accentClass: 'border-blue-500' },
+  { key: 'rawMaterials', title: 'مواد أولية', accentClass: 'border-emerald-500' },
+  { key: 'bags', title: 'أكياس', accentClass: 'border-amber-500' },
+  { key: 'bagThread', title: 'خيط الخياطة', accentClass: 'border-cyan-500' },
+  { key: 'cards', title: 'كروت', accentClass: 'border-violet-500' },
 ];
 
 const STOCKTAKING_PRINT_DEFAULT_CONFIG: StocktakingPrintConfig = {
-  reportTitle: '7�87�8y7� 7�7�7� 7�8!7�8y',
+  reportTitle: 'تقرير الجرد الشهري',
   orientation: 'portrait',
   paperSize: 'a4',
   margins: 'normal',
@@ -145,16 +147,16 @@ const getCardKeyForRow = (row: MonthlyAuditRow, categoryRaw: string | undefined)
   const category = normalizeText(categoryRaw);
   const itemName = normalizeText(row.itemName);
 
-  if (category === '8&7�8�7�7�7�') return 'concentrates';
-  if (category === '8&8�7�7� 7�8�88y7�') return 'rawMaterials';
-  if (category === '7�8�8y7�7�' || category === '7�8�8y7�7�') return 'bags';
-  if (category === '7�8y7� 7�8�7�8' || category === '7�8y7� 7�87�8�7�8') return 'bagThread';
-  if (category === '8�7�8�7� 7�7�8y7�7�' || category === '8�7�8�7� 87�8y8&7�' || category === '8�7�8�7�') return 'cards';
+  if (category === 'مركّزات' || category === '8&78777') return 'concentrates';
+  if (category === 'مواد أولية' || category === 'مواد خام' || category === '8&877 7888y7') return 'rawMaterials';
+  if (category === 'أكياس' || category === 'أجولة' || category === '788y77') return 'bags';
+  if (category === 'خيط خياطة' || category === 'خيط الخياطة' || category === '78y7 7878' || category === '78y7 787878') return 'bagThread';
+  if (category === 'كروت بيانات' || category === 'كروت بلاستيك' || category === 'كروت' || category === '8787 778y77' || category === '8787 878y8&7' || category === '8787') return 'cards';
 
-  if (category.includes('7�8y7�') && category.includes('7�8�7�8')) return 'bagThread';
+  if (category.includes('خيط') && category.includes('خياطة')) return 'bagThread';
 
-  if (category.includes('8�7�8�7�') || category.includes('8�7�7�7�') || category.includes('8�7�7�')) {
-    if (itemName.includes('87�8y8&7�') || itemName.includes('7�7�8y7�7�')) return 'cards';
+  if (category.includes('كروت') || category.includes('بطاق') || category.includes('كرت')) {
+    if (itemName.includes('بلاستيك') || itemName.includes('بيانات')) return 'cards';
     return 'cards';
   }
 
@@ -177,12 +179,18 @@ const getCurrentMonthKey = () => {
 };
 
 const Stocktaking: React.FC<StocktakingProps> = ({
-  items,
-  transactions,
+  items: itemsProp,
+  transactions: transactionsProp,
   currentUserName,
   companyName,
   companyLogoUrl,
 }) => {
+  const storeItems = useInventoryStore((state) => state.items);
+  const storeTransactions = useInventoryStore((state) => state.transactions);
+  const loadAll = useInventoryStore((state) => state.loadAll);
+  const lastLoadedAt = useInventoryStore((state) => state.lastLoadedAt);
+  const items = itemsProp && itemsProp.length > 0 ? itemsProp : storeItems;
+  const transactions = transactionsProp && transactionsProp.length > 0 ? transactionsProp : storeTransactions;
   const [monthKey, setMonthKey] = useState(getCurrentMonthKey());
   const [pane, setPane] = useState<WorkPane>('operations');
   const [blindMode, setBlindMode] = useState(false);
@@ -210,6 +218,12 @@ const Stocktaking: React.FC<StocktakingProps> = ({
 
   const session = useMemo(() => getOrCreateMonthlySession(monthKey), [monthKey, sessionVersion]);
   const { start, end } = useMemo(() => getMonthBounds(monthKey), [monthKey]);
+
+  useEffect(() => {
+    if (!lastLoadedAt) {
+      void loadAll();
+    }
+  }, [lastLoadedAt, loadAll]);
 
   useEffect(() => {
     try {
@@ -255,13 +269,13 @@ const Stocktaking: React.FC<StocktakingProps> = ({
   }, [printTemplates]);
 
   const zones = useMemo(() => {
-    const values = Array.from(new Set(items.map((item) => item.zone?.trim() || '78y7� 8&7�7�7�7�'))).sort();
+    const values = Array.from(new Set(items.map((item) => item.zone?.trim() || 'بدون منطقة'))).sort();
     return ['all', ...values];
   }, [items]);
 
   const zoneItems = useMemo(() => {
     if (zoneFilter === 'all') return items;
-    return items.filter((item) => (item.zone?.trim() || '78y7� 8&7�7�7�7�') === zoneFilter);
+    return items.filter((item) => (item.zone?.trim() || 'بدون منطقة') === zoneFilter);
   }, [items, zoneFilter]);
 
   const auditRows = useMemo(() => {
@@ -336,7 +350,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
 
   const getDraftUser = (itemId: string) => {
     if (draftUsers[itemId]) return draftUsers[itemId];
-    return currentUserName || '8&7�7�7�7�8&';
+    return currentUserName || 'النظام';
   };
 
   const getDraftNote = (itemId: string) => {
@@ -350,7 +364,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
     const rawCount = getDraftCount(itemId);
     const parsed = Number(String(rawCount).replace(/,/g, '').trim());
     if (!Number.isFinite(parsed)) {
-      setStatusMessage('88y8&7� 7�87�7�7� 7�88~7�88y 78y7� 7�7�87�7�.');
+      setStatusMessage('القيمة المدخلة في حقل الجرد غير صالحة.');
       return;
     }
 
@@ -368,7 +382,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
     }
 
     setSessionVersion((prev) => prev + 1);
-    setStatusMessage(`7�8& 7�8~7� 7�7� 7�87�8 8~ 7�8 7�7�7�.`);
+    setStatusMessage(`تم حفظ جرد هذا الصنف بنجاح.`);
   };
 
   const saveAllVisible = () => {
@@ -379,9 +393,9 @@ const Stocktaking: React.FC<StocktakingProps> = ({
     const rows = zoneItems.map((item) => ({
       item_code: item.code || '',
       item_name: item.name,
-      zone: item.zone || '78y7� 8&7�7�7�7�',
+      zone: item.zone || 'بدون منطقة',
       actual_count: '',
-      user_name: currentUserName || '8&7�7�7�7�8&',
+      user_name: currentUserName || 'النظام',
       notes: '',
     }));
 
@@ -395,9 +409,9 @@ const Stocktaking: React.FC<StocktakingProps> = ({
     const rows = operationsRows.map(({ item, itemRecord, conflict }) => ({
       item_code: item.code || '',
       item_name: item.name,
-      zone: item.zone || '78y7� 8&7�7�7�7�',
+      zone: item.zone || 'بدون منطقة',
       actual_count: itemRecord?.actualCount ?? '',
-      conflict: conflict ? '8&7�7�7�7�7�' : '7�88y8&',
+      conflict: conflict ? 'متضارب' : 'معتمد',
       entered_by: itemRecord?.entries.map((entry) => `${entry.userName}:${entry.value}`).join(' | ') || '',
       notes: itemRecord?.notes || '',
     }));
@@ -422,7 +436,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
       const code = String(row.item_code || row['item code'] || '').trim();
       const name = String(row.item_name || row['item name'] || '').trim();
       const countRaw = String(row.actual_count || row['actual count'] || '').trim();
-      const userName = String(row.user_name || row['user name'] || currentUserName || '8&7�7�7�7�8&').trim();
+      const userName = String(row.user_name || row['user name'] || currentUserName || 'النظام').trim();
       const notes = String(row.notes || '').trim();
 
       const parsedCount = Number(countRaw.replace(/,/g, ''));
@@ -441,7 +455,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
     });
 
     setSessionVersion((prev) => prev + 1);
-    setStatusMessage(`7�8& 7�7�7�8y7�7�7� ${importedCount} 7�8~ 7�8 7�7�7�.`);
+    setStatusMessage(`تم استيراد ${importedCount} صنف بنجاح.`);
   };
 
   const getPrintMarginInches = () => {
@@ -481,7 +495,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
   const savePrintTemplate = () => {
     const normalizedName = printTemplateName.trim();
     if (!normalizedName) {
-      setPrintStatusMessage('8y7�7�80 7�7�7�7�8 7�7�8& 7�887�87� 7�8�87�89.');
+      setPrintStatusMessage('يرجى إدخال اسم القالب أولاً.');
       return;
     }
 
@@ -494,7 +508,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
       return [{ id: `tpl-${Date.now()}`, name: normalizedName, config: printConfig, updatedAt: Date.now() }, ...prev].slice(0, 25);
     });
 
-    setPrintStatusMessage(`7�8& 7�8~7� 87�87� 7�87�7�7�7�7�: ${normalizedName}`);
+    setPrintStatusMessage(`تم حفظ قالب الطباعة بنجاح: ${normalizedName}`);
   };
 
   const applyPrintTemplate = (templateId: string) => {
@@ -510,26 +524,26 @@ const Stocktaking: React.FC<StocktakingProps> = ({
     }));
     setSelectedTemplateId(template.id);
     setPrintTemplateName(template.name);
-    setPrintStatusMessage(`7�8& 7�7�8&8y8 87�87�: ${template.name}`);
+    setPrintStatusMessage(`تم تطبيق القالب: ${template.name}`);
   };
 
   const deleteSelectedPrintTemplate = () => {
     if (!selectedTemplateId) {
-      setPrintStatusMessage('8y7�7�80 7�7�7�8y7�7� 87�87� 7�8�87�89.');
+      setPrintStatusMessage('يرجى اختيار قالب أولاً.');
       return;
     }
 
     const template = printTemplates.find((item) => item.id === selectedTemplateId);
     if (!template) return;
 
-    toast.warning(`7�7�8~ 7�887�87� "${template.name}"7�`, {
+    toast.warning(`حذف القالب "${template.name}"؟`, {
       action: {
-        label: '7�7�8�8y7� 7�87�7�8~',
+        label: 'تأكيد الحذف',
         onClick: () => {
           setPrintTemplates((prev) => prev.filter((item) => item.id !== selectedTemplateId));
           setSelectedTemplateId('');
-          setPrintStatusMessage(`7�8& 7�7�8~ 7�887�87�: ${template.name}`);
-          toast.success('7�8& 7�7�8~ 7�887�87�');
+          setPrintStatusMessage(`تم حذف القالب: ${template.name}`);
+          toast.success('تم حذف القالب');
         },
       },
     });
@@ -540,7 +554,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
 
     try {
       setIsPrintingPdf(true);
-      setPrintStatusMessage('7�7�7�8y 7�7�8!8y7� 8&88~ PDF...');
+      setPrintStatusMessage('جاري إنشاء ملف PDF...');
 
       const html2pdfModule = await import('html2pdf.js');
       const html2pdf = (html2pdfModule as any).default;
@@ -550,7 +564,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
       await html2pdf()
         .set({
           margin: [topMarginInches, 0, bottomMarginInches, 0],
-          filename: `7�87�8y7�_7�87�7�7�_${monthKey}.pdf`,
+          filename: `تقرير_الجرد_${monthKey}.pdf`,
           image: { type: 'jpeg', quality: 0.98 },
           html2canvas: { scale: 2, useCORS: true, letterRendering: true },
           jsPDF: { unit: 'in', format: printConfig.paperSize, orientation: printConfig.orientation },
@@ -559,17 +573,17 @@ const Stocktaking: React.FC<StocktakingProps> = ({
         .from(printPageRef.current)
         .save();
 
-      setPrintStatusMessage('7�8& 7�8 7�7�7 8&88~ PDF 7�8 7�7�7�.');
+      setPrintStatusMessage('تم تنزيل ملف PDF بنجاح.');
     } catch (error) {
-      setPrintStatusMessage(error instanceof Error ? error.message : '7�7�7�7� 7�8 7�7�7 8&88~ PDF.');
+      setPrintStatusMessage(error instanceof Error ? error.message : 'فشل في تنزيل ملف PDF.');
     } finally {
       setIsPrintingPdf(false);
     }
   };
 
   const renderStocktakingPrintSheet = () => {
-      const pageMetrics = getPrintPageMetrics();
-      const availableContentHeightMm = Math.max(10, pageMetrics.contentHeightMm - printConfig.topPageMarginMm - printConfig.bottomPageMarginMm);
+    const pageMetrics = getPrintPageMetrics();
+    const availableContentHeightMm = Math.max(10, pageMetrics.contentHeightMm - printConfig.topPageMarginMm - printConfig.bottomPageMarginMm);
 
     const mergeRatio = printConfig.mergeColumns ? Math.min(1, Math.max(0, printConfig.mergeStrength / 100)) : 0;
     const effectiveColumnSpacing = printConfig.mergeColumns
@@ -600,17 +614,17 @@ const Stocktaking: React.FC<StocktakingProps> = ({
 
     const baseColumnWidths = [56, 230, 96, 96, 96, 96, 96, 102, 102, 96, 190];
     const minColumnWidths = [
-      Math.max(34, estimateTextMinWidth('8&'.repeat(maxIndexDigits))),
-      Math.max(88, estimateTextMinWidth('7�87�7�8&'), estimateTextMinWidth('7�'.repeat(Math.min(maxItemNameLen, 24)))),
-      Math.max(58, estimateTextMinWidth('7�87�7�7�8y7�'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
-      Math.max(58, estimateTextMinWidth('7�88�7�7�7�'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
-      Math.max(58, estimateTextMinWidth('7�87�8 7�7�7�'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
-      Math.max(58, estimateTextMinWidth('7�87�7�7�7�'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
-      Math.max(58, estimateTextMinWidth('7�88!7�88�'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
-      Math.max(62, estimateTextMinWidth('7�87�8~7�7�8y'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
-      Math.max(62, estimateTextMinWidth('7�88~7�88y'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
-      Math.max(62, estimateTextMinWidth('7�88~7�8'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
-      Math.max(90, estimateTextMinWidth('7�88&87�7�7�7�7�'), estimateTextMinWidth('7�'.repeat(Math.min(maxNotesLen, 18)))),
+      Math.max(34, estimateTextMinWidth('م'.repeat(maxIndexDigits))),
+      Math.max(88, estimateTextMinWidth('اسم الصنف'), estimateTextMinWidth('م'.repeat(Math.min(maxItemNameLen, 24)))),
+      Math.max(58, estimateTextMinWidth('الإفتتاحي'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
+      Math.max(58, estimateTextMinWidth('الوارد'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
+      Math.max(58, estimateTextMinWidth('الإنتاج'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
+      Math.max(58, estimateTextMinWidth('المنصرف'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
+      Math.max(58, estimateTextMinWidth('التالف'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
+      Math.max(62, estimateTextMinWidth('الرصيد الدفتري'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
+      Math.max(62, estimateTextMinWidth('الجرد الفعلي'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
+      Math.max(62, estimateTextMinWidth('الفارق'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
+      Math.max(90, estimateTextMinWidth('ملاحظات الجرد'), estimateTextMinWidth('م'.repeat(Math.min(maxNotesLen, 18)))),
     ];
 
     const baseTotalWidth = baseColumnWidths.reduce((sum, value) => sum + value, 0);
@@ -681,7 +695,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
       <div className="report-head mb-3 border-b border-slate-200 pb-4 text-center">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-[150px] flex items-center gap-2 text-[11px] text-slate-600 leading-tight">
-            <span className="font-bold text-slate-700">7�7�7�8y7� 7�87�7�7�</span>
+            <span className="font-bold text-slate-700">تقرير الجرد</span>
             <span className="mx-1">|</span>
             <span>{stocktakingMonthYearLabel}</span>
           </div>
@@ -711,7 +725,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
             style={{ fontSize: `${printConfig.fontSize}px` }}
           >
             {card.title}
-            {isContinued ? <span className="text-slate-500 mr-2" style={{ fontSize: `${Math.max(10, printConfig.fontSize - 3)}px` }}>(8&7�7�7�7�7�)</span> : null}
+            {isContinued ? <span className="text-slate-500 mr-2" style={{ fontSize: `${Math.max(10, printConfig.fontSize - 3)}px` }}>(تابع)</span> : null}
           </h4>
         </div>
 
@@ -731,17 +745,17 @@ const Stocktaking: React.FC<StocktakingProps> = ({
             </colgroup>
             <thead className={tableHeadClassName}>
               <tr>
-                <th className="text-center" style={headerCellStyle}>8&</th>
-                <th className="text-center" style={headerCellStyle}>7�87�7�8&</th>
-                <th className="text-center" style={headerCellStyle}>7�87�7�7�8y7�</th>
-                <th className="text-center" style={headerCellStyle}>7�88�7�7�7�</th>
-                <th className="text-center" style={headerCellStyle}>7�87�8 7�7�7�</th>
-                <th className="text-center" style={headerCellStyle}>7�87�7�7�7�</th>
-                <th className="text-center" style={headerCellStyle}>7�88!7�88�</th>
-                <th className="text-center" style={headerCellStyle}>7�87�8~7�7�8y</th>
-                <th className="text-center" style={headerCellStyle}>7�88~7�88y</th>
-                <th className="text-center" style={headerCellStyle}>7�88~7�8</th>
-                <th className="text-center" style={headerCellStyle}>7�88&87�7�7�7�7�</th>
+                <th className="text-center" style={headerCellStyle}>م</th>
+                <th className="text-center" style={headerCellStyle}>الصنف</th>
+                <th className="text-center" style={headerCellStyle}>الإفتتاحي</th>
+                <th className="text-center" style={headerCellStyle}>الوارد</th>
+                <th className="text-center" style={headerCellStyle}>الإنتاج</th>
+                <th className="text-center" style={headerCellStyle}>المنصرف</th>
+                <th className="text-center" style={headerCellStyle}>التالف</th>
+                <th className="text-center" style={headerCellStyle}>الدفتري</th>
+                <th className="text-center" style={headerCellStyle}>الفعلي</th>
+                <th className="text-center" style={headerCellStyle}>الفارق</th>
+                <th className="text-center" style={headerCellStyle}>ملاحظات</th>
               </tr>
             </thead>
             <tbody>
@@ -767,7 +781,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={11} className="p-4 text-center text-slate-500">87� 7�8�7�7� 7�7�8 7�8~ 7�8&8  8~7�7� {card.title} 8~8y 8!7�7� 7�87�8!7�.</td>
+                  <td colSpan={11} className="p-4 text-center text-slate-500">لا توجد أصناف تحت تصنيف {card.title} خلال هذه الفترة.</td>
                 </tr>
               )}
             </tbody>
@@ -803,7 +817,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
 
             {printConfig.showSignatures && (
               <div className="mt-5 pt-4 border-t border-slate-200 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 text-xs">
-                {['8&7�7�7�7� 7�88&7�7�7�8 ', '8&7�8y7� 7�88&7�7�7�8 ', '8&7�8y7� 7�87�8 7�7�7�', '8&7�8y7� 7�88&7�8 7�', '8&7�8y7� 7�88&7�7�7�8  7�7�887�7�7�', '8&7�8y7� 7�7�8& 8&7�7�8 7� 7�87�7�87�8~'].map((title) => (
+                {['أمين المستودع', 'مدير المستودع', 'مدير الإنتاج', 'مدير الإدارة', 'مدير الجودة', 'المدير العام / المفوض'].map((title) => (
                   <div key={title} className="border border-dashed border-slate-300 rounded-lg p-2 flex items-end justify-center text-slate-700 font-bold" style={{ height: (printConfig.printSignatureBoxHeight || 96) + 'px' }}>
                     {title}
                   </div>
@@ -813,7 +827,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
 
             {printConfig.generalNote.trim() && (
               <div className="mt-4 pt-3 border-t border-slate-200 text-xs text-slate-600 whitespace-pre-wrap">
-                <div className="font-bold text-slate-700 mb-1">8&87�7�7�7� 7�7�8&7�</div>
+                <div className="font-bold text-slate-700 mb-1">ملاحظة عامة</div>
                 <div>{printConfig.generalNote}</div>
               </div>
             )}
@@ -825,7 +839,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                   alt="QR Verification"
                   className="w-20 h-20 border border-slate-200 rounded mx-auto"
                 />
-                <div className="text-[10px] text-slate-500 mt-1">7�87�7�88 8&8  7�87�87�8y7�</div>
+                <div className="text-[10px] text-slate-500 mt-1">امسح الرمز للوصول عبر الهاتف</div>
               </div>
             )}
 
@@ -972,7 +986,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
 
                 {isLastPage && printConfig.showSignatures && (
                   <div className="mt-5 pt-4 border-t border-slate-200 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 text-xs">
-                    {['8&7�7�7�7� 7�88&7�7�7�8 ', '8&7�8y7� 7�88&7�7�7�8 ', '8&7�8y7� 7�87�8 7�7�7�', '8&7�8y7� 7�88&7�8 7�', '8&7�8y7� 7�88&7�7�7�8  7�7�887�7�7�', '8&7�8y7� 7�7�8& 8&7�7�8 7� 7�87�7�87�8~'].map((title) => (
+                    {['أمين المستودع', 'مدير المستودع', 'مدير الإنتاج', 'مدير الإدارة', 'مدير الجودة', 'المدير العام / المفوض'].map((title) => (
                       <div key={title} className="border border-dashed border-slate-300 rounded-lg p-2 flex items-end justify-center text-slate-700 font-bold" style={{ height: (printConfig.printSignatureBoxHeight || 96) + 'px' }}>
                         {title}
                       </div>
@@ -982,7 +996,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
 
                 {isLastPage && printConfig.generalNote.trim() && (
                   <div className="mt-4 pt-3 border-t border-slate-200 text-xs text-slate-600 whitespace-pre-wrap">
-                    <div className="font-bold text-slate-700 mb-1">8&87�7�7�7� 7�7�8&7�</div>
+                    <div className="font-bold text-slate-700 mb-1">ملاحظة عامة</div>
                     <div>{printConfig.generalNote}</div>
                   </div>
                 )}
@@ -994,7 +1008,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                       alt="QR Verification"
                       className="w-20 h-20 border border-slate-200 rounded mx-auto"
                     />
-                    <div className="text-[10px] text-slate-500 mt-1">7�87�7�88 8&8  7�87�87�8y7�</div>
+                    <div className="text-[10px] text-slate-500 mt-1">امسح الرمز للوصول عبر الهاتف</div>
                   </div>
                 )}
 
@@ -1017,7 +1031,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
       const base64 = raw.includes(',') ? raw.split(',')[1] : raw;
       saveManualSignedPdf(monthKey, file.name, file.type || 'application/pdf', base64);
       setSessionVersion((prev) => prev + 1);
-      setStatusMessage('7�8& 7�8~7� 8&88~ PDF 7�88&7�7�8&7� 8y7�8�8y7�89.');
+      setStatusMessage('تم حفظ ملف PDF الموقع يدوياً.');
     };
     reader.readAsDataURL(file);
   };
@@ -1025,7 +1039,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
   const handleCloseMonth = async () => {
     if (isClosed) return;
     if (conflictCount > 0) {
-      setStatusMessage('87� 8y8&8�8  7�787�8 7�87�8!7� 88�7�8�7� 7�7�8 7�8~ 8&7�7�7�7�7�7�.');
+      setStatusMessage('لا يمكن إغلاق الجرد لوجود أصناف بها تعارض أو غير مجرودة.');
       return;
     }
 
@@ -1054,7 +1068,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
       const base64 = dataUri.includes(',') ? dataUri.split(',')[1] : dataUri;
       const result = closeMonth({
         monthKey,
-        approvedBy: currentUserName || '8&7�7�7�7�8&',
+        approvedBy: currentUserName || 'النظام',
         rows: auditRows,
         archivedPdfName: pdfName,
         archivedPdfMime: 'application/pdf',
@@ -1062,14 +1076,14 @@ const Stocktaking: React.FC<StocktakingProps> = ({
       });
 
       if (!result.ok) {
-        setStatusMessage(result.reason || '8~7�8 7�787�8 7�87�8!7�.');
+        setStatusMessage(result.reason || 'فشل في إغلاق الجرد.');
         return;
       }
 
       setSessionVersion((prev) => prev + 1);
-      setStatusMessage(`7�8& 7�7�7�8&7�7� 8�7�787�8 7�87�8!7� ${monthKey} 8�7�7�7�8y8 7�7�8y7� 7�87�8~7�7� 887�8!7� 7�87�7�88y.`);
+      setStatusMessage(`تم اعتماد إغلاق الجرد ${monthKey} وحفظ الرصيد الفعلي كأرصدة افتتاحية للشهر القادم.`);
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : '7�7�7� 7�7�7� 7�7�8 7�7 7�87�7�7�8&7�7� 8�7�87�787�8.');
+      setStatusMessage(error instanceof Error ? error.message : 'حدث خطأ أثناء إعداد أو إغلاق الجرد.');
     } finally {
       setIsClosing(false);
     }
@@ -1080,14 +1094,14 @@ const Stocktaking: React.FC<StocktakingProps> = ({
       <div className="bg-white border border-slate-200 rounded-2xl p-4 md:p-6">
         <div className="flex flex-col xl:flex-row gap-3 xl:items-center xl:justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-slate-800">7�87�7�7� 7�87�8!7�8y 8�7�787�8 7�87�8�7�7�</h2>
-            <p className="text-sm text-slate-500">8 7�7�8& 7�87�88y8 : 7�87�8&88y7�7�/7�87�7� + 7�87�7�88y8/7�87�7�7�8&7�7�</p>
+            <h2 className="text-2xl font-bold text-slate-800">تقرير الجرد الشهري واعتماد الجرد الدفتري</h2>
+            <p className="text-sm text-slate-500">ملاحظة حول الألوان: الإفتتاحي/الوارد + المنصرف/التالف</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <input
               type="month"
-              title="7�7�7�8y7�7� 7�8!7� 7�87�7�7�"
+              title="شهر الجرد"
               className="px-3 py-2 border border-slate-300 rounded-lg"
               value={monthKey}
               onChange={(event) => setMonthKey(event.target.value)}
@@ -1097,29 +1111,29 @@ const Stocktaking: React.FC<StocktakingProps> = ({
               className="px-3 py-2 border border-slate-300 rounded-lg"
               value={zoneFilter}
               onChange={(event) => setZoneFilter(event.target.value)}
-              title="7�88&8 7�87�"
+              title="المنطقة"
             >
               {zones.map((zone) => (
-                <option key={zone} value={zone}>{zone === 'all' ? '8�8 7�88&8 7�7�8' : zone}</option>
+                <option key={zone} value={zone}>{zone === 'all' ? 'كل المناطق' : zone}</option>
               ))}
             </select>
 
             <button
               className={`px-3 py-2 rounded-lg border font-bold flex items-center gap-2 ${blindMode ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-white border-slate-300 text-slate-700'}`}
               onClick={() => setBlindMode((prev) => !prev)}
-              title="7�8~7�8y8/7�8y87�8~ 7�87�7� 7�87�7�8&80"
+              title="تفعيل/إلغاء وضع الجرد الأعمى"
             >
-              {blindMode ? <EyeOff size={16} /> : <Eye size={16} />} {blindMode ? '7�87�7� 7�87�7�8&80: 8&8~7�88' : '7�87�7� 7�87�7�8&80: 8&7�8�88~'}
+              {blindMode ? <EyeOff size={16} /> : <Eye size={16} />} {blindMode ? 'وضع الجرد الأعمى: مفعل' : 'وضع الجرد الأعمى: معطل'}
             </button>
           </div>
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
           <button className={`px-3 py-2 rounded-lg border font-bold ${pane === 'operations' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-300'}`} onClick={() => setPane('operations')}>
-            7�8 7�87�8&88y7�7� / 7�87�7�
+            لوحة العمليات / الإدخال
           </button>
           <button className={`px-3 py-2 rounded-lg border font-bold ${pane === 'audit' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-300'}`} onClick={() => setPane('audit')}>
-            7�8 7�87�7�88y8 / 7�87�87�7�8y7�
+            المراجعة / الطباعة
           </button>
         </div>
       </div>
@@ -1128,28 +1142,28 @@ const Stocktaking: React.FC<StocktakingProps> = ({
         <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
           <div className="p-4 border-b border-slate-200 bg-slate-50 flex flex-col xl:flex-row gap-3 xl:items-center xl:justify-between">
             <div>
-              <div className="text-sm text-slate-700 font-bold">7�87�87�8&: {enteredItemsForProgress} / {totalItemsForProgress}</div>
+              <div className="text-sm text-slate-700 font-bold">تم الجرد: {enteredItemsForProgress} / {totalItemsForProgress}</div>
               <progress className="w-72 max-w-full mt-2 h-2.5" value={progress} max={100} />
             </div>
 
             <div className="flex flex-wrap gap-2">
               <button className={`px-3 py-2 rounded-lg border text-sm font-bold ${quickFilter === 'all' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-300'}`} onClick={() => setQuickFilter('all')}>
-                <Filter size={14} className="inline ml-1" /> 7�7�7� 7�88�8
+                <Filter size={14} className="inline ml-1" /> كل الأصناف
               </button>
               <button className={`px-3 py-2 rounded-lg border text-sm font-bold ${quickFilter === 'conflicts' ? 'bg-red-700 text-white border-red-700' : 'bg-white text-slate-700 border-slate-300'}`} onClick={() => setQuickFilter('conflicts')}>
-                <AlertTriangle size={14} className="inline ml-1" /> 7�88&7�7�7�7�7�7�7� 8~87� ({conflictCount})
+                <AlertTriangle size={14} className="inline ml-1" /> الأصناف المتضاربة فقط ({conflictCount})
               </button>
-              <button className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-bold" onClick={exportTemplate} disabled={isClosed}><Download size={14} className="inline ml-1" /> 7�7�7�8y7� 87�87�</button>
-              <button className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-bold" onClick={exportCurrentEntries}><FileDown size={14} className="inline ml-1" /> 7�7�7�8y7� 7�87�7�7�7�87�7�</button>
-              <button className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-bold" onClick={() => importInputRef.current?.click()} disabled={isClosed}><Upload size={14} className="inline ml-1" /> 7�7�7�8y7�7�7�</button>
-              <input ref={importInputRef} type="file" title="7�7�7�8y7�7�7� 7�7�7�7�87�7� 7�87�7�7�" accept=".xlsx,.csv" className="hidden" onChange={(event) => { void handleImportFile(event.target.files?.[0] || null); event.currentTarget.value = ''; }} />
-              <button className="px-3 py-2 rounded-lg bg-slate-900 text-white text-sm font-bold" onClick={saveAllVisible} disabled={isClosed}><Save size={14} className="inline ml-1" /> 7�8~7� 7�88�8</button>
+              <button className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-bold" onClick={exportTemplate} disabled={isClosed}><Download size={14} className="inline ml-1" /> قالب الاستيراد</button>
+              <button className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-bold" onClick={exportCurrentEntries}><FileDown size={14} className="inline ml-1" /> تنزيل المدخلات</button>
+              <button className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-bold" onClick={() => importInputRef.current?.click()} disabled={isClosed}><Upload size={14} className="inline ml-1" /> استيراد</button>
+              <input ref={importInputRef} type="file" title="استيراد ملف جرد" accept=".xlsx,.csv" className="hidden" onChange={(event) => { void handleImportFile(event.target.files?.[0] || null); event.currentTarget.value = ''; }} />
+              <button className="px-3 py-2 rounded-lg bg-slate-900 text-white text-sm font-bold" onClick={saveAllVisible} disabled={isClosed}><Save size={14} className="inline ml-1" /> حفظ الكل</button>
             </div>
           </div>
 
           {isClosed && (
             <div className="m-4 p-3 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 text-sm font-bold">
-              8!7�7� 7�87�8!7� 8&788 (Read-Only). 87� 8y8&8�8  7�7�7�8y8 7�8y7�8 7�7� 7�87�7�.
+              تم إغلاق هذا الجرد (Read-Only). لا يمكن تعديل بيانات الجرد.
             </div>
           )}
 
@@ -1157,15 +1171,15 @@ const Stocktaking: React.FC<StocktakingProps> = ({
             <table className="w-full min-w-[920px] text-sm">
               <thead className="bg-white border-b border-slate-200">
                 <tr>
-                  <th className="p-3 text-right">7�7�8& 7�87�8 8~</th>
-                  <th className="p-3 text-right">7�88&8 7�87�</th>
-                  <th className="p-3 text-right">7�88&8�7�7�8</th>
-                  <th className="p-3 text-right">7�87�7�7� 7�88~7�88y</th>
-                  {!blindMode && <th className="p-3 text-right">7�87�7�8y7� 7�88 7�7�8y</th>}
-                  {!blindMode && <th className="p-3 text-right">7�88~7�8</th>}
-                  <th className="p-3 text-right">7�88&87�7�7�7�7�</th>
-                  <th className="p-3 text-right">7�87�7�87�</th>
-                  <th className="p-3 text-right">7�7�7�7�7</th>
+                  <th className="p-3 text-right">اسم الصنف</th>
+                  <th className="p-3 text-right">المنطقة</th>
+                  <th className="p-3 text-right">اسم المستخدم الذي قام بالجرد</th>
+                  <th className="p-3 text-right">العدد الفعلي</th>
+                  {!blindMode && <th className="p-3 text-right">الرصيد الدفتري</th>}
+                  {!blindMode && <th className="p-3 text-right">الفارق</th>}
+                  <th className="p-3 text-right">الملاحظات</th>
+                  <th className="p-3 text-right">الحالة</th>
+                  <th className="p-3 text-right">إجراءات</th>
                 </tr>
               </thead>
               <tbody>
@@ -1174,11 +1188,11 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                   return (
                     <tr key={item.id} className={`border-b border-slate-100 ${conflict ? 'bg-red-50' : ''}`}>
                       <td className="p-3 font-bold text-slate-800">{item.name}</td>
-                      <td className="p-3 text-slate-600">{item.zone || '78y7� 8&7�7�7�7�'}</td>
+                      <td className="p-3 text-slate-600">{item.zone || 'بدون منطقة'}</td>
                       <td className="p-3">
                         <input
                           type="text"
-                          title="7�7�8& 7�88&7�7�7�7�8& 7�88&7�7�8 887�7�7�"
+                          title="اسم المستخدم الذي قام بالجرد"
                           value={getDraftUser(item.id)}
                           onChange={(event) => setDraftUsers((prev) => ({ ...prev, [item.id]: event.target.value }))}
                           className="w-36 p-2 border border-slate-300 rounded-lg"
@@ -1189,7 +1203,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                         <input
                           type="text"
                           inputMode="decimal"
-                          title="7�87�7�7� 7�88~7�88y"
+                          title="العدد الفعلي"
                           value={getDraftCount(item.id)}
                           onChange={(event) => setDraftCounts((prev) => ({ ...prev, [item.id]: event.target.value }))}
                           className="w-36 p-2 border border-slate-300 rounded-lg"
@@ -1206,7 +1220,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                       <td className="p-3">
                         <input
                           type="text"
-                          title="8&87�7�7�7�7� 7�87�8 8~"
+                          title="ملاحظات الصنف"
                           value={getDraftNote(item.id)}
                           onChange={(event) => setDraftNotes((prev) => ({ ...prev, [item.id]: event.target.value }))}
                           className="w-52 p-2 border border-slate-300 rounded-lg"
@@ -1215,16 +1229,16 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                       </td>
                       <td className="p-3">
                         {conflict ? (
-                          <span className="px-2 py-1 rounded bg-red-100 text-red-700 text-xs font-bold">8&7�7�7�7�7�</span>
+                          <span className="px-2 py-1 rounded bg-red-100 text-red-700 text-xs font-bold">متضارب</span>
                         ) : (
-                          <span className="px-2 py-1 rounded bg-emerald-100 text-emerald-700 text-xs font-bold">7�88y8&</span>
+                          <span className="px-2 py-1 rounded bg-emerald-100 text-emerald-700 text-xs font-bold">معتمد</span>
                         )}
                       </td>
                       <td className="p-3">
                         <div className="flex items-center gap-2">
-                          <button className="px-2 py-1.5 rounded border border-slate-300 text-xs font-bold" onClick={() => saveSingleItem(item.id, false)} disabled={isClosed}>7�8~7�</button>
+                          <button className="px-2 py-1.5 rounded border border-slate-300 text-xs font-bold" onClick={() => saveSingleItem(item.id, false)} disabled={isClosed}>حفظ</button>
                           {conflict && (
-                            <button className="px-2 py-1.5 rounded border border-red-300 text-red-700 text-xs font-bold" onClick={() => saveSingleItem(item.id, true)} disabled={isClosed}>7�8 7�87�7�7�7�7�</button>
+                            <button className="px-2 py-1.5 rounded border border-red-300 text-red-700 text-xs font-bold" onClick={() => saveSingleItem(item.id, true)} disabled={isClosed}>حل التعارض</button>
                           )}
                         </div>
                       </td>
@@ -1233,7 +1247,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                 })}
                 {operationsRows.length === 0 && (
                   <tr>
-                    <td colSpan={blindMode ? 7 : 9} className="p-6 text-center text-slate-500">87� 7�8�7�7� 7�7�8 7�8~ 7�8&8  8!7�7� 7�88~87�7�.</td>
+                    <td colSpan={blindMode ? 7 : 9} className="p-6 text-center text-slate-500">لا توجد أصناف في هذا النطاق.</td>
                   </tr>
                 )}
               </tbody>
@@ -1412,29 +1426,29 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                         </>
                       )}
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">7�7�8& 7�7� 7�8 7�8�8y8  7�87�7�7�8�8 ({printConfig.fontSize}px)</label>
-                        <input title="7�7�8& 7�7� 7�8 7�8�8y8  7�87�7�7�8�8" type="range" min={9} max={30} value={printConfig.fontSize} onChange={(e) => setPrintConfig((prev) => ({ ...prev, fontSize: Number(e.target.value) }))} className="w-full" />
+                        <label className="block text-slate-500 mb-1 font-bold">حجم خط الترويسة ({printConfig.fontSize}px)</label>
+                        <input title="حجم خط الترويسة" type="range" min={9} max={30} value={printConfig.fontSize} onChange={(e) => setPrintConfig((prev) => ({ ...prev, fontSize: Number(e.target.value) }))} className="w-full" />
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">7�7�8& 7�7� 7�87�7�8�8 ({printConfig.tableFontSize}px)</label>
-                        <input title="7�7�8& 7�7� 7�87�7�8�8" type="range" min={5} max={25} value={printConfig.tableFontSize} onChange={(e) => setPrintConfig((prev) => ({ ...prev, tableFontSize: Number(e.target.value) }))} className="w-full" />
+                        <label className="block text-slate-500 mb-1 font-bold">حجم خط الجدول ({printConfig.tableFontSize}px)</label>
+                        <input title="حجم خط الجدول" type="range" min={5} max={25} value={printConfig.tableFontSize} onChange={(e) => setPrintConfig((prev) => ({ ...prev, tableFontSize: Number(e.target.value) }))} className="w-full" />
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">8 8&7� 7�7�7�8~7�7� 7�87�8~8�8~</label>
+                        <label className="block text-slate-500 mb-1 font-bold">ضبط ارتفاع الصفوف</label>
                         <select
-                          title="8 8&7� 7�7�7�8~7�7� 7�87�8~8�8~"
+                          title="ضبط ارتفاع الصفوف"
                           className="w-full p-2 border border-slate-300 rounded-lg"
                           value={printConfig.tableRowHeightMode}
                           onChange={(e) => setPrintConfig((prev) => ({ ...prev, tableRowHeightMode: e.target.value as StocktakingPrintConfig['tableRowHeightMode'] }))}
                         >
-                          <option value="auto">7�887�7�8y (8&7�8 )</option>
-                          <option value="fixed">7�7�7�7� (7�88y8)</option>
+                          <option value="auto">تلقائي (مرن)</option>
+                          <option value="fixed">ثابت (دقيق)</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">7�7�7�8~7�7� 7�8~ 7�87�7�7� ({printConfig.headerRowHeightPx}px)</label>
+                        <label className="block text-slate-500 mb-1 font-bold">ارتفاع ترويسة الجدول ({printConfig.headerRowHeightPx}px)</label>
                         <input
-                          title="7�7�7�8~7�7� 7�8~ 7�87�7�7�"
+                          title="ارتفاع ترويسة الجدول"
                           type="range"
                           min={18}
                           max={90}
@@ -1444,9 +1458,9 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">7�7�7�8~7�7� 7�8~8�8~ 7�87�8y7�8 7�7� ({printConfig.bodyRowHeightPx}px)</label>
+                        <label className="block text-slate-500 mb-1 font-bold">ارتفاع صفوف البيانات ({printConfig.bodyRowHeightPx}px)</label>
                         <input
-                          title="7�7�7�8~7�7� 7�8~8�8~ 7�87�8y7�8 7�7�"
+                          title="ارتفاع صفوف البيانات"
                           type="range"
                           min={18}
                           max={100}
@@ -1456,9 +1470,9 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">7�87�7�8� 7�87�7�7�8y 7�7�7�8 7�87�8~ ({printConfig.rowVerticalPaddingPx}px)</label>
+                        <label className="block text-slate-500 mb-1 font-bold">التباعد الداخلي العمودي للصفوف ({printConfig.rowVerticalPaddingPx}px)</label>
                         <input
-                          title="7�87�7�8� 7�87�7�7�8y 7�7�7�8 7�87�8~"
+                          title="التباعد الداخلي العمودي للصفوف"
                           type="range"
                           min={0}
                           max={24}
@@ -1468,9 +1482,9 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">8&7�7�7� 8&8�7�7� 7�88 7� 7�8&8�7�8y897� 7�7�7�8 7�87�88y7� ({printConfig.cellTextVerticalPosition}%)</label>
+                        <label className="block text-slate-500 mb-1 font-bold">الموضع الرأسي للنص داخل الخلايا ({printConfig.cellTextVerticalPosition}%)</label>
                         <input
-                          title="8&7�7�7� 8&8�7�7� 7�88 7� 7�8&8�7�8y897� 7�7�7�8 7�87�88y7�"
+                          title="الموضع الرأسي للنص داخل الخلايا"
                           type="range"
                           min={0}
                           max={100}
@@ -1479,15 +1493,15 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                           className="w-full"
                         />
                         <div className="mt-1 text-[11px] text-slate-500 flex items-center justify-between">
-                          <span>7�7�880</span>
-                          <span>{printConfig.cellTextVerticalPosition < 34 ? '7�88 7� 8&7�8~8�7� 87�7�880' : printConfig.cellTextVerticalPosition > 66 ? '7�88 7� 8&8 7�8~7� 87�7�8~8' : '7�88 7� 8~8y 7�88&8 7�7�8~ 7�87�8y7�897�'}</span>
-                          <span>7�7�8~8</span>
+                          <span>لأعلى</span>
+                          <span>{printConfig.cellTextVerticalPosition < 34 ? 'النص محاذى لأعلى' : printConfig.cellTextVerticalPosition > 66 ? 'النص محاذى لأسفل' : 'النص في المنتصف'}</span>
+                          <span>لأسفل</span>
                         </div>
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">7�8~7� 7�8 8�7�8  7�87�7�8�8 887�7�880 ({printConfig.tableTitleLiftPx}px)</label>
+                        <label className="block text-slate-500 mb-1 font-bold">مسافة عنوان الجدول من الأعلى ({printConfig.tableTitleLiftPx}px)</label>
                         <input
-                          title="7�8~7� 7�8 8�7�8  7�87�7�8�8 887�7�880"
+                          title="مسافة عنوان الجدول من الأعلى"
                           type="range"
                           min={0}
                           max={40}
@@ -1497,9 +1511,9 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">8&7�7�8~7� 7�88 7� 7�7�7�8 7�87�8&8�7� ({printConfig.columnSpacing}px)</label>
+                        <label className="block text-slate-500 mb-1 font-bold">تباعد النص عن أطراف العمود ({printConfig.columnSpacing}px)</label>
                         <input
-                          title="8&7�7�8~7� 7�88 7� 7�7�7�8 7�87�8&8�7�"
+                          title="تباعد النص عن أطراف العمود"
                           type="range"
                           min={0}
                           max={100}
@@ -1509,7 +1523,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                         />
                       </div>
                       <label className="flex items-center justify-between p-2 border border-slate-200 rounded-lg">
-                        <span>7�8& 7�87�7�8&7�7� 87�7�7�</span>
+                        <span>دمج الأعمدة الذكي</span>
                         <input
                           type="checkbox"
                           checked={printConfig.mergeColumns}
@@ -1518,9 +1532,9 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                       </label>
                       {printConfig.mergeColumns && (
                         <div>
-                          <label className="block text-slate-500 mb-1 font-bold">88�7� 7�8& 7�87�7�8&7�7� ({printConfig.mergeStrength}%)</label>
+                          <label className="block text-slate-500 mb-1 font-bold">قوة دمج الأعمدة ({printConfig.mergeStrength}%)</label>
                           <input
-                            title="88�7� 7�8& 7�87�7�8&7�7�"
+                            title="قوة دمج الأعمدة"
                             type="range"
                             min={0}
                             max={100}
@@ -1536,7 +1550,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                   {activePrintTab === 'content' && (
                     <>
                       <div>
-                        <label className="block text-slate-500 mb-2 font-bold">7�7�7�87�7� 7�87�87�8y7�</label>
+                        <label className="block text-slate-500 mb-2 font-bold">محتوى التقرير</label>
                         <div className="max-h-56 overflow-y-auto border border-slate-200 rounded-lg p-2 space-y-1">
                           {REPORT_CARD_CONFIG.map((card) => (
                             <label key={card.key} className="flex items-center justify-between text-xs px-2 py-1 rounded hover:bg-slate-50">
@@ -1557,13 +1571,13 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                         </div>
                       </div>
                       <label className="flex items-center justify-between p-2 border border-slate-200 rounded-lg">
-                        <span>7�7�8!7�7� 7�87�8�88y7�7�7�</span>
+                        <span>إظهار التوقيعات</span>
                         <input type="checkbox" checked={printConfig.showSignatures} onChange={(e) => setPrintConfig((prev) => ({ ...prev, showSignatures: e.target.checked }))} />
                       </label>
 
                       {printConfig.showSignatures && (
                         <label className="flex items-center justify-between p-2 border border-slate-200 rounded-lg mt-2">
-                          <span>7�8�8 8&7�7�7�7�7� 7�87�8�7�88y7� (px)</span>
+                          <span>ارتفاع مربع التوقيع (px)</span>
                           <div className="flex items-center gap-2">
                             <input
                               type="range"
@@ -1584,32 +1598,32 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                   {activePrintTab === 'branding' && (
                     <>
                       <label className="flex items-center justify-between p-2 border border-slate-200 rounded-lg">
-                        <span>7�7�8�7� 7�87�7�8�8</span>
+                        <span>حدود الجدول</span>
                         <input type="checkbox" checked={printConfig.showBorders} onChange={(e) => setPrintConfig((prev) => ({ ...prev, showBorders: e.target.checked }))} />
                       </label>
                       <label className="flex items-center justify-between p-2 border border-slate-200 rounded-lg">
-                        <span>7�88�7�8  7�87�8~8�8~ (Zebra)</span>
+                        <span>تلوين الصفوف الفردية (Zebra)</span>
                         <input type="checkbox" checked={printConfig.zebraStriping} onChange={(e) => setPrintConfig((prev) => ({ ...prev, zebraStriping: e.target.checked }))} />
                       </label>
                       <label className="flex items-center justify-between p-2 border border-slate-200 rounded-lg">
-                        <span>7�88�8y8  7�8~ 7�87�7�8�7�</span>
+                        <span>تلوين صف الترويسة</span>
                         <input type="checkbox" checked={printConfig.colorHeaderRow} onChange={(e) => setPrintConfig((prev) => ({ ...prev, colorHeaderRow: e.target.checked }))} />
                       </label>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">7�87�7�8& 7�88&7�7�8y</label>
-                        <input title="7�87�7�8& 7�88&7�7�8y" type="text" className="w-full p-2 border border-slate-300 rounded-lg" placeholder="8&7�7�8: 8&7�8�7�7� / 8&7�7�8&7�" value={printConfig.watermarkText} onChange={(e) => setPrintConfig((prev) => ({ ...prev, watermarkText: e.target.value }))} />
+                        <label className="block text-slate-500 mb-1 font-bold">العلامة المائية</label>
+                        <input title="العلامة المائية" type="text" className="w-full p-2 border border-slate-300 rounded-lg" placeholder="مثال: مسودة / سري" value={printConfig.watermarkText} onChange={(e) => setPrintConfig((prev) => ({ ...prev, watermarkText: e.target.value }))} />
                       </div>
                       <label className="flex items-center justify-between p-2 border border-slate-200 rounded-lg">
-                        <span>7�7�7�8~7� QR 8~8y 7�87�7�8y8y8</span>
+                        <span>إظهار رمز QR في التذييل</span>
                         <input type="checkbox" checked={printConfig.showQrCode} onChange={(e) => setPrintConfig((prev) => ({ ...prev, showQrCode: e.target.checked }))} />
                       </label>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">7�7�7�7� 7�87�7�88 7�87�88&8y</label>
-                        <input title="7�7�7�7� 7�87�7�88 7�87�88&8y" type="text" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.reportUrl} onChange={(e) => setPrintConfig((prev) => ({ ...prev, reportUrl: e.target.value }))} />
+                        <label className="block text-slate-500 mb-1 font-bold">رابط الوصول عبر الهاتف</label>
+                        <input title="رابط الوصول عبر الهاتف" type="text" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.reportUrl} onChange={(e) => setPrintConfig((prev) => ({ ...prev, reportUrl: e.target.value }))} />
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">8&87�7�7�7� 7�7�8&7�</label>
-                        <textarea title="8&87�7�7�7� 7�7�8&7�" className="w-full p-2 border border-slate-300 rounded-lg min-h-24" value={printConfig.generalNote} onChange={(e) => setPrintConfig((prev) => ({ ...prev, generalNote: e.target.value }))} />
+                        <label className="block text-slate-500 mb-1 font-bold">ملاحظة عامة</label>
+                        <textarea title="ملاحظة عامة" className="w-full p-2 border border-slate-300 rounded-lg min-h-24" value={printConfig.generalNote} onChange={(e) => setPrintConfig((prev) => ({ ...prev, generalNote: e.target.value }))} />
                       </div>
                     </>
                   )}
@@ -1618,7 +1632,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
 
               <div className="col-span-9 flex flex-col min-h-0">
                 <div className="px-4 py-2 border-b border-slate-200 bg-white flex items-center justify-between text-xs">
-                  <div className="text-slate-600">8&7�7�8y8 7� 7�8y7� 887�87�8y7� (WYSIWYG)</div>
+                  <div className="text-slate-600">معاينة حية للطباعة (WYSIWYG)</div>
                   {printStatusMessage && <div className="text-indigo-700 font-bold">{printStatusMessage}</div>}
                 </div>
 
@@ -1641,9 +1655,9 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                 </div>
 
                 <div className="px-4 py-3 bg-white border-t border-slate-200 flex items-center justify-end gap-2">
-                  <button onClick={() => setShowPrintStudio(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50">7�787�8</button>
+                  <button onClick={() => setShowPrintStudio(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50">إغلاق</button>
                   <button onClick={() => void buildPdfFromPrintStudio()} disabled={isPrintingPdf} className="px-5 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 disabled:opacity-50">
-                    {isPrintingPdf ? '7�7�7�8y 7�87�7�7�7�7�...' : '7�87�7�7�7�7� 7�88 8!7�7�8y7� (PDF)'}
+                    {isPrintingPdf ? 'جاري التصدير...' : 'التصدير النهائي (PDF)'}
                   </button>
                 </div>
               </div>
