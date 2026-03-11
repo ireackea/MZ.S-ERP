@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 3 - Full Legacy Removal & Complete Single Source of Truth - 2026-03-05
 // ENTERPRISE FIX: Phase 2 - Full Single Source of Truth & Legacy Cleanup - 2026-03-05
 // ENTERPRISE FIX: Phase 1 - Single Source of Truth & Integration - 2026-03-05
 // ENTERPRISE FIX: Arabic Encoding Restoration - Full Components Folder - 2026-03-04
@@ -12,6 +13,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Package, AlertTriangle, TrendingUp, DollarSign, Activity, RefreshCw, AlertCircle, Printer } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from '@services/toastService';
+import { getAuthToken, getAuthUser } from '../services/authService';
 import { useInventoryStore } from '../store/useInventoryStore';
 
 interface DashboardStats {
@@ -111,14 +113,8 @@ const Dashboard: React.FC = () => {
   }, [items, transactions, users]);
 
   const resolveGeneratedBy = () => {
-    try {
-      const raw = localStorage.getItem('feed_factory_jwt_user');
-      if (!raw) return 'Dashboard User';
-      const parsed = JSON.parse(raw) as { name?: string; username?: string; email?: string };
-      return parsed?.name || parsed?.username || parsed?.email || 'Dashboard User';
-    } catch {
-      return 'Dashboard User';
-    }
+    const user = getAuthUser() as { name?: string; username?: string; email?: string } | null;
+    return user?.name || user?.username || user?.email || 'Dashboard User';
   };
 
   const handlePrintDashboardPdf = async () => {
@@ -154,7 +150,7 @@ const Dashboard: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('feed_factory_jwt_token') || ''}`,
+          Authorization: `Bearer ${getAuthToken() || ''}`,
         },
         body: JSON.stringify(payload),
       });

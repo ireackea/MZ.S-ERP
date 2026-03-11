@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 3 - Full Legacy Removal & Complete Single Source of Truth - 2026-03-05
 // ENTERPRISE FIX: Phase 7 - Single Owner Pattern - 2026-03-01
 // Items.tsx - Single Owner of Items Data (state + sync + storage)
 
@@ -5,20 +6,19 @@ import React, { FormEvent, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { CheckSquare, Edit3, Plus, Printer, RefreshCcw, Search, ShieldAlert, Square, Trash2 } from 'lucide-react';
 import { toast } from '@services/toastService';
-import { deleteItemsByPublicIds, getItems as getItemsFromApi, syncItems, type ItemDto, type SyncItemPayload } from '@services/itemsService';
+import { getAuthToken } from '../services/authService';
 import { usePermissions } from '@hooks/usePermissions';
 import { useSession } from '@hooks/useSession';
 import { addAuditLog } from '../services/legacy/storage';
 import type { Item, ItemSortMode } from '../types';
 import { useInventoryStore, sortItems, normOrder, read, write, SOFT_KEY, SORT_KEY, type SoftMap, type SortState, type ItemForm, type BulkForm } from '../store/useInventoryStore';
-import { useInventory } from '../contexts/InventoryContext';
 
 const SORTS: Array<{ value: ItemSortMode; label: string }> = [
-  { value: 'manual_locked', label: '7�7�7�8y7� 8y7�8�8y 7�7�7�7�' },
-  { value: 'name_asc', label: '7�87�7�8& 7�-8y' },
-  { value: 'name_desc', label: '7�87�7�8& 8y-7�' },
-  { value: 'code_asc', label: '7�87�8&7� 7�7�7�7�7�8y' },
-  { value: 'category_then_name', label: '7�7�7� 7�87�7�8 8y8~ 7�8& 7�87�7�8&' },
+  { value: 'manual_locked', label: 'ترتيب يدوي مخصص' },
+  { value: 'name_asc', label: 'الاسم أ-ي' },
+  { value: 'name_desc', label: 'الاسم ي-أ' },
+  { value: 'code_asc', label: 'الكود تصاعدي' },
+  { value: 'category_then_name', label: 'حسب التصنيف ثم الاسم' },
 ];
 
 const emptyForm: ItemForm = { name: '', code: '', category: '', unit: '', minLimit: '0', maxLimit: '1000', orderLimit: '', currentStock: '0' };
@@ -27,16 +27,16 @@ const emptyBulk: BulkForm = { category: '', unit: '', minLimit: '', maxLimit: ''
 const ItemsPage: React.FC = () => {
   const { data: session } = useSession();
   const { hasPermission } = usePermissions();
-  const { categories } = useInventory();
 
   const {
     items,
+    categories,
     loading,
     error,
     soft,
     sortMode,
     manualOrder,
-    load,
+    loadAll,
     setSortMode,
     move,
     createItem,
@@ -63,8 +63,8 @@ const ItemsPage: React.FC = () => {
   const canDelete = hasPermission('items.delete') || hasPermission('items.*');
 
   useEffect(() => {
-    void load();
-  }, []);
+    void loadAll();
+  }, [loadAll]);
 
   const visible = useMemo(() => {
     let result = sortMode === 'manual_locked'
@@ -132,7 +132,7 @@ const ItemsPage: React.FC = () => {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!canEdit) {
-      toast.error('87� 7�8&88� 7�87�7�8y7� 7�87�7�7�8y8');
+      toast.error('لا تملك الصلاحية لتنفيذ هذا الإجراء');
       return;
     }
 
@@ -179,7 +179,7 @@ const ItemsPage: React.FC = () => {
 
   const onPrintItemsPdf = async () => {
     try {
-      const token = localStorage.getItem('feed_factory_auth_token');
+      const token = getAuthToken();
       if (!token) throw new Error('No auth token.');
 
       const payload = {
@@ -223,9 +223,9 @@ const ItemsPage: React.FC = () => {
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
-      toast.success('7�8& 7�8�88y7� PDF 7�8 7�7�7�');
+      toast.success('تم تصدير PDF بنجاح');
     } catch (error: any) {
-      toast.error(error?.message || '8~7�8 7�8�88y7� PDF');
+      toast.error(error?.message || 'فشل تصدير PDF');
     }
   };
 
@@ -234,9 +234,9 @@ const ItemsPage: React.FC = () => {
       <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-red-700">
         <div className="mb-2 flex items-center gap-2 font-bold">
           <ShieldAlert size={18} />
-          88y7� 87�8y8� 7�87�7�8y7� 7�88�7�8�8 7�880 8!7�8! 7�87�8~7�7�
+          لا تملك الصلاحية للوصول إلى هذه الصفحة
         </div>
-        <div>7�7�7�7�7� 7�880 7�87�87�7�8y7� <code>items.view</code>.</div>
+        <div>تحتاج إلى صلاحية <code>items.view</code>.</div>
       </div>
     );
   }
@@ -245,11 +245,11 @@ const ItemsPage: React.FC = () => {
     <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-xl font-bold text-slate-900">7�7�7�7�7� 7�87�7�8 7�8~</h1>
+          <h1 className="text-xl font-bold text-slate-900">إدارة الأصناف</h1>
           <div className="flex items-center gap-2">
-            <button onClick={() => void load()} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-sm">
+            <button onClick={() => void loadAll()} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-sm">
               <RefreshCcw size={14} />
-              7�7�7�8y7�
+              تحديث
             </button>
             <button onClick={() => void onPrintItemsPdf()} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-sm">
               <Printer size={14} />
@@ -258,7 +258,7 @@ const ItemsPage: React.FC = () => {
             {canEdit && (
               <button onClick={() => { setForm(emptyForm); setFormOpen(true); }} className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-2 text-sm text-white">
                 <Plus size={14} />
-                7�7�7�8~7� 7�8 8~
+                إضافة صنف
               </button>
             )}
           </div>
@@ -270,11 +270,11 @@ const ItemsPage: React.FC = () => {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full rounded-lg border border-slate-300 py-2 pr-8 text-sm"
-              placeholder="7�7�7�..."
+              placeholder="بحث..."
             />
           </div>
           <select value={category} onChange={(e) => setCategory(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
-            <option value="all">8�8 7�87�7�8 8y8~7�7�</option>
+            <option value="all">كل التصنيفات</option>
             {categories.map((c) => (
               <option key={c} value={c}>{c}</option>
             ))}
@@ -285,14 +285,14 @@ const ItemsPage: React.FC = () => {
             ))}
           </select>
           <button onClick={() => setShowArchived((v) => !v)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
-            {showArchived ? '7�7�7� 7�88&7�7�8�8~7�7� 8~87�' : '7�7�7� 7�88 7�7� 8~87�'}
+            {showArchived ? 'إخفاء المؤرشفة' : 'عرض المؤرشفة فقط'}
           </button>
         </div>
       </div>
 
       {selected.size > 0 && (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-2 text-sm">
-          <span className="ml-2 font-bold">{selected.size} 7�8 8~ 8&7�7�7�</span>
+          <span className="ml-2 font-bold">{selected.size} صنف محدد</span>
           {canEdit && (
             <button onClick={() => setBulkOpen(true)} className="ml-2 rounded border border-slate-300 bg-white px-2 py-1">
               Bulk Edit
@@ -303,8 +303,8 @@ const ItemsPage: React.FC = () => {
               onClick={() => {
                 const ids = Array.from(selected);
                 softDelete(ids, actorName);
-                addAuditLog({ userId: actorId, userName: actorName, event: 'DELETE', details: `Soft delete (${ids.length})` });
-                toast.success('7�8& 7�7�7�8~7� 7�87�7�8 7�8~');
+                addAuditLog({ userId: actorId, userName: actorName, action: 'DELETE', entity: 'ITEM', details: `Soft delete (${ids.length})` });
+                toast.success('تم أرشفة الأصناف بنجاح');
                 setSelected(new Set());
               }}
               className="ml-2 rounded border border-amber-300 bg-white px-2 py-1 text-amber-700"
@@ -317,8 +317,8 @@ const ItemsPage: React.FC = () => {
               onClick={() => {
                 const ids = Array.from(selected);
                 restore(ids);
-                addAuditLog({ userId: actorId, userName: actorName, event: 'RESTORE', details: `Restore (${ids.length})` });
-                toast.success('7�8& 7�7�7�7�7�7�7� 7�87�7�8 7�8~');
+                addAuditLog({ userId: actorId, userName: actorName, action: 'UPDATE', entity: 'ITEM', details: `Restore (${ids.length})` });
+                toast.success('تم استعادة الأصناف بنجاح');
                 setSelected(new Set());
               }}
               className="ml-2 rounded border border-emerald-300 bg-white px-2 py-1 text-emerald-700"
@@ -350,19 +350,19 @@ const ItemsPage: React.FC = () => {
                   {allSelected ? <CheckSquare size={16} /> : <Square size={16} />}
                 </button>
               </th>
-              <th className="px-3 py-2 text-right">7�87�8&7�</th>
-              <th className="px-3 py-2 text-right">7�87�7�8&</th>
-              <th className="px-3 py-2 text-right">7�87�7�8 8y8~</th>
-              <th className="px-3 py-2 text-right">7�88�7�7�7�</th>
-              <th className="px-3 py-2 text-right">7�88�8&8y7�</th>
-              <th className="px-3 py-2 text-right">7�87�7�7�7�77�7�</th>
+              <th className="px-3 py-2 text-right">الكود</th>
+              <th className="px-3 py-2 text-right">الاسم</th>
+              <th className="px-3 py-2 text-right">التصنيف</th>
+              <th className="px-3 py-2 text-right">الوحدة</th>
+              <th className="px-3 py-2 text-right">الكمية</th>
+              <th className="px-3 py-2 text-right">الإجراءات</th>
             </tr>
           </thead>
           <tbody>
             {loading && (
               <tr>
                 <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
-                  7�7�7�8y 7�87�7�8&8y8...
+                  جاري التحميل...
                 </td>
               </tr>
             )}
@@ -376,7 +376,7 @@ const ItemsPage: React.FC = () => {
             {!loading && !error && visible.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
-                  87� 7�8�7�7� 7�7�8 7�8~ 87�7�7�8!7�
+                  لا توجد سجلات لعرضها
                 </td>
               </tr>
             )}
@@ -412,7 +412,7 @@ const ItemsPage: React.FC = () => {
                     <button
                       onClick={async () => {
                         await purge([String(i.id)], actorId, actorName);
-                        toast.success('7�8& 7�87�7�8~ 8 8!7�7�8y7�89');
+                        toast.success('تم حذف السجل نهائياً');
                       }}
                       className="ml-1 rounded border border-red-300 p-1 text-red-700"
                     >
@@ -429,12 +429,12 @@ const ItemsPage: React.FC = () => {
       {formOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <form onSubmit={submit} className="w-full max-w-xl rounded-2xl bg-white p-5 shadow-2xl">
-            <h2 className="mb-3 text-lg font-bold">{form.id ? '7�7�7�8y8 7�8 8~' : '7�7�7�8~7� 7�8 8~ 7�7�8y7�'}</h2>
+            <h2 className="mb-3 text-lg font-bold">{form.id ? 'تعديل الصنف' : 'إضافة صنف جديد'}</h2>
             <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-              <input required placeholder="7�87�7�8&" value={form.name} onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
-              <input placeholder="7�87�8&7�" value={form.code} onChange={(e) => setForm((s) => ({ ...s, code: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
-              <input required placeholder="7�87�7�8 8y8~" value={form.category} onChange={(e) => setForm((s) => ({ ...s, category: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
-              <input required placeholder="7�88�7�7�7�" value={form.unit} onChange={(e) => setForm((s) => ({ ...s, unit: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
+              <input required placeholder="الاسم" value={form.name} onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
+              <input placeholder="الكود" value={form.code} onChange={(e) => setForm((s) => ({ ...s, code: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
+              <input required placeholder="التصنيف" value={form.category} onChange={(e) => setForm((s) => ({ ...s, category: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
+              <input required placeholder="الوحدة" value={form.unit} onChange={(e) => setForm((s) => ({ ...s, unit: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
               <input type="number" placeholder="Min" value={form.minLimit} onChange={(e) => setForm((s) => ({ ...s, minLimit: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
               <input type="number" placeholder="Max" value={form.maxLimit} onChange={(e) => setForm((s) => ({ ...s, maxLimit: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
               <input type="number" placeholder="Order Limit" value={form.orderLimit} onChange={(e) => setForm((s) => ({ ...s, orderLimit: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
@@ -442,10 +442,10 @@ const ItemsPage: React.FC = () => {
             </div>
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" onClick={() => setFormOpen(false)} className="rounded border border-slate-300 px-3 py-2 text-sm">
-                7�877�7
+                إلغاء
               </button>
               <button type="submit" className="rounded bg-slate-900 px-3 py-2 text-sm text-white">
-                7�8~7�
+                حفظ
               </button>
             </div>
           </form>
@@ -455,20 +455,20 @@ const ItemsPage: React.FC = () => {
       {bulkOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-xl rounded-2xl bg-white p-5 shadow-2xl">
-            <h3 className="mb-3 text-lg font-bold">Bulk Edit ({selected.size})</h3>
+            <h3 className="mb-3 text-lg font-bold">تعديل جماعي ({selected.size})</h3>
             <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-              <input placeholder="7�87�7�8 8y8~ 7�87�7�8y7� (7�7�7�8y7�7�8y)" value={bulk.category} onChange={(e) => setBulk((s) => ({ ...s, category: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
-              <input placeholder="7�88�7�7�7� 7�87�7�8y7�7� (7�7�7�8y7�7�8y)" value={bulk.unit} onChange={(e) => setBulk((s) => ({ ...s, unit: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
+              <input placeholder="التصنيف الجديد (اختياري)" value={bulk.category} onChange={(e) => setBulk((s) => ({ ...s, category: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
+              <input placeholder="الوحدة الجديدة (اختياري)" value={bulk.unit} onChange={(e) => setBulk((s) => ({ ...s, unit: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
               <input type="number" placeholder="Min" value={bulk.minLimit} onChange={(e) => setBulk((s) => ({ ...s, minLimit: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
               <input type="number" placeholder="Max" value={bulk.maxLimit} onChange={(e) => setBulk((s) => ({ ...s, maxLimit: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
               <input type="number" placeholder="Order Limit" value={bulk.orderLimit} onChange={(e) => setBulk((s) => ({ ...s, orderLimit: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm md:col-span-2" />
             </div>
             <div className="mt-4 flex justify-end gap-2">
               <button onClick={() => setBulkOpen(false)} className="rounded border border-slate-300 px-3 py-2 text-sm">
-                7�877�7
+                إلغاء
               </button>
               <button onClick={() => void applyBulk()} className="rounded bg-slate-900 px-3 py-2 text-sm text-white">
-                7�7�7�8y8
+                تحديث
               </button>
             </div>
           </div>

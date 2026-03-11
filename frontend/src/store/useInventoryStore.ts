@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 3 - Full Legacy Removal & Complete Single Source of Truth - 2026-03-05
 // ENTERPRISE FIX: Phase 2 - Full Single Source of Truth & Legacy Cleanup - 2026-03-05
 // ENTERPRISE FIX: Phase 1 - Single Source of Truth & Integration - 2026-03-05
 // ENTERPRISE FIX: Phase 0 - Stabilization & UTF-8 Lockdown - 2026-03-05
@@ -46,12 +47,22 @@ type InventoryAction = 'add' | 'remove' | 'update';
 type ActorInfo = { id: string; name: string };
 type OpeningBalanceMap = Record<string, number>;
 type OpeningBalanceRow = { itemId: string; quantity: number };
+type OpeningBalanceStoreRow = {
+  id: number;
+  itemId: string;
+  itemPublicId?: string;
+  financialYear: number;
+  quantity: number;
+  unitCost?: number | null;
+  item?: { name: string; publicId?: string };
+};
 
 type Store = {
   items: Item[];
   balances: Record<string, number>;
   transactions: Transaction[];
   openingBalances: OpeningBalanceMap;
+  openingBalanceRows: OpeningBalanceStoreRow[];
   openingBalancesYear: number | null;
   openingBalancesLoading: boolean;
   openingBalancesError: string | null;
@@ -72,6 +83,7 @@ type Store = {
   syncFromServer: () => Promise<void>;
   setTransactions: (transactions: Transaction[]) => void;
   setOpeningBalances: (financialYear: number, rows: OpeningBalanceRow[]) => void;
+  setOpeningBalanceRows: (financialYear: number, rows: OpeningBalanceStoreRow[]) => void;
   setUsers: (users: User[]) => void;
   setRoles: (roles: RoleDefinition[]) => void;
   setReferenceData: (data: { units?: string[]; categories?: string[] }) => void;
@@ -275,6 +287,44 @@ const normalizeOpeningBalanceRows = (rows: Array<{ item_id?: string; itemId?: st
     return acc;
   }, {});
 
+const normalizeOpeningBalanceStoreRows = (rows: any[], financialYear: number): OpeningBalanceStoreRow[] =>
+  rows.reduce<OpeningBalanceStoreRow[]>((acc, row, index) => {
+    const itemPublicId = String(row?.itemPublicId ?? row?.item?.publicId ?? row?.item_id ?? row?.itemId ?? '').trim();
+    const itemId = itemPublicId;
+    const quantity = Number(row?.quantity ?? 0);
+    const unitCost = row?.unitCost == null ? null : Number(row.unitCost);
+    if (!itemId || !Number.isFinite(quantity)) return acc;
+
+    acc.push({
+      id: Number.isFinite(Number(row?.id)) ? Number(row.id) : index + 1,
+      itemId,
+      itemPublicId: itemPublicId || undefined,
+      financialYear: Number.isFinite(Number(row?.financialYear)) ? Number(row.financialYear) : financialYear,
+      quantity,
+      unitCost: unitCost != null && Number.isFinite(unitCost) ? unitCost : null,
+      item: row?.item?.name
+        ? { name: String(row.item.name), publicId: row?.item?.publicId ? String(row.item.publicId) : undefined }
+        : undefined,
+    });
+    return acc;
+  }, []);
+
+const localOpeningBalanceStoreRows = (financialYear: number) =>
+  getOpeningBalancesByYear(financialYear).reduce<OpeningBalanceStoreRow[]>((acc, row, index) => {
+    const itemId = String(row?.item_id ?? '').trim();
+    const quantity = Number(row?.quantity ?? 0);
+    if (!itemId || !Number.isFinite(quantity)) return acc;
+    acc.push({
+      id: index + 1,
+      itemId,
+      itemPublicId: itemId,
+      financialYear,
+      quantity,
+      unitCost: null,
+    });
+    return acc;
+  }, []);
+
 const mapApiOpeningBalances = (rows: any[]) =>
   rows.reduce<OpeningBalanceMap>((acc, row) => {
     const itemId = String(row?.itemPublicId ?? row?.item?.publicId ?? row?.itemId ?? '').trim();
@@ -295,6 +345,7 @@ export const useInventoryStore = create<Store>()(
       balances: {},
       transactions: [],
       openingBalances: {},
+      openingBalanceRows: [],
       openingBalancesYear: null,
       openingBalancesLoading: false,
       openingBalancesError: null,
@@ -340,6 +391,7 @@ export const useInventoryStore = create<Store>()(
         const localTransactions = getTransactions();
         const localOpeningBalancesYear = currentFinancialYear();
         const localOpeningBalances = normalizeOpeningBalanceRows(getOpeningBalancesByYear(localOpeningBalancesYear));
+        const localOpeningRows = localOpeningBalanceStoreRows(localOpeningBalancesYear);
         const localUsers = normalizeUsers(getUsers());
         const localRoles = getIamConfig().roles;
         const localCategories = uniqueStrings(getCategories() || []);
@@ -350,6 +402,7 @@ export const useInventoryStore = create<Store>()(
           error: null,
           transactions: localTransactions,
           openingBalances: localOpeningBalances,
+          openingBalanceRows: localOpeningRows,
           openingBalancesYear: localOpeningBalancesYear,
           openingBalancesError: null,
           users: localUsers,
@@ -370,10 +423,12 @@ export const useInventoryStore = create<Store>()(
 
         try {
           const rows = await getOpeningBalancesFromApi(financialYear);
+          const nextOpeningBalanceRows = Array.isArray(rows) ? normalizeOpeningBalanceStoreRows(rows, financialYear) : [];
           const nextOpeningBalances = Array.isArray(rows) ? mapApiOpeningBalances(rows) : {};
 
           set({
             openingBalances: nextOpeningBalances,
+            openingBalanceRows: nextOpeningBalanceRows,
             openingBalancesYear: financialYear,
             openingBalancesLoading: false,
             openingBalancesError: null,
@@ -387,8 +442,10 @@ export const useInventoryStore = create<Store>()(
           }
         } catch {
           const fallback = normalizeOpeningBalanceRows(getOpeningBalancesByYear(financialYear));
+          const fallbackRows = localOpeningBalanceStoreRows(financialYear);
           set({
             openingBalances: fallback,
+            openingBalanceRows: fallbackRows,
             openingBalancesYear: financialYear,
             openingBalancesLoading: false,
             openingBalancesError: 'تعذر مزامنة أرصدة بداية المدة من الخادم. تم استخدام النسخة المحلية.',
@@ -405,6 +462,9 @@ export const useInventoryStore = create<Store>()(
         const fallbackOpeningBalances = Object.keys(get().openingBalances).length > 0
           ? get().openingBalances
           : normalizeOpeningBalanceRows(getOpeningBalancesByYear(openingBalanceYear));
+        const fallbackOpeningBalanceRows = get().openingBalanceRows.length > 0
+          ? get().openingBalanceRows
+          : localOpeningBalanceStoreRows(openingBalanceYear);
         const fallbackUsers = get().users.length > 0 ? get().users : normalizeUsers(getUsers());
         const fallbackRoles = get().roles.length > 0 ? get().roles : getIamConfig().roles;
         const fallbackCategories = uniqueStrings([...(getCategories() || []), ...get().categories]);
@@ -425,6 +485,9 @@ export const useInventoryStore = create<Store>()(
         const nextOpeningBalances = openingBalancesResult.status === 'fulfilled' && Array.isArray(openingBalancesResult.value)
           ? mapApiOpeningBalances(openingBalancesResult.value)
           : fallbackOpeningBalances;
+        const nextOpeningBalanceRows = openingBalancesResult.status === 'fulfilled' && Array.isArray(openingBalancesResult.value)
+          ? normalizeOpeningBalanceStoreRows(openingBalancesResult.value, openingBalanceYear)
+          : fallbackOpeningBalanceRows;
         const nextUsers = usersResult.status === 'fulfilled' ? normalizeUsers(usersResult.value.data.map(mapUserDto)) : fallbackUsers;
         const nextRoles = rolesResult.status === 'fulfilled' ? rolesResult.value.map(mapRoleDto) : fallbackRoles;
 
@@ -443,6 +506,7 @@ export const useInventoryStore = create<Store>()(
           balances: normalized.balances,
           transactions: nextTransactions,
           openingBalances: nextOpeningBalances,
+          openingBalanceRows: nextOpeningBalanceRows,
           openingBalancesYear: openingBalanceYear,
           openingBalancesError: openingBalancesResult.status === 'rejected'
             ? 'تعذر مزامنة أرصدة بداية المدة من الخادم. تم استخدام النسخة المحلية.'
@@ -470,9 +534,18 @@ export const useInventoryStore = create<Store>()(
         const nextOpeningBalances = normalizeOpeningBalanceRows(
           rows.map((row) => ({ item_id: row.itemId, quantity: row.quantity }))
         );
+        const nextOpeningBalanceRows = rows.map((row, index) => ({
+          id: index + 1,
+          itemId: row.itemId,
+          itemPublicId: row.itemId,
+          financialYear,
+          quantity: row.quantity,
+          unitCost: null,
+        }));
 
         set({
           openingBalances: nextOpeningBalances,
+          openingBalanceRows: nextOpeningBalanceRows,
           openingBalancesYear: financialYear,
           openingBalancesError: null,
         });
@@ -480,6 +553,37 @@ export const useInventoryStore = create<Store>()(
         upsertOpeningBalances(
           financialYear,
           rows.map((row) => ({ item_id: row.itemId, quantity: row.quantity }))
+        );
+      },
+
+      setOpeningBalanceRows: (financialYear, rows) => {
+        const nextOpeningBalanceRows = rows.map((row, index) => ({
+          ...row,
+          id: Number.isFinite(Number(row.id)) ? Number(row.id) : index + 1,
+          financialYear,
+          itemId: String(row.itemPublicId || row.itemId),
+          itemPublicId: String(row.itemPublicId || row.itemId),
+          quantity: Number(row.quantity || 0),
+          unitCost: row.unitCost == null ? null : Number(row.unitCost),
+        }));
+
+        const nextOpeningBalances = nextOpeningBalanceRows.reduce<OpeningBalanceMap>((acc, row) => {
+          if (Number.isFinite(row.quantity)) {
+            acc[String(row.itemPublicId || row.itemId)] = Number(row.quantity);
+          }
+          return acc;
+        }, {});
+
+        set({
+          openingBalances: nextOpeningBalances,
+          openingBalanceRows: nextOpeningBalanceRows,
+          openingBalancesYear: financialYear,
+          openingBalancesError: null,
+        });
+
+        upsertOpeningBalances(
+          financialYear,
+          nextOpeningBalanceRows.map((row) => ({ item_id: String(row.itemPublicId || row.itemId), quantity: Number(row.quantity || 0) }))
         );
       },
 
@@ -728,5 +832,5 @@ export const useInventoryStore = create<Store>()(
 );
 
 export { sortItems, normOrder, read, write, SOFT_KEY, SORT_KEY };
-export type { SoftMap, SortState, ItemForm, BulkForm, InventoryAction, ActorInfo };
+export type { SoftMap, SortState, ItemForm, BulkForm, InventoryAction, ActorInfo, OpeningBalanceStoreRow };
 

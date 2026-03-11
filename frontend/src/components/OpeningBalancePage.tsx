@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 3 - Full Legacy Removal & Complete Single Source of Truth - 2026-03-05
 // ENTERPRISE FIX: Arabic Encoding Restoration - Full Components Folder - 2026-03-04
 // Arabic text encoding verified and corrected
 
@@ -8,35 +9,13 @@ import * as XLSX from 'xlsx';
 import { useToast } from '@hooks/useToast';
 import {
   bulkUpsertOpeningBalances,
-  getOpeningBalances,
   setOpeningBalance,
-  OpeningBalancePayload,
+  type OpeningBalancePayload,
 } from '@services/openingBalanceService';
-import { getItems, ItemDto, syncItems } from '@services/itemsService';
-import { ReportColumnConfig } from '../types';
-import { useInventoryStore } from '../store/useInventoryStore';
-import { useInventory } from '../contexts/InventoryContext';
-
-interface OpeningBalanceRow {
-  id: number;
-  itemId: number;
-  itemPublicId?: string;
-  financialYear: number;
-  quantity: number;
-  unitCost?: number | null;
-  item?: { name: string; publicId?: string };
-}
-
-interface LocalItemLike {
-  id?: string | number;
-  name?: string;
-  unit?: string;
-  category?: string;
-  description?: string;
-}
+import type { ReportColumnConfig } from '../types';
+import { useInventoryStore, type OpeningBalanceStoreRow } from '../store/useInventoryStore';
 
 const currentYear = new Date().getFullYear();
-const COLUMN_STORAGE_KEY = 'feed_factory_opening_balance_columns';
 const DEFAULT_COLUMNS: ReportColumnConfig[] = [
   { key: 'item', label: 'الصنف', isVisible: true },
   { key: 'quantity', label: 'الكمية', isVisible: true },
@@ -51,9 +30,9 @@ const mergeColumns = (
   incoming?: ReportColumnConfig[]
 ): ReportColumnConfig[] => {
   if (!incoming || incoming.length === 0) return base;
-  const allowed = new Set(base.map((c) => c.key));
-  const normalized = incoming.filter((c) => allowed.has(c.key));
-  const missing = base.filter((c) => !normalized.find((n) => n.key === c.key));
+  const allowed = new Set(base.map((column) => column.key));
+  const normalized = incoming.filter((column) => allowed.has(column.key));
+  const missing = base.filter((column) => !normalized.find((entry) => entry.key === column.key));
   return [...normalized, ...missing];
 };
 
@@ -67,12 +46,15 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
   onUpdateColumnConfig,
 }) => {
   const { showToast, ToastComponent } = useToast();
-  const { items: inventoryItems } = useInventoryStore();
+  const inventoryItems = useInventoryStore((state) => state.items);
+  const openingBalanceRows = useInventoryStore((state) => state.openingBalanceRows);
+  const openingBalancesLoading = useInventoryStore((state) => state.openingBalancesLoading);
+  const openingBalancesError = useInventoryStore((state) => state.openingBalancesError);
+  const loadAll = useInventoryStore((state) => state.loadAll);
+  const loadOpeningBalances = useInventoryStore((state) => state.loadOpeningBalances);
+  const setOpeningBalanceRows = useInventoryStore((state) => state.setOpeningBalanceRows);
 
   const [year, setYear] = useState<number>(currentYear);
-  const [rows, setRows] = useState<OpeningBalanceRow[]>([]);
-  const [items, setItems] = useState<ItemDto[]>([]);
-  const [loadingBalances, setLoadingBalances] = useState(false);
   const [syncingItems, setSyncingItems] = useState(false);
   const [importing, setImporting] = useState(false);
   const [errorDetails, setErrorDetails] = useState<string | null>(null);
@@ -84,11 +66,11 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const visibleColumns = useMemo(
-    () => localColumnConfig.filter((col) => col.isVisible),
+    () => localColumnConfig.filter((column) => column.isVisible),
     [localColumnConfig]
   );
 
-  const normalize = (v: unknown) => String(v ?? '').trim().toLowerCase();
+  const normalize = (value: unknown) => String(value ?? '').trim().toLowerCase();
 
   const numberFormatter = useMemo(
     () =>
@@ -106,244 +88,130 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
   };
 
   const parseFormattedNumber = (raw: string): number => {
-    const cleaned = String(raw ?? '')
-      .replace(/,/g, '')
-      .trim();
+    const cleaned = String(raw ?? '').replace(/,/g, '').trim();
     if (!cleaned) return Number.NaN;
     return Number(cleaned);
   };
 
-  const handleNumericFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-    const parsed = parseFormattedNumber(e.currentTarget.value);
+  const handleNumericFocus = (event: React.FocusEvent<HTMLInputElement>) => {
+    const parsed = parseFormattedNumber(event.currentTarget.value);
     if (!Number.isFinite(parsed)) return;
-    e.currentTarget.value = String(parsed);
+    event.currentTarget.value = String(parsed);
   };
 
   const handleNumericBlur = (
-    e: React.FocusEvent<HTMLInputElement>,
-    row: OpeningBalanceRow,
+    event: React.FocusEvent<HTMLInputElement>,
+    row: OpeningBalanceStoreRow,
     field: 'quantity' | 'unitCost'
   ) => {
-    const parsed = parseFormattedNumber(e.currentTarget.value);
+    const parsed = parseFormattedNumber(event.currentTarget.value);
     const previousValue = field === 'quantity' ? row.quantity : row.unitCost;
 
     if (!Number.isFinite(parsed)) {
-      e.currentTarget.value = formatNumber(previousValue ?? null);
+      event.currentTarget.value = formatNumber(previousValue ?? null);
       return;
     }
 
     const rounded = Number(parsed.toFixed(3));
-    e.currentTarget.value = formatNumber(rounded);
+    event.currentTarget.value = formatNumber(rounded);
     void handleEdit(row, field, rounded);
   };
 
+  const normalizedInventoryItems = useMemo(
+    () =>
+      inventoryItems.map((item) => ({
+        id: String(item.id),
+        publicId: item.publicId ? String(item.publicId) : undefined,
+        code: item.code ? String(item.code) : undefined,
+        name: String(item.name),
+        unit: item.unit ? String(item.unit) : undefined,
+        category: item.category ? String(item.category) : undefined,
+      })),
+    [inventoryItems]
+  );
+
+  const itemMetaByPublicId = useMemo(() => {
+    const map = new Map<string, (typeof normalizedInventoryItems)[number]>();
+    normalizedInventoryItems.forEach((item) => {
+      if (item.publicId) map.set(String(item.publicId), item);
+    });
+    return map;
+  }, [normalizedInventoryItems]);
+
+  const itemMetaById = useMemo(() => {
+    const map = new Map<string, (typeof normalizedInventoryItems)[number]>();
+    normalizedInventoryItems.forEach((item) => {
+      map.set(String(item.id), item);
+    });
+    return map;
+  }, [normalizedInventoryItems]);
+
+  const itemMetaByName = useMemo(() => {
+    const map = new Map<string, (typeof normalizedInventoryItems)[number]>();
+    normalizedInventoryItems.forEach((item) => {
+      map.set(normalize(item.name), item);
+    });
+    return map;
+  }, [normalizedInventoryItems]);
+
+  const getItemMeta = (row: OpeningBalanceStoreRow) => {
+    const byPublicId = row.itemPublicId ? itemMetaByPublicId.get(String(row.itemPublicId)) : undefined;
+    const byId = itemMetaById.get(String(row.itemId));
+    const byName = itemMetaByName.get(normalize(row.item?.name));
+    return byPublicId || byId || byName;
+  };
+
   const sortedRows = useMemo(() => {
-    const list = [...rows];
+    const list = [...openingBalanceRows].filter((row) => row.financialYear === year);
     const orderIndex = new Map<string, number>();
     const nameIndex = new Map<string, number>();
-    const source = inventoryItems.length ? inventoryItems : items;
-    source.forEach((item: any, idx: number) => {
+
+    normalizedInventoryItems.forEach((item, index) => {
       const key = item.publicId ?? item.id;
-      if (key !== undefined) orderIndex.set(String(key), idx);
-      const itemName = normalize(item.name);
-      if (itemName) nameIndex.set(itemName, idx);
+      orderIndex.set(String(key), index);
+      nameIndex.set(normalize(item.name), index);
     });
 
-    return list.sort((a, b) => {
-      const aKey = a.itemPublicId ?? a.itemId;
-      const bKey = b.itemPublicId ?? b.itemId;
-      const aIdx =
-        orderIndex.get(String(aKey)) ??
-        nameIndex.get(normalize(a.item?.name)) ??
+    return list.sort((left, right) => {
+      const leftKey = left.itemPublicId ?? left.itemId;
+      const rightKey = right.itemPublicId ?? right.itemId;
+      const leftIndex =
+        orderIndex.get(String(leftKey)) ??
+        nameIndex.get(normalize(left.item?.name)) ??
         Number.MAX_SAFE_INTEGER;
-      const bIdx =
-        orderIndex.get(String(bKey)) ??
-        nameIndex.get(normalize(b.item?.name)) ??
+      const rightIndex =
+        orderIndex.get(String(rightKey)) ??
+        nameIndex.get(normalize(right.item?.name)) ??
         Number.MAX_SAFE_INTEGER;
-      if (aIdx !== bIdx) return aIdx - bIdx;
-      return (a.item?.name || '').localeCompare(b.item?.name || '', 'ar');
+      if (leftIndex !== rightIndex) return leftIndex - rightIndex;
+      return (left.item?.name || '').localeCompare(right.item?.name || '', 'ar');
     });
-  }, [rows, items, inventoryItems]);
+  }, [openingBalanceRows, normalizedInventoryItems, year]);
 
   useEffect(() => {
     setLocalColumnConfig(mergeColumns(DEFAULT_COLUMNS, columnConfig));
   }, [columnConfig]);
 
-  const normalizeInventoryItem = (item: any): ItemDto | null => {
-    if (!item?.name) return null;
-    const idValue = Number(item.id);
-    return {
-      id: Number.isFinite(idValue) ? idValue : 0,
-      publicId: item.publicId ?? (item.id ? String(item.id) : undefined),
-      code: item.code ? String(item.code) : undefined,
-      name: String(item.name),
-      unit: item.unit ? String(item.unit) : undefined,
-      category: item.category ? String(item.category) : undefined,
-      description: item.description ? String(item.description) : undefined,
-    };
-  };
-
-  const itemMetaByPublicId = useMemo(() => {
-    const map = new Map<string, ItemDto>();
-    inventoryItems.forEach((item) => {
-      const normalizedItem = normalizeInventoryItem(item);
-      const key = normalizedItem?.publicId;
-      if (normalizedItem && key) map.set(String(key), normalizedItem);
-    });
-    items.forEach((item) => {
-      if (item.publicId) map.set(String(item.publicId), item);
-    });
-    return map;
-  }, [items, inventoryItems]);
-
-  const itemMetaById = useMemo(() => {
-    const map = new Map<string, ItemDto>();
-    items.forEach((item) => {
-      if (typeof item.id !== 'undefined') map.set(String(item.id), item);
-    });
-    return map;
-  }, [items]);
-
-  const itemMetaByName = useMemo(() => {
-    const map = new Map<string, ItemDto>();
-    inventoryItems.forEach((item) => {
-      const normalizedItem = normalizeInventoryItem(item);
-      if (!normalizedItem) return;
-      map.set(normalize(normalizedItem.name), normalizedItem);
-    });
-    items.forEach((item) => {
-      if (item.name) map.set(normalize(item.name), item);
-    });
-    return map;
-  }, [items, inventoryItems]);
-
-  const getItemMeta = (row: OpeningBalanceRow) => {
-    let meta: ItemDto | undefined;
-    if (row.itemPublicId && itemMetaByPublicId.has(String(row.itemPublicId))) {
-      meta = itemMetaByPublicId.get(String(row.itemPublicId));
-    } else if (row.itemId && itemMetaById.has(String(row.itemId))) {
-      meta = itemMetaById.get(String(row.itemId));
-    }
-
-    const nameKey = normalize(row.item?.name || meta?.name);
-    const byName = nameKey ? itemMetaByName.get(nameKey) : undefined;
-
-    if (meta) {
-      if (!meta.code && byName?.code) meta = { ...meta, code: byName.code };
-      if (!meta.unit && byName?.unit) meta = { ...meta, unit: byName.unit };
-      if (!meta.category && byName?.category) meta = { ...meta, category: byName.category };
-      return meta;
-    }
-
-    return byName;
-  };
-
-  const getLocalItemsForSync = () => {
-    try {
-      const raw = localStorage.getItem('feed_factory_items');
-      const parsed = raw ? (JSON.parse(raw) as LocalItemLike[]) : [];
-      if (!Array.isArray(parsed)) return [];
-
-      return parsed
-        .map((item) => ({
-          publicId: String(item?.id ?? '').trim(),
-          name: String(item?.name ?? '').trim(),
-          unit: item?.unit ? String(item.unit) : undefined,
-          category: item?.category ? String(item.category) : undefined,
-          description: item?.description ? String(item.description) : undefined,
-        }))
-        .filter((item) => item.publicId && item.name);
-    } catch {
-      return [];
-    }
-  };
-
-  const getFetchItemsErrorMessage = (err: any): string => {
-    const status = err?.response?.status;
-    const serverMessage = err?.response?.data?.message;
-    if (status === 401) return 'غير مصرح (401): طابق ADMIN_TOKEN مع VITE_BACKUP_API_TOKEN.';
-    if (status === 404) return 'المسار /items غير موجود. تحقق من تشغيل Backend الصحيح.';
-    if (err?.code === 'ERR_NETWORK') return 'تعذر الاتصال بالخادم. تحقق من VITE_API_URL ومنفذ الـ Backend.';
-    return serverMessage || err?.message || 'فشل جلب الأصناف من الخادم.';
-  };
-
-  const loadBalances = async (targetYear: number) => {
-    setLoadingBalances(true);
-    setErrorDetails(null);
-    try {
-      const data = await getOpeningBalances(targetYear);
-      setRows(data || []);
-    } catch (e: any) {
-      const message = e?.message || 'تعذر تحميل أرصدة بداية المدة';
-      setErrorDetails(message);
-      showToast(message, 'error');
-    } finally {
-      setLoadingBalances(false);
-    }
-  };
-
-  const fetchItems = async (manual = false) => {
-    setSyncingItems(manual);
-    try {
-      let data = await getItems();
-
-      if (!data.length) {
-        const localItems = getLocalItemsForSync();
-        if (localItems.length) {
-          if (manual) {
-            await syncItems(localItems);
-            data = await getItems();
-            showToast(`تمت مزامنة ${localItems.length} صنف من قسم الأصناف.`, 'success');
-          } else {
-            setItems(localItems as unknown as ItemDto[]);
-            localStorage.setItem('cached_items', JSON.stringify(localItems));
-            showToast('لا توجد أصناف في الخادم حالياً. تم عرض الأصناف المحلية.', 'error');
-            return;
-          }
-        }
-      }
-
-      setItems(data);
-      localStorage.setItem('cached_items', JSON.stringify(data));
-      if (manual) showToast('تم تحديث قائمة الأصناف بنجاح.', 'success');
-    } catch (err: any) {
-      const cached = JSON.parse(localStorage.getItem('cached_items') || '[]');
-      if (Array.isArray(cached) && cached.length) {
-        setItems(cached);
-        showToast(
-          manual
-            ? 'تعذر التحديث من الخادم، تم استخدام النسخة المحلية.'
-            : 'تم استخدام النسخة المحلية للأصناف.',
-          'error'
-        );
-      } else {
-        const localItems = getLocalItemsForSync();
-        if (localItems.length) {
-          setItems(localItems as unknown as ItemDto[]);
-          localStorage.setItem('cached_items', JSON.stringify(localItems));
-          showToast('تعذر الوصول للخادم، تم تحميل أصناف قسم الأصناف المحلي.', 'error');
-        } else {
-          showToast(getFetchItemsErrorMessage(err), 'error');
-        }
-      }
-    } finally {
-      setSyncingItems(false);
-    }
-  };
+  useEffect(() => {
+    void loadAll();
+  }, [loadAll]);
 
   useEffect(() => {
-    void loadBalances(year);
-  }, [year]);
+    void loadOpeningBalances(year);
+  }, [loadOpeningBalances, year]);
 
-  useEffect(() => {
-    void fetchItems();
-  }, []);
-
-  const handleEdit = async (row: OpeningBalanceRow, field: 'quantity' | 'unitCost', value: number) => {
+  const handleEdit = async (
+    row: OpeningBalanceStoreRow,
+    field: 'quantity' | 'unitCost',
+    value: number
+  ) => {
     if (!Number.isFinite(value)) return;
-    const previous = rows;
-    const next = rows.map((r) => (r.id === row.id ? { ...r, [field]: value } : r));
-    setRows(next);
+    const previousRows = openingBalanceRows;
+    const nextRows = openingBalanceRows.map((entry) =>
+      entry.id === row.id ? { ...entry, [field]: value } : entry
+    );
+    setOpeningBalanceRows(year, nextRows);
+
     try {
       await setOpeningBalance({
         itemPublicId: row.itemPublicId || row.item?.publicId || String(row.itemId),
@@ -351,17 +219,28 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
         quantity: field === 'quantity' ? value : row.quantity,
         unitCost: field === 'unitCost' ? value : row.unitCost ?? undefined,
       });
-    } catch (e: any) {
-      setRows(previous);
-      showToast(e?.message || 'تعذر حفظ الرصيد', 'error');
+    } catch (error: any) {
+      setOpeningBalanceRows(year, previousRows);
+      showToast(error?.message || 'تعذر حفظ الرصيد', 'error');
+    }
+  };
+
+  const handleSyncItems = async () => {
+    setSyncingItems(true);
+    try {
+      await loadAll();
+      showToast('تم تحديث قائمة الأصناف بنجاح.', 'success');
+    } catch (error: any) {
+      showToast(error?.message || 'تعذر تحديث الأصناف من المتجر.', 'error');
+    } finally {
+      setSyncingItems(false);
     }
   };
 
   const handleExportTemplate = () => {
-    const exportSource = inventoryItems.length ? inventoryItems : items;
-    const template = (exportSource || []).map((item: any) => ({
+    const template = normalizedInventoryItems.map((item) => ({
       'اسم الصنف': item.name ?? '',
-      'المعرف العام (publicId / الكود)': item.code ?? '',
+      'المعرف العام (publicId / الكود)': item.code ?? item.publicId ?? item.id,
       'الوحدة': item.unit ?? '',
       'الفئة': item.category ?? '',
       'الكمية': '',
@@ -369,9 +248,8 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
     }));
 
     const headerOrder = ['اسم الصنف', 'المعرف العام (publicId / الكود)', 'الوحدة', 'الفئة', 'الكمية', 'التكلفة'];
-    const ws = XLSX.utils.json_to_sheet(template, { header: headerOrder });
-
-    ws['!cols'] = [
+    const worksheet = XLSX.utils.json_to_sheet(template, { header: headerOrder });
+    worksheet['!cols'] = [
       { wch: 30 },
       { wch: 28 },
       { wch: 12 },
@@ -380,15 +258,15 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
       { wch: 12 },
     ];
 
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Opening Balance Template');
-    XLSX.writeFile(wb, 'Opening_Balance_Template.xlsx');
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Opening Balance Template');
+    XLSX.writeFile(workbook, 'Opening_Balance_Template.xlsx');
   };
 
-  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     if (!file) return;
-    if (!items.length) {
+    if (!normalizedInventoryItems.length) {
       showToast('لا توجد أصناف محمّلة. اضغط "مزامنة الأصناف" أولاً.', 'error');
       return;
     }
@@ -398,9 +276,9 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
 
     try {
       const buffer = await file.arrayBuffer();
-      const wb = XLSX.read(buffer, { type: 'array' });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const json = XLSX.utils.sheet_to_json<any>(ws);
+      const workbook = XLSX.read(buffer, { type: 'array' });
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json<any>(worksheet);
 
       if (!json.length) {
         showToast('الملف فارغ، لا توجد بيانات للاستيراد.', 'error');
@@ -409,41 +287,38 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
 
       const payload: OpeningBalancePayload[] = [];
       const errors: string[] = [];
-      const importSource = inventoryItems.length ? inventoryItems : items;
 
-      json.forEach((row, idx) => {
+      json.forEach((row, index) => {
         const identifier = normalize(
           row['المعرف العام (publicId / الكود)'] ||
             row['الكود'] ||
-            row['Code'] ||
-            row['id'] ||
-            row['ID'] ||
-            row['Name'] ||
+            row.Code ||
+            row.id ||
+            row.ID ||
+            row.Name ||
             row['الاسم']
         );
         const name = normalize(row['اسم الصنف'] || row['الاسم']);
-        const qtyRaw = row['الكمية'] ?? row['Quantity'];
-        const qty = Number(qtyRaw);
-        const costRaw = row['التكلفة'] ?? row['Cost'];
+        const qty = Number(row['الكمية'] ?? row.Quantity);
+        const costRaw = row['التكلفة'] ?? row.Cost;
         const unitCost = Number.isFinite(Number(costRaw)) ? Number(costRaw) : undefined;
 
         if ((!identifier && !name) || !Number.isFinite(qty) || qty < 0) {
-          errors.push(`السطر ${idx + 2}: بيانات غير صالحة (معرف/اسم أو كمية).`);
+          errors.push(`السطر ${index + 2}: بيانات غير صالحة (معرف/اسم أو كمية).`);
           return;
         }
 
-        const match = importSource.find((i: any) => {
-          const pid = normalize(i.publicId ?? i.id);
-          const code = normalize(i.code);
-          const id = normalize(i.id);
-          const nm = normalize(i.name);
-          return pid === identifier || code === identifier || id === identifier || nm === name;
+        const match = normalizedInventoryItems.find((item) => {
+          const publicId = normalize(item.publicId ?? item.id);
+          const code = normalize(item.code);
+          const id = normalize(item.id);
+          const itemName = normalize(item.name);
+          return publicId === identifier || code === identifier || id === identifier || itemName === name;
         });
 
         const matchPublicId = match?.publicId ?? match?.id;
-
         if (!match || !matchPublicId) {
-          errors.push(`السطر ${idx + 2}: لم يتم العثور على صنف مطابق لـ "${identifier || name}".`);
+          errors.push(`السطر ${index + 2}: لم يتم العثور على صنف مطابق لـ "${identifier || name}".`);
           return;
         }
 
@@ -474,20 +349,17 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
 
       const allErrors = [...errors, ...backendErrors];
       setErrorDetails(allErrors.length ? allErrors.join('\n') : null);
-      void loadBalances(year);
-    } catch (err: any) {
+      await loadOpeningBalances(year);
+    } catch (error: any) {
       showToast('فشل استيراد الملف.', 'error');
-      const responseMessage = err?.response?.data?.message;
-      const responseError = err?.response?.data?.error;
+      const responseMessage = error?.response?.data?.message;
+      const responseError = error?.response?.data?.error;
       const responseDetails = Array.isArray(responseMessage)
         ? responseMessage.join('\n')
         : responseMessage;
 
       setErrorDetails(
-        responseDetails ||
-          responseError ||
-          err?.message ||
-          'حدث خطأ أثناء قراءة الملف.'
+        responseDetails || responseError || error?.message || 'حدث خطأ أثناء قراءة الملف.'
       );
     } finally {
       setImporting(false);
@@ -496,17 +368,21 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
   };
 
   const toggleColumnVisibility = (key: string) => {
-    setLocalColumnConfig((prev) => prev.map((col) => (col.key === key ? { ...col, isVisible: !col.isVisible } : col)));
+    setLocalColumnConfig((previous) =>
+      previous.map((column) =>
+        column.key === key ? { ...column, isVisible: !column.isVisible } : column
+      )
+    );
   };
 
   const moveColumn = (key: string, direction: 'up' | 'down') => {
-    setLocalColumnConfig((prev) => {
-      const next = [...prev];
-      const idx = next.findIndex((col) => col.key === key);
-      if (idx < 0) return prev;
-      const target = direction === 'up' ? idx - 1 : idx + 1;
-      if (target < 0 || target >= next.length) return prev;
-      [next[idx], next[target]] = [next[target], next[idx]];
+    setLocalColumnConfig((previous) => {
+      const next = [...previous];
+      const index = next.findIndex((column) => column.key === key);
+      if (index < 0) return previous;
+      const target = direction === 'up' ? index - 1 : index + 1;
+      if (target < 0 || target >= next.length) return previous;
+      [next[index], next[target]] = [next[target], next[index]];
       return next;
     });
   };
@@ -514,14 +390,12 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
   const saveColumns = () => {
     const merged = mergeColumns(DEFAULT_COLUMNS, localColumnConfig);
     onUpdateColumnConfig(merged);
-    localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(merged));
     showToast('تم حفظ إعدادات الأعمدة', 'success');
   };
 
   const resetColumns = () => {
     setLocalColumnConfig(DEFAULT_COLUMNS);
     onUpdateColumnConfig(DEFAULT_COLUMNS);
-    localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(DEFAULT_COLUMNS));
     showToast('تمت إعادة الأعمدة للوضع الافتراضي', 'success');
   };
 
@@ -538,12 +412,14 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
             <label className="text-sm text-slate-600">السنة المالية</label>
             <select
               value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
+              onChange={(event) => setYear(Number(event.target.value))}
+              title="السنة المالية"
+              aria-label="السنة المالية"
               className="border rounded px-3 py-2"
             >
-              {[year - 1, year, year + 1].map((y) => (
-                <option key={y} value={y}>
-                  {y}
+              {[year - 1, year, year + 1].map((optionYear) => (
+                <option key={optionYear} value={optionYear}>
+                  {optionYear}
                 </option>
               ))}
             </select>
@@ -551,7 +427,7 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
 
           <div className="flex flex-wrap gap-2">
             <button
-              onClick={() => fetchItems(true)}
+              onClick={() => void handleSyncItems()}
               disabled={syncingItems}
               className="bg-indigo-600 text-white px-4 py-2 rounded disabled:opacity-60"
             >
@@ -579,14 +455,14 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
             </label>
 
             <button
-              onClick={() => void loadBalances(year)}
+              onClick={() => void loadOpeningBalances(year)}
               className="bg-slate-100 text-slate-700 px-3 py-2 rounded border border-slate-300 hover:bg-slate-200 flex items-center gap-1"
             >
               <RefreshCw size={14} /> تحديث
             </button>
 
             <button
-              onClick={() => setShowColumnSettings((s) => !s)}
+              onClick={() => setShowColumnSettings((value) => !value)}
               className="bg-slate-100 text-slate-700 px-3 py-2 rounded border border-slate-300 hover:bg-slate-200"
             >
               إعدادات الأعمدة
@@ -597,28 +473,28 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
         {showColumnSettings && (
           <div className="border rounded-xl p-3 bg-slate-50 space-y-2">
             <div className="text-sm font-bold text-slate-700">إعدادات الأعمدة (داخل القسم)</div>
-            {localColumnConfig.map((col, idx) => (
-              <div key={col.key} className="flex items-center justify-between border rounded p-2 bg-white">
+            {localColumnConfig.map((column, index) => (
+              <div key={column.key} className="flex items-center justify-between border rounded p-2 bg-white">
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
-                    checked={col.isVisible}
-                    onChange={() => toggleColumnVisibility(col.key)}
+                    checked={column.isVisible}
+                    onChange={() => toggleColumnVisibility(column.key)}
                   />
-                  {col.label}
+                  {column.label}
                 </label>
                 <div className="flex gap-2">
                   <button
-                    disabled={idx === 0}
+                    disabled={index === 0}
                     className="px-2 py-1 border rounded disabled:opacity-40"
-                    onClick={() => moveColumn(col.key, 'up')}
+                    onClick={() => moveColumn(column.key, 'up')}
                   >
                     ↑
                   </button>
                   <button
-                    disabled={idx === localColumnConfig.length - 1}
+                    disabled={index === localColumnConfig.length - 1}
                     className="px-2 py-1 border rounded disabled:opacity-40"
-                    onClick={() => moveColumn(col.key, 'down')}
+                    onClick={() => moveColumn(column.key, 'down')}
                   >
                     ↓
                   </button>
@@ -636,24 +512,24 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
           </div>
         )}
 
-        {errorDetails && (
+        {(errorDetails || openingBalancesError) && (
           <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded whitespace-pre-wrap text-sm">
-            {errorDetails}
+            {errorDetails || openingBalancesError}
           </div>
         )}
 
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
           <div className="border-b px-4 py-2 text-sm text-slate-600 flex justify-between">
             <span>الجدول</span>
-            {loadingBalances && <span className="text-amber-600">جاري التحميل...</span>}
+            {openingBalancesLoading && <span className="text-amber-600">جاري التحميل...</span>}
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="bg-slate-50 text-slate-600">
                 <tr>
-                  {visibleColumns.map((col) => (
-                    <th key={col.key} className="py-2 px-3 text-right">
-                      {col.label}
+                  {visibleColumns.map((column) => (
+                    <th key={column.key} className="py-2 px-3 text-right">
+                      {column.label}
                     </th>
                   ))}
                 </tr>
@@ -661,68 +537,61 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
               <tbody>
                 {sortedRows.map((row) => (
                   <tr key={row.id} className="border-b last:border-b-0">
-                    {visibleColumns.map((col) => {
+                    {visibleColumns.map((column) => {
                       const meta = getItemMeta(row);
-                      if (col.key === 'item') {
+
+                      if (column.key === 'item') {
                         return (
-                          <td key={col.key} className="px-3 py-2">
+                          <td key={column.key} className="px-3 py-2">
                             {row.item?.name || meta?.name || `#${row.itemId}`}
                           </td>
                         );
                       }
 
-                      if (col.key === 'quantity') {
+                      if (column.key === 'quantity') {
                         return (
-                          <td key={col.key} className="px-3 py-2">
+                          <td key={column.key} className="px-3 py-2">
                             <input
                               type="text"
                               inputMode="decimal"
+                              title={`كمية ${row.item?.name || meta?.name || row.itemId}`}
+                              aria-label={`كمية ${row.item?.name || meta?.name || row.itemId}`}
                               className="w-full border rounded px-2 py-1 text-right"
                               defaultValue={formatNumber(row.quantity)}
                               onFocus={handleNumericFocus}
-                              onBlur={(e) => handleNumericBlur(e, row, 'quantity')}
+                              onBlur={(event) => handleNumericBlur(event, row, 'quantity')}
                             />
                           </td>
                         );
                       }
 
-                      if (col.key === 'unitCost') {
+                      if (column.key === 'unitCost') {
                         return (
-                          <td key={col.key} className="px-3 py-2">
+                          <td key={column.key} className="px-3 py-2">
                             <input
                               type="text"
                               inputMode="decimal"
+                              title={`تكلفة ${row.item?.name || meta?.name || row.itemId}`}
+                              aria-label={`تكلفة ${row.item?.name || meta?.name || row.itemId}`}
                               className="w-full border rounded px-2 py-1 text-right"
                               defaultValue={row.unitCost == null ? '' : formatNumber(row.unitCost)}
                               onFocus={handleNumericFocus}
-                              onBlur={(e) => handleNumericBlur(e, row, 'unitCost')}
+                              onBlur={(event) => handleNumericBlur(event, row, 'unitCost')}
                             />
                           </td>
                         );
                       }
 
-                      if (col.key === 'unit') {
-                        return (
-                          <td key={col.key} className="px-3 py-2">
-                            {meta?.unit || '-'}
-                          </td>
-                        );
+                      if (column.key === 'unit') {
+                        return <td key={column.key} className="px-3 py-2">{meta?.unit || '-'}</td>;
                       }
 
-                      if (col.key === 'category') {
-                        return (
-                          <td key={col.key} className="px-3 py-2">
-                            {meta?.category || '-'}
-                          </td>
-                        );
+                      if (column.key === 'category') {
+                        return <td key={column.key} className="px-3 py-2">{meta?.category || '-'}</td>;
                       }
 
-                      if (col.key === 'code') {
-                        return (
-                          <td key={col.key} className="px-3 py-2">
-                            {meta?.code ?? ''}
-                          </td>
-                        );
+                      if (column.key === 'code') {
+                        return <td key={column.key} className="px-3 py-2">{meta?.code ?? ''}</td>;
                       }
 
                       return null;
@@ -730,7 +599,7 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
                   </tr>
                 ))}
 
-                {!loadingBalances && sortedRows.length === 0 && (
+                {!openingBalancesLoading && sortedRows.length === 0 && (
                   <tr>
                     <td colSpan={Math.max(1, visibleColumns.length)} className="px-3 py-6 text-center text-slate-400">
                       لا توجد أرصدة مسجلة لهذه السنة.
