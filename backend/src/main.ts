@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 0 - Stabilization & UTF-8 Lockdown - 2026-03-05
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
@@ -75,6 +76,7 @@ async function bootstrap() {
       }
     },
     credentials: true,
+    allowedHeaders: ['Authorization', 'Content-Type'],
   });
 
   const rateLimitWindowMs = 60 * 1000;
@@ -130,13 +132,13 @@ async function bootstrap() {
     next();
   });
 
-  // 7�"�#���"�7�"�7��7�"�#�⬑"�#���%7�"�#���"� AUTH REQUEST MONITOR
+  // 7"#"7"77"#⬑"#%  // [AUTH REQUEST MONITOR]
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.url.includes('auth') || req.url.includes('/auth')) {
-      console.log(`\n7�"�#���"�7�"�7��7�"�7��7�"�7�"� [Backend Entry] Incoming: ${req.method} ${req.url}`);
-      console.log(`   7�"�#���"�7�"�7��7�"�#�⬑"�7��S7�"�#���"� IP: ${extractIp(req)}`);
+      console.log(`\n[Auth Monitor] [Backend Entry] Incoming: ${req.method} ${req.url}`);
+      console.log(`   [Auth Monitor] IP: ${extractIp(req)}`);
       if (req.body && Object.keys(req.body).length > 0) {
-        console.log(`   7�"�#���"�7�"�7��7�"�#�⬑"�7��S7�"�7�"� Body: ${JSON.stringify(req.body).substring(0, 100)}`);
+        console.log(`   [Auth Monitor] Body: ${JSON.stringify(req.body).substring(0, 100)}`);
       }
     }
     next();

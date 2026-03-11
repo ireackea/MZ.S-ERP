@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 0 - Stabilization & UTF-8 Lockdown - 2026-03-05
 // ENTERPRISE FIX: Phase 7 - Single Source of Truth for Items - 2026-03-01
 // Zustand Store for Items - Single Owner Pattern
 
@@ -49,6 +50,8 @@ const write = <T,>(k: string, v: T) => {
   localStorage.setItem(k, JSON.stringify(v));
 };
 
+const getPendingDeletedIds = () => new Set(Object.keys(read<SoftMap>(SOFT_KEY, {})));
+
 const n = (v: unknown, f: number) => (Number.isFinite(Number(v)) ? Number(v) : f);
 
 // ENTERPRISE FIX: Phase 0 - Fatal Errors Fixed - Blueprint Compliant - 2026-03-02
@@ -57,9 +60,9 @@ const cmp = (a: unknown, b: unknown) => String(a || '').localeCompare(String(b |
 const toDelta = (type: string, quantity: number): number => {
   if (!Number.isFinite(quantity)) return 0;
   const normalized = String(type).trim().toLowerCase();
-  
-  const inboundKeywords = ['in', 'purchase', 'incoming', 'import', 'production', '8�7�7�7�', '7�7�7�7', '7�8�7�8y7�', '7�8 7�7�7�'];
-  const outboundKeywords = ['out', 'sale', 'outgoing', 'export', 'consumption', '7�7�7�7�', '7�8y7�', '7�7�8~', '7�7�88~', '7�7�7�8!87�8�'];
+
+  const inboundKeywords = ['in', 'purchase', 'incoming', 'import', 'production', 'وارد', 'شراء', 'إنتاج', 'دخول'];
+  const outboundKeywords = ['out', 'sale', 'outgoing', 'export', 'consumption', 'صادر', 'صرف', 'بيع', 'استهلاك', 'تالف'];
 
   if (inboundKeywords.some((keyword) => normalized.includes(keyword))) return Math.abs(quantity);
   if (outboundKeywords.some((keyword) => normalized.includes(keyword))) return -Math.abs(quantity);
@@ -91,8 +94,8 @@ const dto = (r: ItemDto): Item => ({
   name: r.name,
   code: r.code || undefined,
   barcode: r.barcode || undefined,
-  category: r.category || '78y7� 8&7�8 8~',
-  unit: r.unit || '87�7�7�',
+  category: r.category || 'تصنيف عام',
+  unit: r.unit || 'وحدة',
   minLimit: n(r.minLimit, 0),
   maxLimit: n(r.maxLimit, 1000),
   orderLimit: r.orderLimit == null ? undefined : n(r.orderLimit, 0),
@@ -130,20 +133,15 @@ export const useInventoryStore = create<Store>()(
       load: async () => {
         set({ loading: true, error: null });
         try {
-          // 1. Read pending deletes from localStorage
-          const pendingDeletes = read<SoftMap>(SOFT_KEY, {});
-          const deletedIds = new Set(Object.keys(pendingDeletes));
+          const deletedIds = getPendingDeletedIds();
 
-          // 2. Load from API
           const apiItems = await getItemsFromApi();
           const mappedItems = apiItems.map(dto);
 
-          // 3. Filter out pending deletes
           const filteredItems = mappedItems.filter(item =>
             !deletedIds.has(String(item.id))
           );
 
-          // 4. Update store
           const manualOrder = normOrder(filteredItems, get().manualOrder);
           set({
             items: filteredItems,
@@ -186,11 +184,12 @@ export const useInventoryStore = create<Store>()(
         await addAuditLog({
           userId: actorId,
           userName: actorName,
-          event: 'item_create',
+          action: 'CREATE',
+          entity: 'ITEM',
           details: `Created item: ${item.name} (${item.id})`
         });
 
-        toast.success('7�8&7� 7�7�7�8~7� 7�87�8 8~ 7�8 7�7�7�');
+        toast.success('تم إضافة الصنف بنجاح');
       },
 
       updateItem: async (item, actorId, actorName) => {
@@ -200,11 +199,12 @@ export const useInventoryStore = create<Store>()(
         await addAuditLog({
           userId: actorId,
           userName: actorName,
-          event: 'item_update',
+          action: 'UPDATE',
+          entity: 'ITEM',
           details: `Updated item: ${item.name} (${item.id})`
         });
 
-        toast.success('7�8& 7�7�7�8y8 7�87�8 8~ 7�8 7�7�7�');
+        toast.success('تم تعديل الصنف بنجاح');
       },
 
       bulkUpdate: async (ids, patch, actorId, actorName) => {
@@ -219,11 +219,12 @@ export const useInventoryStore = create<Store>()(
         await addAuditLog({
           userId: actorId,
           userName: actorName,
-          event: 'items_bulk_update',
+          action: 'UPDATE',
+          entity: 'ITEM',
           details: `Bulk updated ${ids.length} items`
         });
 
-        toast.success(`7�8& 7�7�7�8y7� ${ids.length} 7�8 8~ 7�8 7�7�7�`);
+        toast.success(`تم تعديل ${ids.length} صنف بنجاح`);
       },
 
       updateStockFromTransaction: (type, quantity, itemId) => {
@@ -246,7 +247,7 @@ export const useInventoryStore = create<Store>()(
         });
         set({ soft });
         write(SOFT_KEY, soft);
-        toast.success('7�8& 8 88 7�87�7�8 7�8~ 7�880 7�87�7�7�8y8~');
+        toast.success('تم تصنيف الأصناف كمحذوفة بنجاح');
       },
 
       restore: (ids) => {
@@ -254,36 +255,32 @@ export const useInventoryStore = create<Store>()(
         ids.forEach((id) => delete soft[id]);
         set({ soft });
         write(SOFT_KEY, soft);
-        toast.success('7�8& 7�7�7�7�7�7�7� 7�87�7�8 7�8~ 8&8  7�87�7�7�8y8~');
+        toast.success('تم استعادة الأصناف بنجاح');
       },
 
       purge: async (ids, actorId, actorName) => {
-        // 1. Delete from API and wait for confirmation
         await deleteItemsByPublicIds(ids);
 
-        // 2. Update localStorage
         const soft = { ...get().soft };
         ids.forEach((id) => delete soft[id]);
         set({ soft });
         write(SOFT_KEY, soft);
 
-        // 3. Update store
         const setIds = new Set(ids);
         const items = get().items.filter((i) => !setIds.has(String(i.id)));
         const manualOrder = normOrder(items, get().manualOrder.filter((id) => !setIds.has(id)));
         set({ items, soft, manualOrder });
         write(SORT_KEY, { mode: get().sortMode, manualOrder });
 
-        // 4. Audit log
         await addAuditLog({
           userId: actorId,
           userName: actorName,
-          event: 'items_delete',
+          action: 'DELETE',
+          entity: 'ITEM',
           details: `Permanently deleted ${ids.length} items: ${ids.join(', ')}`
         });
 
-        // 5. Notify user
-        toast.success('7�8& 7�87�7�8~ 8 8!7�7�8y7�89');
+        toast.success('تم حذف الأصناف نهائياً بنجاح');
       },
     }),
     {

@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 0 - Stabilization & UTF-8 Lockdown - 2026-03-05
 // ENTERPRISE FIX: Exact Legacy UI Restoration - 2026-02-27
 // ENTERPRISE FIX: Router Context Fixed - 2026-02-26
 // إصلاح آمن: استعادة التوجيه مع دعم كامل للصلاحيات
@@ -74,7 +75,9 @@ const RouteLoadingFallback: React.FC = () => (
 // ENTERPRISE FIX: Phase 1 - Dual Mode Implementation - 2026-03-02
 const AppContent = () => {
   const { isOffline, isSyncing } = useOfflineSync();
-  const { items } = useInventoryStore();
+  const items = useInventoryStore((state) => state.items);
+  const loadInventoryStore = useInventoryStore((state) => state.load);
+  const inventoryStoreLoading = useInventoryStore((state) => state.loading);
   const { units, categories, addUnit, deleteUnit, addCategory, deleteCategory, updateStockFromTransaction } = useInventory();
 
   // Core Data
@@ -98,6 +101,7 @@ const AppContent = () => {
   const [currentUser, setCurrentUser] = useState<User | undefined>(undefined);
   // ENTERPRISE FIX: authReady starts as false
   const [authReady, setAuthReady] = useState<boolean>(false);
+  const [inventoryRouteReady, setInventoryRouteReady] = useState(false);
   const deniedAccessLogRef = useRef<Set<string>>(new Set());
   const [setupName, setSetupName] = useState('');
   const [setupEmail, setSetupEmail] = useState('');
@@ -212,6 +216,36 @@ const AppContent = () => {
       if (freshUser) setCurrentUser(freshUser);
     }
   }, [users, currentUser]);
+
+  useEffect(() => {
+    if (!authReady) return;
+
+    if (!currentUser) {
+      setInventoryRouteReady(false);
+      return;
+    }
+
+    let active = true;
+    setInventoryRouteReady(false);
+
+    const syncInventoryAfterLogin = async () => {
+      try {
+        await loadInventoryStore();
+      } catch (error) {
+        console.error('[App] Failed to reload inventory store after login:', error);
+      } finally {
+        if (active) {
+          setInventoryRouteReady(true);
+        }
+      }
+    };
+
+    void syncInventoryAfterLogin();
+
+    return () => {
+      active = false;
+    };
+  }, [authReady, currentUser?.id, loadInventoryStore]);
 
   // Persist data
   useEffect(() => { if (!authReady) return; saveTransactions(transactions); }, [transactions, authReady]);
@@ -402,6 +436,7 @@ const AppContent = () => {
     };
 
     console.log('[Permissions] Setting currentUser.permissions:', targetUser.permissions);
+  setInventoryRouteReady(false);
     setCurrentUser(targetUser);
     upsertCurrentSession(targetUser);
     logUserActivity?.({ userId: targetUser.id, userName: targetUser.name, event: 'login_success', details: `${targetUser.role} - ${redirectTo}` });
@@ -414,9 +449,9 @@ const AppContent = () => {
     if (currentUser) {
       logUserActivity({ userId: currentUser.id, userName: currentUser.name, event: 'sessions_revoked', details: 'تسجيل خروج آمن من النظام' });
     }
-    logout();
+    setInventoryRouteReady(false);
     setCurrentUser(undefined);
-    window.location.hash = '/';
+    logout();
   };
 
   // ENTERPRISE FIX: Show EnterpriseLoading until auth is ready
@@ -517,6 +552,15 @@ const AppContent = () => {
 
   // ENTERPRISE FIX: Permission Guard Fixed - 2026-02-26
   const renderProtectedRoute = (permissionId: string, routeId: string, element: React.ReactNode) => {
+    if (!inventoryRouteReady || inventoryStoreLoading) {
+      return (
+        <EnterpriseLoading
+          message="جاري تحميل بيانات المخزون..."
+          subMessage="يتم تهيئة حالة التطبيق بعد تسجيل الدخول"
+        />
+      );
+    }
+
     if (currentUser?.role === 'SuperAdmin' || currentUser?.role === 'admin') {
       console.log(`[Permission Guard] SuperAdmin access granted to ${routeId}`);
       return element;

@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 0 - Stabilization & UTF-8 Lockdown - 2026-03-05
 // ENTERPRISE FIX: Exact Legacy UI Restoration - 2026-02-27
 // ENTERPRISE FIX: Runtime Recovery Hardening - 2026-02-28
 import apiClient from '@api/client';
@@ -5,6 +6,12 @@ import apiClient from '@api/client';
 const AUTH_TOKEN_KEY = 'feed_factory_jwt_token';
 const AUTH_USER_KEY = 'feed_factory_jwt_user';
 export const AUTH_SESSION_EVENT = 'feed_factory_auth_session_changed';
+const AUTH_STORAGE_PREFIXES = ['feed_factory_jwt_', 'feed_factory_auth_'];
+const AUTH_STORAGE_KEYS = [
+  'feed_factory_last_login_username',
+  'feed_factory_current_session_id',
+  'feed_factory_last_activity_at',
+];
 
 export type AuthLoginResponse = {
   accessToken: string;
@@ -24,6 +31,30 @@ export type AuthSessionUser = AuthLoginResponse['user'];
 const emitSessionChanged = () => {
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new Event(AUTH_SESSION_EVENT));
+};
+
+const clearMatchingStorage = (storage: Storage | undefined) => {
+  if (!storage) return;
+
+  for (let index = storage.length - 1; index >= 0; index -= 1) {
+    const key = storage.key(index);
+    if (!key) continue;
+
+    if (
+      AUTH_STORAGE_KEYS.includes(key) ||
+      AUTH_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
+    ) {
+      storage.removeItem(key);
+    }
+  }
+};
+
+export const clearAllAuthData = () => {
+  if (typeof window === 'undefined') return;
+
+  clearMatchingStorage(window.localStorage);
+  clearMatchingStorage(window.sessionStorage);
+  emitSessionChanged();
 };
 
 export const getAuthToken = () => localStorage.getItem(AUTH_TOKEN_KEY) || '';
@@ -85,9 +116,9 @@ export const login = async (username: string, password: string): Promise<AuthLog
 
 export const logout = () => {
   try {
-    localStorage.removeItem(AUTH_TOKEN_KEY);
-    setAuthUser(null);
+    clearAllAuthData();
     console.log('[authService] User logged out');
+    window.location.href = '/login';
   } catch (error) {
     console.error('[authService] Failed to logout:', error);
   }
