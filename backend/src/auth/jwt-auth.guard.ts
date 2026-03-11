@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 5 - Final Production Readiness - 2026-03-05
 // ENTERPRISE FIX: Multi-Source JWT Guard with Secure Fallback - 2026-03-04
 import {
   CanActivate,
@@ -7,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
+import type { SignOptions } from 'jsonwebtoken';
 import { Request, Response } from 'express';
 import { AuditService } from '../audit/audit.service';
 import { IS_PUBLIC_KEY } from './auth.constants';
@@ -114,8 +116,12 @@ export class JwtAuthGuard implements CanActivate {
     return process.env.JWT_SECRET || process.env.ADMIN_TOKEN || 'feedfactory-dev-secret';
   }
 
-  private getJwtExpiresIn(): string {
-    return String(process.env.JWT_EXPIRES_IN || '24h');
+  private getJwtExpiresIn(): NonNullable<SignOptions['expiresIn']> {
+    const raw = String(process.env.JWT_EXPIRES_IN || '24h').trim();
+    if (/^\d+$/.test(raw)) {
+      return Number(raw);
+    }
+    return raw as NonNullable<SignOptions['expiresIn']>;
   }
 
   private async tryAuthenticateCandidate(

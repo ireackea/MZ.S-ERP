@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 5 - Final Production Readiness - 2026-03-05
 // ENTERPRISE FIX: Phase 4 - Production Polish & Final Integration - 2026-03-05
 // ENTERPRISE FIX: Arabic Encoding Restoration - Full Components Folder - 2026-03-04
 // Arabic text encoding verified and corrected
@@ -222,6 +223,8 @@ const Reports: React.FC = () => {
         rows: normalizedRows,
       });
       toast.success('7�8& 7�7�7�8y7� 7�87�87�8y7� 7�8 7�7�7�');
+    } catch {
+      toast.error('تعذر تصدير ملف Excel. حاول مرة أخرى.');
     } finally {
       setIsExportingExcel(false);
     }
@@ -275,6 +278,8 @@ const Reports: React.FC = () => {
         fileName: `${payload.filename}.pdf`,
       });
       toast.success('7�8& 7�8 7�7�7 8&88~ PDF 7�8 7�7�7�');
+    } catch {
+      toast.error('تعذر تصدير ملف PDF. حاول مرة أخرى.');
     } finally {
       setIsExportingPdf(false);
     }

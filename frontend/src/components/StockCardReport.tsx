@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 5 - Final Production Readiness - 2026-03-05
 // ENTERPRISE FIX: Phase 4 - Production Polish & Final Integration - 2026-03-05
 // ENTERPRISE FIX: Arabic Encoding Restoration - Full Components Folder - 2026-03-04
 // Arabic text encoding verified and corrected
@@ -78,47 +79,52 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
 
     const companyLabel = companyName || 'اسم الشركة';
 
-    await exportSheetsToExcel({
-      fileName: `StockCard_Detailed_${startDate}_${endDate}.xlsx`,
-      sheets: reportData.map((card) => {
-        const wsData = [
-          ['بطاقة صنف مفصلة من نظام فيد فاكتوري', companyLabel],
-        ['اسم الصنف:', card.item.name, 'كود الصنف:', card.item.code || '-'],
-        ['من تاريخ:', startDate, 'إلى:', endDate],
-        [],
-        ['التاريخ', 'رقم الفاتورة', 'المورد/المستلم', 'وارد (شراء)', 'إنتاج (إضافة)', 'منصرف (بيع)', 'هالك (تالف)', 'الرصيد'],
-        ['', '', 'رصيد افتتاحي', '', '', '', '', card.openingBalance]
-        ];
+    try {
+      await exportSheetsToExcel({
+        fileName: `StockCard_Detailed_${startDate}_${endDate}.xlsx`,
+        sheets: reportData.map((card) => {
+          const wsData = [
+            ['بطاقة صنف مفصلة من نظام فيد فاكتوري', companyLabel],
+            ['اسم الصنف:', card.item.name, 'كود الصنف:', card.item.code || '-'],
+            ['من تاريخ:', startDate, 'إلى:', endDate],
+            [],
+            ['التاريخ', 'رقم الفاتورة', 'المورد/المستلم', 'وارد (شراء)', 'إنتاج (إضافة)', 'منصرف (بيع)', 'هالك (تالف)', 'الرصيد'],
+            ['', '', 'رصيد افتتاحي', '', '', '', '', card.openingBalance]
+          ];
 
-        card.rows.forEach(row => {
+          card.rows.forEach(row => {
+            wsData.push([
+              row.date,
+              row.warehouseInvoice,
+              row.notes || row.supplierOrReceiver,
+              row.importQty || '',
+              row.prodQty || '',
+              row.exportQty || '',
+              row.wasteQty || '',
+              row.runningBalance,
+            ]);
+          });
+
           wsData.push([
-            row.date,
-            row.warehouseInvoice,
-            row.notes || row.supplierOrReceiver,
-            row.importQty || '',
-            row.prodQty || '',
-            row.exportQty || '',
-            row.wasteQty || '',
-            row.runningBalance,
+            'الإجماليات', '', '',
+            card.totalImport,
+            card.totalProduction,
+            card.totalExport,
+            card.totalWaste,
+            card.rows.length > 0 ? card.rows[card.rows.length - 1].runningBalance : card.openingBalance,
           ]);
-        });
 
-        wsData.push([
-          'الإجماليات', '', '',
-          card.totalImport,
-          card.totalProduction,
-          card.totalExport,
-          card.totalWaste,
-          card.rows.length > 0 ? card.rows[card.rows.length - 1].runningBalance : card.openingBalance,
-        ]);
-
-        return {
-          name: card.item.name.substring(0, 30),
-          rows: wsData,
-          columns: [{ wch: 12 }, { wch: 15 }, { wch: 30 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }],
-        };
-      }),
-    });
+          return {
+            name: card.item.name.substring(0, 30),
+            rows: wsData,
+            columns: [{ wch: 12 }, { wch: 15 }, { wch: 30 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }],
+          };
+        }),
+      });
+    } catch {
+      toast.error('تعذر تصدير بطاقة الصنف إلى Excel. حاول مرة أخرى.');
+      return;
+    }
 
     const exportedRows = reportData.reduce((total, card) => total + card.rows.length, 0);
     onExport?.(exportedRows);
@@ -131,15 +137,19 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
     }
     if (!reportContainerRef.current || reportData.length === 0) return;
 
-    await exportElementToPdf({
-      element: reportContainerRef.current,
-      fileName: `StockCard_Detailed_${startDate}_${endDate}.pdf`,
-      jsPdfOptions: {
-        unit: 'mm',
-        format: 'a4',
-        orientation: 'landscape',
-      },
-    });
+    try {
+      await exportElementToPdf({
+        element: reportContainerRef.current,
+        fileName: `StockCard_Detailed_${startDate}_${endDate}.pdf`,
+        jsPdfOptions: {
+          unit: 'mm',
+          format: 'a4',
+          orientation: 'landscape',
+        },
+      });
+    } catch {
+      toast.error('تعذر تصدير بطاقة الصنف إلى PDF. حاول مرة أخرى.');
+    }
   };
 
   const toggleSelection = (id: string) => {

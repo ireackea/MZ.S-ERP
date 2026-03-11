@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 5 - Final Production Readiness - 2026-03-05
 // ENTERPRISE FIX: Phase 4 - Production Polish & Final Integration - 2026-03-05
 // ENTERPRISE FIX: Phase 3 - Full Legacy Removal & Complete Single Source of Truth - 2026-03-05
 // ENTERPRISE FIX: Phase 2 - Full Single Source of Truth & Legacy Cleanup - 2026-03-05
@@ -337,6 +338,8 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
     const setGridPreferences = useInventoryStore((state) => state.setGridPreferences);
     const resetGridPreferences = useInventoryStore((state) => state.resetGridPreferences);
     const exportElementToPdf = useInventoryStore((state) => state.exportElementToPdf);
+    const exportRowsToExcel = useInventoryStore((state) => state.exportRowsToExcel);
+    const exportSheetsToExcel = useInventoryStore((state) => state.exportSheetsToExcel);
     const items = storeItems.length > 0 ? storeItems : (itemsProp || []);
     const transactions = storeTransactions.length > 0 ? storeTransactions : (transactionsProp || []);
 
@@ -1738,48 +1741,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
 
         setPrintStatusMessage('جاري إنشاء ملف Excel وإعداد تنسيق التقرير...');
         try {
-            const ExcelJS = await import('exceljs');
-            const workbook = new ExcelJS.Workbook();
-            const worksheet = workbook.addWorksheet('سجل العمليات');
-            worksheet.views = [{ rightToLeft: true }];
-            const paperSize: ExcelPaperSizeValue = printConfig.paperSize === 'a3' ? 8 : printConfig.paperSize === 'legal' ? 5 : 9;
-            worksheet.pageSetup = {
-                orientation: printConfig.orientation,
-                paperSize: paperSize as any,
-                fitToPage: true,
-                fitToWidth: 1,
-                fitToHeight: 0,
-            };
-
             const totalColumns = Math.max(1, selectedColumns.length);
-
-            const setRangeBorder = (rowNumber: number, startColumn: number, endColumn: number, color = 'FFE2E8F0') => {
-                if (!printConfig.showBorders) return;
-                for (let columnIndex = startColumn; columnIndex <= endColumn; columnIndex += 1) {
-                    const cell = worksheet.getCell(rowNumber, columnIndex);
-                    cell.border = {
-                        top: { style: 'thin', color: { argb: color } },
-                        left: { style: 'thin', color: { argb: color } },
-                        bottom: { style: 'thin', color: { argb: color } },
-                        right: { style: 'thin', color: { argb: color } },
-                    };
-                }
-            };
-
-            const titleRow = worksheet.addRow([printConfig.reportTitle || 'تقرير سجل العمليات']).number;
-            worksheet.mergeCells(titleRow, 1, titleRow, totalColumns);
-            const titleCell = worksheet.getCell(titleRow, 1);
-            titleCell.font = { bold: true, size: 18, color: { argb: 'FF0F172A' } };
-            titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-
-            const metaRow = worksheet.addRow([`تم التصدير في ${new Date().toLocaleString('en-GB')} ⬢ عدد العمليات: ${operationSummary.totalCount}`]).number;
-            worksheet.mergeCells(metaRow, 1, metaRow, totalColumns);
-            const metaCell = worksheet.getCell(metaRow, 1);
-            metaCell.font = { size: 11, color: { argb: 'FF64748B' } };
-            metaCell.alignment = { horizontal: 'center', vertical: 'middle' };
-
-            worksheet.addRow([]);
-
             const summaryCards = [
                 { label: 'إجمالي كمية الدخول', value: formatNumber(operationSummary.totalNetWeight) },
                 { label: 'إجمالي كمية المورد', value: formatNumber(operationSummary.totalSupplierNet) },
@@ -1790,103 +1752,56 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
 
             const splitAt = Math.max(1, Math.floor(totalColumns / 2));
             const hasRightRegion = splitAt < totalColumns;
-            const styleCardRegion = (labelRow: number, valueRow: number, startColumn: number, endColumn: number, label: string, value: string) => {
-                worksheet.mergeCells(labelRow, startColumn, labelRow, endColumn);
-                worksheet.mergeCells(valueRow, startColumn, valueRow, endColumn);
-
-                const labelCell = worksheet.getCell(labelRow, startColumn);
-                labelCell.value = label;
-                labelCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-                labelCell.font = { bold: true, size: Math.max(9, printConfig.tableFontSize - 1), color: { argb: 'FF64748B' } };
-                labelCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
-
-                const valueCell = worksheet.getCell(valueRow, startColumn);
-                valueCell.value = value;
-                valueCell.alignment = { horizontal: 'center', vertical: 'middle' };
-                valueCell.font = { bold: true, size: Math.max(10, printConfig.tableFontSize + 1), color: { argb: 'FF0F172A' } };
-
-                setRangeBorder(labelRow, startColumn, endColumn);
-                setRangeBorder(valueRow, startColumn, endColumn);
-            };
+            const sheetRows: Array<Array<string | number>> = [
+                [printConfig.reportTitle || 'تقرير سجل العمليات'],
+                [`تم التصدير في ${new Date().toLocaleString('en-GB')} | عدد العمليات: ${operationSummary.totalCount}`],
+                [],
+            ];
 
             for (let index = 0; index < summaryCards.length; index += 2) {
                 const leftCard = summaryCards[index];
                 const rightCard = summaryCards[index + 1];
 
-                const labelRow = worksheet.addRow(new Array(totalColumns).fill('')).number;
-                const valueRow = worksheet.addRow(new Array(totalColumns).fill('')).number;
-
-                styleCardRegion(labelRow, valueRow, 1, hasRightRegion ? splitAt : totalColumns, leftCard.label, leftCard.value);
-                if (rightCard && hasRightRegion) {
-                    styleCardRegion(labelRow, valueRow, splitAt + 1, totalColumns, rightCard.label, rightCard.value);
-                }
+                sheetRows.push([
+                    leftCard.label,
+                    leftCard.value,
+                    ...(rightCard && hasRightRegion ? [rightCard.label, rightCard.value] : []),
+                ]);
             }
 
-            worksheet.addRow([]);
-
-            const addHeaderRow = () => {
-                const header = worksheet.addRow(selectedColumns.map((column) => column.label));
-                header.height = Math.max(20, printConfig.rowHeight - 8);
-                header.eachCell((cell) => {
-                    cell.font = { bold: true, size: printConfig.tableFontSize, color: { argb: 'FF334155' } };
-                    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: printConfig.wrapCellText };
-                    if (printConfig.colorHeaderRow) {
-                        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
-                    }
-                });
-                setRangeBorder(header.number, 1, totalColumns, 'FFCBD5E1');
-            };
+            sheetRows.push([]);
 
             groupedPrintRows.forEach((group) => {
                 if (printConfig.grouping !== 'none') {
-                    const subtotal = `Subtotal: ${formatNumber(group.subtotalNet)}`;
-                    const groupRow = worksheet.addRow([`${group.title} ⬢ ${subtotal}`]).number;
-                    worksheet.mergeCells(groupRow, 1, groupRow, totalColumns);
-                    const groupCell = worksheet.getCell(groupRow, 1);
-                    groupCell.font = { bold: true, size: Math.max(10, printConfig.tableFontSize), color: { argb: 'FF334155' } };
-                    groupCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
-                    groupCell.alignment = { horizontal: 'right', vertical: 'middle' };
-                    setRangeBorder(groupRow, 1, totalColumns);
+                    sheetRows.push([`${group.title} | الإجمالي الفرعي: ${formatNumber(group.subtotalNet)}`]);
                 }
 
-                addHeaderRow();
+                sheetRows.push(selectedColumns.map((column) => column.label));
 
-                group.rows.forEach((row, rowIndex) => {
-                    const dataRow = worksheet.addRow(selectedColumns.map((column) => getPrintCellValue(row, column.key)));
-                    dataRow.height = Math.max(18, printConfig.rowHeight - 10);
-                    dataRow.eachCell((cell) => {
-                        cell.font = { size: printConfig.tableFontSize, color: { argb: 'FF0F172A' } };
-                        cell.alignment = {
-                            horizontal: 'center',
-                            vertical: 'middle',
-                            wrapText: printConfig.wrapCellText,
-                        };
-                        if (printConfig.zebraStriping && rowIndex % 2 === 1) {
-                            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
-                        }
-                    });
-                    setRangeBorder(dataRow.number, 1, totalColumns);
+                group.rows.forEach((row) => {
+                    sheetRows.push(selectedColumns.map((column) => getPrintCellValue(row, column.key)));
                 });
 
-                worksheet.addRow([]);
+                sheetRows.push([]);
             });
 
-            selectedColumns.forEach((column, index) => {
+            const columns = selectedColumns.map((column) => {
                 const headerLen = Math.max(6, String(column.label || '').length);
                 const maxValueLen = operationRowsForPrint.reduce((maxLen, row) => {
                     const value = String(getPrintCellValue(row, column.key));
                     return Math.max(maxLen, value.length);
                 }, headerLen);
-                worksheet.getColumn(index + 1).width = Math.min(60, Math.max(12, Math.ceil(maxValueLen * 1.2)));
+                return { wch: Math.min(60, Math.max(12, Math.ceil(maxValueLen * 1.2))) };
             });
 
-            const buffer = await workbook.xlsx.writeBuffer();
-            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = `operation-log-filter-${new Date().toISOString().slice(0, 10)}.xlsx`;
-            link.click();
-            URL.revokeObjectURL(link.href);
+            await exportSheetsToExcel({
+                fileName: `operation-log-filter-${new Date().toISOString().slice(0, 10)}.xlsx`,
+                sheets: [{
+                    name: 'سجل العمليات',
+                    rows: sheetRows,
+                    columns,
+                }],
+            });
 
             setPrintStatusMessage('تم تصدير ملف Excel بتنسيق متقدم للتقرير.');
         } catch {
@@ -1898,7 +1813,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
 
     // --- SMART IMPORT/EXPORT LOGIC ---
 
-    const handleSmartExport = () => {
+    const handleSmartExport = async () => {
         if (!canExport) {
             toast.error('لا تملك صلاحية تصدير العمليات من النظام.');
             return;
@@ -1934,14 +1849,16 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
             };
         });
 
-        const ws = XLSX.utils.json_to_sheet(data);
-        const wscols = Object.keys(data[0] || {}).map(k => ({ wch: k.length + 10 }));
-        ws['!cols'] = wscols;
-
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "حركة المخزون");
-        XLSX.writeFile(wb, `Stock_Movement_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
-        onExport?.(data.length);
+        try {
+            await exportRowsToExcel({
+                fileName: `Stock_Movement_Export_${new Date().toISOString().split('T')[0]}.xlsx`,
+                sheetName: 'حركة المخزون',
+                rows: data,
+            });
+            onExport?.(data.length);
+        } catch {
+            toast.error('تعذر تصدير حركة المخزون إلى Excel. حاول مرة أخرى.');
+        }
     };
 
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {

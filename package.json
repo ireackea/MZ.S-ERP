@@ -8,13 +8,14 @@
     "backend"
   ],
   "scripts": {
-    "dev": "npm run dev:frontend",
+    "dev": "npm run frontend:dev",
     "postinstall": "npm run prisma:generate",
     "check:encoding": "node scripts/check-text-encoding.mjs",
     "validate:phase1": "node scripts/validation-phase1.mjs",
     "validate:phase3": "node scripts/validation-phase3.mjs",
     "validate:all": "npm run validate:phase1 && npm run validate:phase3",
     "build": "npm run frontend:build",
+    "build:full": "npm run frontend:build && npm run backend:build",
     "build:prod": "npm run frontend:build && npm run backend:build",
     "preview": "npm run frontend:preview",
     "frontend:dev": "npm run dev --workspace=frontend",
@@ -37,6 +38,7 @@
     "db:sync": "npm run prisma:generate && npm run prisma:migrate:dev"
   },
   "devDependencies": {
+    "@rollup/rollup-win32-x64-msvc": "^4.59.0",
     "concurrently": "^9.2.1"
   }
 }

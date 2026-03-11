@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 5 - Final Production Readiness - 2026-03-05
 // ENTERPRISE FIX: Phase 4 - Production Polish & Final Integration - 2026-03-05
 // ENTERPRISE FIX: Phase 0 - Stabilization & UTF-8 Lockdown - 2026-03-05
 import { NestFactory } from '@nestjs/core';
@@ -60,6 +61,10 @@ function extractIp(req: Request): string {
   return req.ip || 'unknown';
 }
 
+function normalizeRequestPath(req: Request): string {
+  return req.path || req.url.split('?')[0] || '/';
+}
+
 async function bootstrap() {
   const envPath = loadBackendEnv();
   const app = await NestFactory.create(AppModule);
@@ -67,19 +72,6 @@ async function bootstrap() {
 
   // ENTERPRISE FIX: Phase 0 - Fatal Errors Fixed - 2026-03-02
   app.use(cookieParser());
-  app.enableCors({
-    origin: (origin, callback) => {
-      const allowed = getAllowedOrigins();
-      if (!origin || allowed.includes(origin) || isTrustedLocalOrigin(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
-    credentials: true,
-    allowedHeaders: ['Authorization', 'Content-Type'],
-  });
-
   const rateLimitWindowMs = 60 * 1000;
   const rateLimitPerMinute = Number(process.env.RATE_LIMIT_PER_MINUTE || 100);
   const rateBuckets = new Map<string, { count: number; resetAt: number }>();
@@ -121,7 +113,7 @@ async function bootstrap() {
       const logPayload = {
         event: 'http_request',
         method: req.method,
-        path: req.originalUrl || req.url,
+        path: normalizeRequestPath(req),
         statusCode: res.statusCode,
         durationMs: Date.now() - start,
         ip: extractIp(req),
@@ -164,6 +156,7 @@ async function bootstrap() {
       return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
+    allowedHeaders: ['Authorization', 'Content-Type'],
   });
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
