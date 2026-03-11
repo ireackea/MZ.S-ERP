@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 6 - Final Polish & Production Handover - 2026-03-05
 // ENTERPRISE FIX: Phase 5 - Final Production Readiness - 2026-03-05
 // ENTERPRISE FIX: Phase 4 - Production Polish & Final Integration - 2026-03-05
 // ENTERPRISE FIX: Phase 3 - Full Legacy Removal & Complete Single Source of Truth - 2026-03-05
@@ -452,6 +453,8 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
     const [printTemplateName, setPrintTemplateName] = useState('');
     const [selectedTemplateId, setSelectedTemplateId] = useState('');
     const [isPrintingPdf, setIsPrintingPdf] = useState(false);
+    const [isQuickExportingExcel, setIsQuickExportingExcel] = useState(false);
+    const [isSmartExportingExcel, setIsSmartExportingExcel] = useState(false);
     const [printStatusMessage, setPrintStatusMessage] = useState('');
     const printSheetRef = useRef<HTMLDivElement | null>(null);
     const printPageRef = useRef<HTMLDivElement | null>(printSheetRef.current);
@@ -583,6 +586,14 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
     const formatCurrencyLYD = (amount?: number) => {
         const value = Number(amount || 0);
         return `${value.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} د.ل`;
+    };
+
+    const resolveExportErrorMessage = (error: unknown, fallback: string) => {
+        if (typeof error === 'object' && error !== null) {
+            const candidate = (error as { response?: { data?: { message?: string } }; message?: string });
+            return candidate.response?.data?.message || candidate.message || fallback;
+        }
+        return fallback;
     };
 
     const getRuleById = (ruleId?: string) => unloadingRules.find(rule => rule.id === ruleId && rule.is_active);
@@ -1739,6 +1750,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
             return;
         }
 
+        setIsQuickExportingExcel(true);
         setPrintStatusMessage('جاري إنشاء ملف Excel وإعداد تنسيق التقرير...');
         try {
             const totalColumns = Math.max(1, selectedColumns.length);
@@ -1804,9 +1816,12 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
             });
 
             setPrintStatusMessage('تم تصدير ملف Excel بتنسيق متقدم للتقرير.');
-        } catch {
+            toast.success('تم تصدير ملف Excel للتقرير الحالي بنجاح.');
+        } catch (error) {
             setPrintStatusMessage('فشل تصدير ملف Excel.');
-            toast.error('حدث خطأ أثناء تصدير Excel. حاول مجدداً.');
+            toast.error(resolveExportErrorMessage(error, 'حدث خطأ أثناء تصدير Excel. حاول مجدداً.'));
+        } finally {
+            setIsQuickExportingExcel(false);
         }
     };
 
@@ -1816,6 +1831,10 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
     const handleSmartExport = async () => {
         if (!canExport) {
             toast.error('لا تملك صلاحية تصدير العمليات من النظام.');
+            return;
+        }
+        if (transactions.length === 0) {
+            toast.error('لا توجد عمليات متاحة للتصدير إلى Excel.');
             return;
         }
         // Advanced Export: Includes calculated fields and readable names
@@ -1849,6 +1868,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
             };
         });
 
+        setIsSmartExportingExcel(true);
         try {
             await exportRowsToExcel({
                 fileName: `Stock_Movement_Export_${new Date().toISOString().split('T')[0]}.xlsx`,
@@ -1856,8 +1876,11 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                 rows: data,
             });
             onExport?.(data.length);
-        } catch {
-            toast.error('تعذر تصدير حركة المخزون إلى Excel. حاول مرة أخرى.');
+            toast.success('تم تصدير حركة المخزون إلى Excel بنجاح.');
+        } catch (error) {
+            toast.error(resolveExportErrorMessage(error, 'تعذر تصدير حركة المخزون إلى Excel. حاول مرة أخرى.'));
+        } finally {
+            setIsSmartExportingExcel(false);
         }
     };
 
@@ -2661,8 +2684,8 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                 </div>
                 <div className="flex gap-3">
                     <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
-                        <button onClick={handleSmartExport} disabled={!canExport} className="flex items-center gap-2 px-4 py-2 bg-white text-slate-700 rounded-lg hover:text-emerald-600 hover:shadow-sm transition font-medium text-xs disabled:opacity-50 disabled:cursor-not-allowed" title={canExport ? 'تصدير Excel' : 'لا تملك صلاحية التصدير'}>
-                            <FileUp size={16} /> تصدير Excel
+                        <button onClick={handleSmartExport} disabled={!canExport || isSmartExportingExcel || transactions.length === 0} className="flex items-center gap-2 px-4 py-2 bg-white text-slate-700 rounded-lg hover:text-emerald-600 hover:shadow-sm transition font-medium text-xs disabled:opacity-50 disabled:cursor-not-allowed" title={canExport ? 'تصدير Excel' : 'لا تملك صلاحية التصدير'}>
+                            {isSmartExportingExcel ? <Loader2 size={16} className="animate-spin" /> : <FileUp size={16} />} تصدير Excel
                         </button>
                         <div className="w-[1px] h-6 bg-slate-300"></div>
                         <button onClick={() => { if (canImport) setIsImportOpen(true); else toast.error('لا تملك صلاحية استيراد الملفات.'); }} disabled={!canImport} className="flex items-center gap-2 px-4 py-2 bg-white text-slate-700 rounded-lg hover:text-blue-600 hover:shadow-sm transition font-medium text-xs disabled:opacity-50 disabled:cursor-not-allowed" title={canImport ? 'استيراد إكسل' : 'لا تملك صلاحية استيراد الملفات'}>
@@ -2678,10 +2701,11 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                         </button>
                         <button
                             onClick={quickPrintCurrentFilter}
-                            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium text-xs"
+                            disabled={isQuickExportingExcel || operationRowsForPrint.length === 0}
+                            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                             title="تصدير Excel بناءً على الفلاتر الحالية"
                         >
-                            <FileText size={16} /> تصدير Excel
+                            {isQuickExportingExcel ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />} تصدير Excel
                         </button>
                     </div>
                     <div className="bg-emerald-50 text-emerald-700 px-4 py-2 rounded-xl text-sm font-bold border border-emerald-100 flex items-center">
@@ -3772,7 +3796,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
 
                                 <div className="px-4 py-3 bg-white border-t border-slate-200 flex items-center justify-end gap-2">
                                     <button onClick={() => setShowPrintStudio(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50">إغلاق</button>
-                                    <button onClick={quickPrintCurrentFilter} className="px-4 py-2 border border-indigo-300 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold hover:bg-indigo-100">تصدير Excel</button>
+                                    <button onClick={quickPrintCurrentFilter} disabled={isQuickExportingExcel || operationRowsForPrint.length === 0} className="px-4 py-2 border border-indigo-300 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold hover:bg-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed">{isQuickExportingExcel ? 'جاري التصدير...' : 'تصدير Excel'}</button>
                                     <button onClick={buildPdfFromPreview} disabled={isPrintingPdf} className="px-5 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 disabled:opacity-50">
                                         {isPrintingPdf ? 'جاري التصدير...' : 'طباعة/تصدير للملف الكتروني (PDF)'}
                                     </button>

@@ -1,7 +1,10 @@
+// ENTERPRISE FIX: Phase 6 - Final Polish & Production Handover - 2026-03-05
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
+const ENTERPRISE_DEFAULT_PASSWORD = 'SecurePassword2026!';
+const LEGACY_WEAK_ADMIN_PASSWORDS = new Set(['admin123', 'admin123!', 'admin', 'password', '12345678', 'admin@123']);
 
 const defaultRoles = [
   { name: 'SuperAdmin', description: 'Full access to all system modules', permissions: ['*'], color: '#ef4444' },
@@ -40,6 +43,31 @@ const defaultRoles = [
   },
 ] as const;
 
+function validatePasswordPolicy(password: string) {
+  const candidate = String(password || '');
+  const hasMinLength = candidate.length >= 8;
+  const hasUpper = /[A-Z]/.test(candidate);
+  const hasLower = /[a-z]/.test(candidate);
+  const hasDigit = /\d/.test(candidate);
+  const hasSpecial = /[^A-Za-z0-9]/.test(candidate);
+
+  return hasMinLength && hasUpper && hasLower && hasDigit && hasSpecial;
+}
+
+function resolveDefaultPassword() {
+  const rawPassword = String(process.env.ADMIN_PASSWORD || '').trim();
+  if (!rawPassword) {
+    return ENTERPRISE_DEFAULT_PASSWORD;
+  }
+
+  if (LEGACY_WEAK_ADMIN_PASSWORDS.has(rawPassword.toLowerCase()) || !validatePasswordPolicy(rawPassword)) {
+    console.warn('[Seed] Ignoring weak ADMIN_PASSWORD value and enforcing enterprise default password.');
+    return ENTERPRISE_DEFAULT_PASSWORD;
+  }
+
+  return rawPassword;
+}
+
 async function main() {
   for (const role of defaultRoles) {
     await prisma.role.upsert({
@@ -61,7 +89,8 @@ async function main() {
   const superAdminRole = await prisma.role.findUniqueOrThrow({ where: { name: 'SuperAdmin' } });
   const managerRole = await prisma.role.findUniqueOrThrow({ where: { name: 'Manager' } });
   const viewerRole = await prisma.role.findUniqueOrThrow({ where: { name: 'Viewer' } });
-  const passwordHash = await bcrypt.hash(process.env.ADMIN_PASSWORD || 'SecurePassword2026!', 10);
+  const defaultPassword = resolveDefaultPassword();
+  const passwordHash = await bcrypt.hash(defaultPassword, 10);
 
   await prisma.user.upsert({
     where: { username: 'superadmin' },
@@ -132,7 +161,7 @@ async function main() {
     },
   });
 
-  console.log('Seeded default RBAC roles and users (superadmin, manager, viewer)');
+  console.log(`Seeded default RBAC roles and users (superadmin, manager, viewer) with password: ${defaultPassword}`);
 }
 
 main()

@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 6 - Final Polish & Production Handover - 2026-03-05
 // ENTERPRISE FIX: Phase 5 - Final Production Readiness - 2026-03-05
 // ENTERPRISE FIX: Phase 4 - Production Polish & Final Integration - 2026-03-05
 // ENTERPRISE FIX: Arabic Encoding Restoration - Full Components Folder - 2026-03-04
@@ -87,6 +88,14 @@ const numberFormatter = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 3,
   maximumFractionDigits: 3,
 });
+
+const resolveExportErrorMessage = (error: unknown, fallback: string) => {
+  if (typeof error === 'object' && error !== null) {
+    const candidate = (error as { response?: { data?: { message?: string } }; message?: string });
+    return candidate.response?.data?.message || candidate.message || fallback;
+  }
+  return fallback;
+};
 
 const Reports: React.FC = () => {
   const exportRowsToExcel = useInventoryStore((state) => state.exportRowsToExcel);
@@ -223,8 +232,8 @@ const Reports: React.FC = () => {
         rows: normalizedRows,
       });
       toast.success('7�8& 7�7�7�8y7� 7�87�87�8y7� 7�8 7�7�7�');
-    } catch {
-      toast.error('تعذر تصدير ملف Excel. حاول مرة أخرى.');
+    } catch (error) {
+      toast.error(resolveExportErrorMessage(error, 'تعذر تصدير ملف Excel. حاول مرة أخرى.'));
     } finally {
       setIsExportingExcel(false);
     }
@@ -278,8 +287,8 @@ const Reports: React.FC = () => {
         fileName: `${payload.filename}.pdf`,
       });
       toast.success('7�8& 7�8 7�7�7 8&88~ PDF 7�8 7�7�7�');
-    } catch {
-      toast.error('تعذر تصدير ملف PDF. حاول مرة أخرى.');
+    } catch (error) {
+      toast.error(resolveExportErrorMessage(error, 'تعذر تصدير ملف PDF. حاول مرة أخرى.'));
     } finally {
       setIsExportingPdf(false);
     }

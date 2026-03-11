@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 6 - Final Polish & Production Handover - 2026-03-05
 // ENTERPRISE FIX: Phase 5 - Final Production Readiness - 2026-03-05
 // ENTERPRISE FIX: Phase 4 - Production Polish & Final Integration - 2026-03-05
 // ENTERPRISE FIX: Arabic Encoding Restoration - Full Components Folder - 2026-03-04
@@ -9,7 +10,7 @@ import { Item, Transaction } from '../types';
 import { generateStockCard, StockCardResult } from '../services/reportingService';
 import {
   FileText, Calendar, Filter, Printer, Search,
-  ArrowRight, CheckSquare, Square, X, Download
+  ArrowRight, CheckSquare, Square, X, Download, Loader2
 } from 'lucide-react';
 import { toast } from '@services/toastService';
 import { useInventoryStore } from '../store/useInventoryStore';
@@ -49,7 +50,17 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
   // UI State
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
   const reportContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const resolveExportErrorMessage = (error: unknown, fallback: string) => {
+    if (typeof error === 'object' && error !== null) {
+      const candidate = (error as { response?: { data?: { message?: string } }; message?: string });
+      return candidate.response?.data?.message || candidate.message || fallback;
+    }
+    return fallback;
+  };
 
   const handleGenerate = () => {
     if (selectedItemIds.size === 0) {
@@ -75,10 +86,14 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
       toast.error('لا تملك صلاحية التصدير لهذه الصفحة.');
       return;
     }
-    if (reportData.length === 0) return;
+    if (reportData.length === 0) {
+      toast.error('قم بإنشاء تقرير بطاقة الصنف أولاً قبل التصدير إلى Excel.');
+      return;
+    }
 
     const companyLabel = companyName || 'اسم الشركة';
 
+    setIsExportingExcel(true);
     try {
       await exportSheetsToExcel({
         fileName: `StockCard_Detailed_${startDate}_${endDate}.xlsx`,
@@ -121,9 +136,12 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
           };
         }),
       });
-    } catch {
-      toast.error('تعذر تصدير بطاقة الصنف إلى Excel. حاول مرة أخرى.');
+      toast.success('تم تصدير بطاقة الصنف إلى Excel بنجاح.');
+    } catch (error) {
+      toast.error(resolveExportErrorMessage(error, 'تعذر تصدير بطاقة الصنف إلى Excel. حاول مرة أخرى.'));
       return;
+    } finally {
+      setIsExportingExcel(false);
     }
 
     const exportedRows = reportData.reduce((total, card) => total + card.rows.length, 0);
@@ -135,8 +153,12 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
       toast.error('لا تملك صلاحية التصدير لهذه الصفحة.');
       return;
     }
-    if (!reportContainerRef.current || reportData.length === 0) return;
+    if (!reportContainerRef.current || reportData.length === 0) {
+      toast.error('قم بإنشاء تقرير بطاقة الصنف أولاً قبل التصدير إلى PDF.');
+      return;
+    }
 
+    setIsExportingPdf(true);
     try {
       await exportElementToPdf({
         element: reportContainerRef.current,
@@ -147,8 +169,11 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
           orientation: 'landscape',
         },
       });
-    } catch {
-      toast.error('تعذر تصدير بطاقة الصنف إلى PDF. حاول مرة أخرى.');
+      toast.success('تم تصدير بطاقة الصنف إلى PDF بنجاح.');
+    } catch (error) {
+      toast.error(resolveExportErrorMessage(error, 'تعذر تصدير بطاقة الصنف إلى PDF. حاول مرة أخرى.'));
+    } finally {
+      setIsExportingPdf(false);
     }
   };
 
@@ -259,11 +284,11 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
             <p className="text-slate-500 text-sm mt-1">تقرير تفصيلي يعرض الوارد، المنصرف، الإنتاج، والهالك لكل صنف.</p>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => void handleExportExcel()} disabled={!canExport} className="flex items-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed" title={canExport ? 'تصدير Excel' : 'لا تملك صلاحية التصدير لهذه الصفحة'}>
-              <Download size={16} /> Excel
+            <button onClick={() => void handleExportExcel()} disabled={!canExport || isExportingExcel || reportData.length === 0} className="flex items-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed" title={canExport ? 'تصدير Excel' : 'لا تملك صلاحية التصدير لهذه الصفحة'}>
+              {isExportingExcel ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />} Excel
             </button>
-            <button onClick={() => void handleExportPdf()} disabled={!canExport} className="flex items-center gap-2 px-4 py-2 border border-red-200 text-red-700 rounded-lg hover:bg-red-50 transition text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed" title={canExport ? 'تصدير PDF' : 'لا تملك صلاحية التصدير لهذه الصفحة'}>
-              <FileText size={16} /> PDF
+            <button onClick={() => void handleExportPdf()} disabled={!canExport || isExportingPdf || reportData.length === 0} className="flex items-center gap-2 px-4 py-2 border border-red-200 text-red-700 rounded-lg hover:bg-red-50 transition text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed" title={canExport ? 'تصدير PDF' : 'لا تملك صلاحية التصدير لهذه الصفحة'}>
+              {isExportingPdf ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />} PDF
             </button>
             <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 transition text-sm font-bold shadow-lg">
               <Printer size={16} /> طباعة التقرير
