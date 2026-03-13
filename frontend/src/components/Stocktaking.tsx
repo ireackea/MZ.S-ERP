@@ -71,7 +71,7 @@ interface StocktakingPrintConfig {
   mergeColumns: boolean;
   mergeStrength: number;
   fontSize: number;
-  printSignatureBoxHeight?: number; // 7778~77 8&77777 7878788y7 7787878
+  printSignatureBoxHeight?: number; // Optional signature box height in px
   tableFontSize: number;
   showBorders: boolean;
   zebraStriping: boolean;
