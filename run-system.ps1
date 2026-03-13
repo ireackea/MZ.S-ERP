@@ -1,6 +1,6 @@
 # =============================================================================
 # ENTERPRISE MASTER RUNNER: FeedFactory Pro Full-Stack Execution System
-# Version: 2026.03 - Phase 2 Ready (Multi-User & Cloud Sync)
+# Version: 2026.03 - Phase 3 Ready (Multi-User, Cloud Sync & Codespaces)
 # Author: Full-Stack Enterprise Architect (Fellow Grade)
 # =============================================================================
 
@@ -11,7 +11,20 @@ $ErrorActionPreference = "Stop"
 $PROJECT_ROOT = Split-Path -Parent $MyInvocation.MyCommand.Path
 $BACKEND_DIR = Join-Path $PROJECT_ROOT "backend"
 $FRONTEND_DIR = $PROJECT_ROOT
-$PRISMA_DIR = Join-Path $PROJECT_ROOT "prisma"
+$PRISMA_DIR = Join-Path $PROJECT_ROOT "backend\prisma"
+$BACKEND_PORT = if ($env:BACKEND_PORT) { $env:BACKEND_PORT } else { "3001" }
+$FRONTEND_PORT = if ($env:FRONTEND_PORT) { $env:FRONTEND_PORT } else { "5173" }
+
+# Detect GitHub Codespaces environment
+$IS_CODESPACE = [bool]$env:CODESPACE_NAME
+if ($IS_CODESPACE) {
+    $CS_DOMAIN = if ($env:GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN) { $env:GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN } else { "app.github.dev" }
+    $BACKEND_URL  = "https://$($env:CODESPACE_NAME)-${BACKEND_PORT}.${CS_DOMAIN}"
+    $FRONTEND_URL = "https://$($env:CODESPACE_NAME)-${FRONTEND_PORT}.${CS_DOMAIN}"
+} else {
+    $BACKEND_URL  = "http://localhost:${BACKEND_PORT}"
+    $FRONTEND_URL = "http://localhost:${FRONTEND_PORT}"
+}
 
 # =============================================================================
 # Helper Functions
@@ -80,6 +93,10 @@ function Invoke-PreflightChecks {
     Test-Directory (Join-Path $FRONTEND_DIR "src")
     Test-Directory $PRISMA_DIR
     Log-Success "All required directories found"
+
+    if ($IS_CODESPACE) {
+        Log-Info "Detected GitHub Codespaces environment: $($env:CODESPACE_NAME)"
+    }
     
     # Check if node_modules exist
     if (-not (Test-Path (Join-Path $PROJECT_ROOT "node_modules"))) {
@@ -111,8 +128,9 @@ function Invoke-PreflightChecks {
 function Invoke-DatabaseSync {
     Log-Step "Step 1: Syncing Database Schema (Prisma)..."
     
-    # Generate Prisma Client
+    # Generate Prisma Client (must run from backend directory)
     Log-Info "Generating Prisma Client..."
+    Set-Location $BACKEND_DIR
     npx prisma generate
     
     # Run migrations (development mode)
@@ -126,6 +144,7 @@ function Invoke-DatabaseSync {
         npx prisma db seed
     }
     
+    Set-Location $PROJECT_ROOT
     Log-Success "Database synchronization completed"
 }
 
@@ -181,7 +200,7 @@ function Invoke-HealthCheck {
     
     while ($ATTEMPT -lt $MAX_ATTEMPTS) {
         try {
-            $response = Invoke-WebRequest -Uri "http://localhost:3000/api/health" -UseBasicParsing -ErrorAction SilentlyContinue
+            $response = Invoke-WebRequest -Uri "${BACKEND_URL}/api/health" -UseBasicParsing -ErrorAction SilentlyContinue
             if ($response.StatusCode -eq 200) {
                 Log-Success "Backend health check passed: $($response.Content)"
                 return $true
@@ -206,9 +225,12 @@ function Invoke-SystemLaunch {
     Write-Host ""
     Write-Host "=============================================================================" -ForegroundColor Cyan
     Write-Host "  FeedFactory Pro Enterprise System" -ForegroundColor Cyan
-    Write-Host "  - Backend:  http://localhost:3000" -ForegroundColor White
-    Write-Host "  - Frontend: http://localhost:5173" -ForegroundColor White
-    Write-Host "  - Health:   http://localhost:3000/api/health" -ForegroundColor White
+    Write-Host "  - Backend:  ${BACKEND_URL}" -ForegroundColor White
+    Write-Host "  - Frontend: ${FRONTEND_URL}" -ForegroundColor White
+    Write-Host "  - Health:   ${BACKEND_URL}/api/health" -ForegroundColor White
+    if ($IS_CODESPACE) {
+        Write-Host "  - Environment: GitHub Codespaces ($($env:CODESPACE_NAME))" -ForegroundColor Yellow
+    }
     Write-Host "=============================================================================" -ForegroundColor Cyan
     Write-Host ""
     
@@ -235,7 +257,7 @@ function Main {
     Write-Host ""
     Write-Host "=============================================================================" -ForegroundColor Cyan
     Write-Host "  🏭 FeedFactory Pro Enterprise System - Master Runner" -ForegroundColor Cyan
-    Write-Host "  Version: 2026.03 | Phase 2 Ready (Multi-User & Cloud Sync)" -ForegroundColor Cyan
+    Write-Host "  Version: 2026.03 | Phase 3 Ready (Multi-User, Cloud Sync & Codespaces)" -ForegroundColor Cyan
     Write-Host "=============================================================================" -ForegroundColor Cyan
     Write-Host ""
     
@@ -266,15 +288,22 @@ function Main {
             Invoke-CacheClear
             Log-Success "Cache cleaned successfully"
         }
+        "codespace" {
+            Log-Info "Running in GitHub Codespaces mode (no-db, health-check after launch)..."
+            Invoke-PreflightChecks
+            Invoke-CacheClear
+            Invoke-SystemLaunch
+        }
         "help" {
             Write-Host "Usage: .\run-system.ps1 [command]"
             Write-Host ""
             Write-Host "Commands:"
-            Write-Host "  full     - Full system startup (default)"
-            Write-Host "  no-db    - Start without database sync"
-            Write-Host "  health   - Run health check only"
-            Write-Host "  clean    - Clean cache only"
-            Write-Host "  help     - Show this help message"
+            Write-Host "  full       - Full system startup (default)"
+            Write-Host "  no-db      - Start without database sync"
+            Write-Host "  health     - Run health check only"
+            Write-Host "  clean      - Clean cache only"
+            Write-Host "  codespace  - Optimized startup for GitHub Codespaces"
+            Write-Host "  help       - Show this help message"
         }
         default {
             Log-Error "Unknown command: $command"
