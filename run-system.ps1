@@ -174,6 +174,7 @@ function Invoke-CacheClear {
 function Invoke-HealthCheck {
     Log-Step "Running health check..."
     
+    $BackendPort = if ($env:BACKEND_PORT) { $env:BACKEND_PORT } else { "3001" }
     # Wait for backend to start
     Log-Info "Waiting for backend to be ready (max 30 seconds)..."
     $MAX_ATTEMPTS = 30
@@ -181,7 +182,7 @@ function Invoke-HealthCheck {
     
     while ($ATTEMPT -lt $MAX_ATTEMPTS) {
         try {
-            $response = Invoke-WebRequest -Uri "http://localhost:3000/api/health" -UseBasicParsing -ErrorAction SilentlyContinue
+            $response = Invoke-WebRequest -Uri "http://localhost:${BackendPort}/api/health" -UseBasicParsing -ErrorAction SilentlyContinue
             if ($response.StatusCode -eq 200) {
                 Log-Success "Backend health check passed: $($response.Content)"
                 return $true
@@ -203,12 +204,13 @@ function Invoke-HealthCheck {
 
 function Invoke-SystemLaunch {
     Log-Step "Step 3: Launching Backend & Frontend in Watch Mode..."
+    $BackendPort = if ($env:BACKEND_PORT) { $env:BACKEND_PORT } else { "3001" }
     Write-Host ""
     Write-Host "=============================================================================" -ForegroundColor Cyan
     Write-Host "  FeedFactory Pro Enterprise System" -ForegroundColor Cyan
-    Write-Host "  - Backend:  http://localhost:3000" -ForegroundColor White
+    Write-Host "  - Backend:  http://localhost:${BackendPort}" -ForegroundColor White
     Write-Host "  - Frontend: http://localhost:5173" -ForegroundColor White
-    Write-Host "  - Health:   http://localhost:3000/api/health" -ForegroundColor White
+    Write-Host "  - Health:   http://localhost:${BackendPort}/api/health" -ForegroundColor White
     Write-Host "=============================================================================" -ForegroundColor Cyan
     Write-Host ""
     
@@ -244,6 +246,15 @@ function Main {
     if (-not $command) { $command = "full" }
     
     switch ($command) {
+        "codespaces" {
+            Log-Info "Running system startup for GitHub Codespaces..."
+            if (-not $env:BACKEND_PORT) { $env:BACKEND_PORT = "3001" }
+            Log-Info "Backend port: $($env:BACKEND_PORT) | Frontend port: 5173"
+            Log-Info "Ensure ports $($env:BACKEND_PORT) and 5173 are forwarded in your Codespace."
+            Invoke-PreflightChecks
+            Invoke-CacheClear
+            Invoke-SystemLaunch
+        }
         "full" {
             Log-Info "Running FULL system startup..."
             Invoke-PreflightChecks
@@ -270,8 +281,9 @@ function Main {
             Write-Host "Usage: .\run-system.ps1 [command]"
             Write-Host ""
             Write-Host "Commands:"
-            Write-Host "  full     - Full system startup (default)"
-            Write-Host "  no-db    - Start without database sync"
+            Write-Host "  full       - Full system startup (default)"
+            Write-Host "  codespaces - Start in GitHub Codespaces mode (no DB sync)"
+            Write-Host "  no-db      - Start without database sync"
             Write-Host "  health   - Run health check only"
             Write-Host "  clean    - Clean cache only"
             Write-Host "  help     - Show this help message"
