@@ -1,4 +1,3 @@
-// @ts-nocheck
 // ENTERPRISE FIX: Phase 1.6 - Final Cleanup Pass - 2026-03-02
 // تحسين Background Sync - كود كامل ومستقر مع Exponential Backoff و 409 Conflict Handling
 
@@ -137,7 +136,7 @@ async function processMutationQueue(attempt = 1) {
       request.onerror = () => reject(request.error);
       request.onsuccess = () => resolve(request.result);
       request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result;
+        const db = /** @type {IDBOpenDBRequest} */ (event.target).result;
         if (!db.objectStoreNames.contains('mutationQueue')) {
           db.createObjectStore('mutationQueue', { keyPath: 'id' });
         }

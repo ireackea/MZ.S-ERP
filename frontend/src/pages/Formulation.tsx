@@ -52,8 +52,8 @@ const mapItemDtoToItem = (row: ItemDto): Item => ({
   barcode: row.barcode || undefined,
   name: row.name,
   englishName: row.description || undefined,
-  category: row.category || '7"7"7"7"7"7"7"#"77"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"7"7"7"7"#97"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#97"7"7"7"7"7"7"7"7"7"7"',
-  unit: row.unit || '7"7"7"7"7"7"7"#"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"',
+  category: row.category || '',
+  unit: row.unit || '',
   minLimit: toNumber(row.minLimit, 0),
   maxLimit: toNumber(row.maxLimit, 1000),
   orderLimit: row.orderLimit == null ? undefined : toNumber(row.orderLimit, 0),
@@ -333,7 +333,7 @@ const FormulationPage: React.FC = () => {
       return {
         id: ingredient.id,
         name: item?.name || ingredient.itemId,
-        unit: item?.unit || '7"7"7"7"7"7"7"#"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"',
+        unit: item?.unit || '',
         percentage: ingredient.percentage,
         requiredKg,
         available,
@@ -354,7 +354,7 @@ const FormulationPage: React.FC = () => {
 
   const onSaveFormula = async (draft: FormulationDraft) => {
     const saved = await saveFormula(editing ? { ...draft, id: editing.id } : draft);
-    toast.success(editing ? '7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#97"7"7" 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#97"7"#"77"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#"#"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#97"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7".' : '7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#97"7"7" 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#97"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"# 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#97"7"#"77"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#"#"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#97"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7".');
+    toast.success(editing ? '' : '');
     setFormOpen(false);
     setEditing(null);
     setFocusFormulaId(String(saved.id));
@@ -362,7 +362,7 @@ const FormulationPage: React.FC = () => {
 
   const onDeleteSelected = async () => {
     if (!canDelete) {
-      toast.error('7"7"7"7"7"7"7"#97"7"#"77"7"7"7"7"7"7"7" 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#97"7"7"7"7"7"7"7"7"7"#97"7"#"77"7"7"7"7"7"7"#"#" 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#97"7"#"77"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#97"7"#"77"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#"#"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7".');
+      toast.error('');
       return;
     }
     const ids = Array.from(selectedIds);
@@ -375,7 +375,7 @@ const FormulationPage: React.FC = () => {
       setSelectedIds(new Set());
       toast.success(`7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#97"7"7" 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7" ${deleted} 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#"#"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7".`);
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || error?.message || '7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#97"7"#"7 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#97"7"#"77"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#"#"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7".');
+      toast.error(error?.response?.data?.message || error?.message || '');
     }
   };
 
