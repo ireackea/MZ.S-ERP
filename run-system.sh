@@ -2,7 +2,7 @@
 
 # =============================================================================
 # ENTERPRISE MASTER RUNNER: FeedFactory Pro Full-Stack Execution System
-# Version: 2026.03 - Phase 2 Ready (Multi-User & Cloud Sync)
+# Version: 2026.03 - Phase 3 Ready (Multi-User, Cloud Sync & Codespaces)
 # Author: Full-Stack Enterprise Architect (Fellow Grade)
 # =============================================================================
 
@@ -20,7 +20,20 @@ NC='\033[0m' # No Color
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$PROJECT_ROOT/backend"
 FRONTEND_DIR="$PROJECT_ROOT"
-PRISMA_DIR="$PROJECT_ROOT/prisma"
+PRISMA_DIR="$PROJECT_ROOT/backend/prisma"
+BACKEND_PORT="${BACKEND_PORT:-3001}"
+FRONTEND_PORT="${FRONTEND_PORT:-5173}"
+
+# Detect GitHub Codespaces environment
+if [ -n "$CODESPACE_NAME" ]; then
+    BACKEND_URL="https://${CODESPACE_NAME}-${BACKEND_PORT}.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-app.github.dev}"
+    FRONTEND_URL="https://${CODESPACE_NAME}-${FRONTEND_PORT}.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-app.github.dev}"
+    IS_CODESPACE=true
+else
+    BACKEND_URL="http://localhost:${BACKEND_PORT}"
+    FRONTEND_URL="http://localhost:${FRONTEND_PORT}"
+    IS_CODESPACE=false
+fi
 
 # =============================================================================
 # Helper Functions
@@ -83,6 +96,10 @@ preflight_checks() {
     check_directory "$PRISMA_DIR"
     log_success "All required directories found"
     
+    if [ "$IS_CODESPACE" = true ]; then
+        log_info "Detected GitHub Codespaces environment: $CODESPACE_NAME"
+    fi
+    
     # Check if node_modules exist
     if [ ! -d "$PROJECT_ROOT/node_modules" ]; then
         log_warning "Frontend dependencies not installed. Running npm install..."
@@ -111,9 +128,9 @@ preflight_checks() {
 sync_database() {
     log_step "Step 1: Syncing Database Schema (Prisma)..."
     
-    # Generate Prisma Client
+    # Generate Prisma Client (must run from backend directory)
     log_info "Generating Prisma Client..."
-    npx prisma generate
+    cd "$BACKEND_DIR" && npx prisma generate
     
     # Run migrations (development mode)
     log_info "Running database migrations..."
@@ -125,6 +142,7 @@ sync_database() {
         npx prisma db seed
     fi
     
+    cd "$PROJECT_ROOT"
     log_success "Database synchronization completed"
 }
 
@@ -175,8 +193,8 @@ run_health_check() {
     ATTEMPT=0
     
     while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-        if curl -s http://localhost:3000/api/health &> /dev/null; then
-            HEALTH_RESPONSE=$(curl -s http://localhost:3000/api/health)
+        if curl -s "${BACKEND_URL}/api/health" &> /dev/null; then
+            HEALTH_RESPONSE=$(curl -s "${BACKEND_URL}/api/health")
             log_success "Backend health check passed: $HEALTH_RESPONSE"
             return 0
         fi
@@ -197,9 +215,12 @@ launch_system() {
     echo ""
     echo "============================================================================="
     echo "  FeedFactory Pro Enterprise System"
-    echo "  - Backend:  http://localhost:3000"
-    echo "  - Frontend: http://localhost:5173"
-    echo "  - Health:   http://localhost:3000/api/health"
+    echo "  - Backend:  ${BACKEND_URL}"
+    echo "  - Frontend: ${FRONTEND_URL}"
+    echo "  - Health:   ${BACKEND_URL}/api/health"
+    if [ "$IS_CODESPACE" = true ]; then
+        echo "  - Environment: GitHub Codespaces (${CODESPACE_NAME})"
+    fi
     echo "============================================================================="
     echo ""
     
@@ -224,7 +245,7 @@ main() {
     echo ""
     echo "============================================================================="
     echo "  🏭 FeedFactory Pro Enterprise System - Master Runner"
-    echo "  Version: 2026.03 | Phase 2 Ready (Multi-User & Cloud Sync)"
+    echo "  Version: 2026.03 | Phase 3 Ready (Multi-User, Cloud Sync & Codespaces)"
     echo "============================================================================="
     echo ""
     
@@ -252,15 +273,26 @@ main() {
             clear_cache
             log_success "Cache cleaned successfully"
             ;;
+        "codespace")
+            log_info "Running in GitHub Codespaces mode (no-db, health-check after launch)..."
+            preflight_checks
+            clear_cache
+            launch_system &
+            SYSTEM_PID=$!
+            sleep 10
+            run_health_check || log_warning "Health check failed — system may still be starting"
+            wait $SYSTEM_PID
+            ;;
         "help"|"-h"|"--help")
             echo "Usage: $0 [command]"
             echo ""
             echo "Commands:"
-            echo "  full     - Full system startup (default)"
-            echo "  no-db    - Start without database sync"
-            echo "  health   - Run health check only"
-            echo "  clean    - Clean cache only"
-            echo "  help     - Show this help message"
+            echo "  full       - Full system startup (default)"
+            echo "  no-db      - Start without database sync"
+            echo "  health     - Run health check only"
+            echo "  clean      - Clean cache only"
+            echo "  codespace  - Optimized startup for GitHub Codespaces"
+            echo "  help       - Show this help message"
             ;;
         *)
             log_error "Unknown command: $1"

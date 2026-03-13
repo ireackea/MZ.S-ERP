@@ -30,6 +30,7 @@
     "prisma:migrate:prod": "npm run prisma:migrate:prod --workspace=backend",
     "prisma:seed": "npm run prisma:seed --workspace=backend",
     "health-check": "node scripts/health-check.mjs",
+    "cloud-audit": "bash scripts/cloud-audit.sh",
     "deploy:prod": "bash scripts/deploy.sh",
     "test": "npm run test --workspace=frontend",
     "dev:full": "concurrently -n \"BACKEND,FRONTEND\" -c \"bgBlue,bgGreen\" \"npm run backend:dev\" \"npm run frontend:dev\"",
