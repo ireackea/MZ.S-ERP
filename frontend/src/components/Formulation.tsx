@@ -1,10 +1,10 @@
-// ENTERPRISE FIX: Phase 3 - Full Legacy Removal & Complete Single Source of Truth - 2026-03-05
-// ENTERPRISE FIX: Phase 2 - Full Single Source of Truth & Legacy Cleanup - 2026-03-05
-// ENTERPRISE FIX: Phase 1 - Single Source of Truth & Integration - 2026-03-05
+// ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
+// Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
 import React, { useEffect, useMemo, useState } from 'react';
 import { Beaker, Edit2, Plus, Search, Trash2 } from 'lucide-react';
 import { toast } from '@services/toastService';
 import FormulationForm from './FormulationForm';
+import type { FormulationDraft } from './FormulationForm';
 import type { Formula, Item } from '../types';
 import { useInventoryStore } from '../store/useInventoryStore';
 
@@ -68,9 +68,23 @@ const Formulation: React.FC<FormulationProps> = ({
     setIsModalOpen(true);
   };
 
-  const handleSave = async (formula: Formula) => {
+  const handleSave = async (draft: FormulationDraft) => {
     setIsSubmitting(true);
     try {
+      const formula: Formula = {
+        id: editingFormula?.id || draft.id || crypto.randomUUID(),
+        code: draft.code,
+        name: draft.name,
+        targetProductId: draft.targetItemId,
+        isActive: draft.isActive,
+        notes: draft.notes,
+        items: draft.ingredients.map((entry) => ({
+          itemId: entry.itemId,
+          percentage: entry.percentage,
+          weightPerTon: entry.weightPerTon,
+        })),
+      };
+
       if (editingFormula) {
         await onUpdateFormula(formula);
         toast.success('تم تحديث التركيبة بنجاح.');

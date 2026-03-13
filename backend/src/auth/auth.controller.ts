@@ -1,4 +1,5 @@
-// ENTERPRISE FIX: Phase 0 - Fatal Errors Fixed - Blueprint Compliant - 2026-03-02
+// ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
+// Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
 import { Body, Controller, Post, Req, Res } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Public } from './decorators/public.decorator';
@@ -22,12 +23,15 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.authService.login(dto.username, dto.password);
+    const result = await this.authService.login(dto.username, dto.password, {
+      ipAddress: String(req.ip || req.socket?.remoteAddress || '0.0.0.0'),
+      userAgent: String(req.headers['user-agent'] || 'unknown'),
+    });
     
     res.cookie('feed_factory_jwt', result.accessToken, {
       httpOnly: true,
       secure: this.shouldUseSecureCookie(req),
-      sameSite: 'lax',
+      sameSite: 'strict',
       path: '/',
       maxAge: 24 * 60 * 60 * 1000, 
     });
@@ -48,7 +52,7 @@ export class AuthController {
       path: '/',
       httpOnly: true,
       secure: this.shouldUseSecureCookie(req),
-      sameSite: 'lax',
+      sameSite: 'strict',
     });
     return { success: true, message: 'Logged out successfully' };
   }

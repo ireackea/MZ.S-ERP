@@ -1,8 +1,5 @@
-// ENTERPRISE FIX: Phase 3 - Full Legacy Removal & Complete Single Source of Truth - 2026-03-05
-// ENTERPRISE FIX: Phase 2 - Full Single Source of Truth & Legacy Cleanup - 2026-03-05
-// ENTERPRISE FIX: Phase 1 - Single Source of Truth & Integration - 2026-03-05
-// ENTERPRISE FIX: Arabic Encoding Restoration - Full Components Folder - 2026-03-04
-// Arabic text encoding verified and corrected
+// ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
+// Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Item, Transaction } from '../types';
@@ -20,7 +17,6 @@ import {
   Save,
   Upload,
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import {
   MonthlyAuditRow,
   computeMonthlyAuditRows,
@@ -142,6 +138,15 @@ const STOCKTAKING_PRINT_DEFAULT_CONFIG: StocktakingPrintConfig = {
 
 const STOCKTAKING_PRINT_CONFIG_STORAGE_KEY = 'stocktaking_print_config';
 const STOCKTAKING_PRINT_TEMPLATES_STORAGE_KEY = 'stocktaking_print_templates';
+
+let xlsxLoader: Promise<typeof import('xlsx')> | null = null;
+
+const loadXlsx = () => {
+  if (!xlsxLoader) {
+    xlsxLoader = import('xlsx');
+  }
+  return xlsxLoader;
+};
 
 const normalizeText = (value: string | undefined) => String(value || '').trim().toLowerCase();
 
@@ -391,7 +396,8 @@ const Stocktaking: React.FC<StocktakingProps> = ({
     operationsRows.forEach(({ item }) => saveSingleItem(item.id));
   };
 
-  const exportTemplate = () => {
+  const exportTemplate = async () => {
+    const XLSX = await loadXlsx();
     const rows = zoneItems.map((item) => ({
       item_code: item.code || '',
       item_name: item.name,
@@ -407,7 +413,8 @@ const Stocktaking: React.FC<StocktakingProps> = ({
     XLSX.writeFile(wb, `Stocktaking_Template_${monthKey}.xlsx`);
   };
 
-  const exportCurrentEntries = () => {
+  const exportCurrentEntries = async () => {
+    const XLSX = await loadXlsx();
     const rows = operationsRows.map(({ item, itemRecord, conflict }) => ({
       item_code: item.code || '',
       item_name: item.name,
@@ -427,6 +434,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
   const handleImportFile = async (file: File | null) => {
     if (!file || isClosed) return;
 
+    const XLSX = await loadXlsx();
     const buffer = await file.arrayBuffer();
     const workbook = XLSX.read(buffer, { type: 'array' });
     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];

@@ -1,5 +1,5 @@
-// ENTERPRISE FIX: Phase 5 - Final Production Readiness - 2026-03-05
-// ENTERPRISE FIX: Multi-Source JWT Guard with Secure Fallback - 2026-03-04
+// ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
+// Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
 import {
   CanActivate,
   ExecutionContext,
@@ -25,7 +25,7 @@ type JwtPayloadLike = {
   sid?: string;
 };
 
-type TokenSource = 'authorization' | 'cookie' | 'query';
+type TokenSource = 'cookie';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -50,48 +50,18 @@ export class JwtAuthGuard implements CanActivate {
     const http = context.switchToHttp();
     const request = http.getRequest<Request & { user?: unknown }>();
     const response = http.getResponse<Response>();
-    const headers = request?.headers || {};
-
-    const bearerToken = this.extractBearerToken(headers.authorization);
     const cookieToken = this.extractCookieToken(request);
-    const queryToken = this.extractQueryToken(request);
 
-    const tokenCandidates: Array<{ source: TokenSource; token: string }> = [];
-    if (bearerToken) tokenCandidates.push({ source: 'authorization', token: bearerToken });
-    if (cookieToken) tokenCandidates.push({ source: 'cookie', token: cookieToken });
-
-    const allowQueryInCurrentEnv = this.allowQueryToken();
-    if (queryToken && allowQueryInCurrentEnv) {
-      tokenCandidates.push({ source: 'query', token: queryToken });
-    } else if (queryToken && !allowQueryInCurrentEnv) {
-      await this.logGuardAttempt(request, {
-        status: 'failed',
-        source: 'query',
-        message: 'Query token rejected in production (DEV_MODE is not enabled)',
-      });
-    }
-
-    if (tokenCandidates.length === 0) {
+    if (!cookieToken) {
       throw new UnauthorizedException('Login required via secure cookie');
     }
 
-    for (const candidate of tokenCandidates) {
-      const authenticated = await this.tryAuthenticateCandidate(request, response, candidate.source, candidate.token);
-      if (authenticated) {
-        return true;
-      }
+    const authenticated = await this.tryAuthenticateCandidate(request, response, 'cookie', cookieToken);
+    if (authenticated) {
+      return true;
     }
 
     throw new UnauthorizedException('Invalid or expired token');
-  }
-
-  private extractBearerToken(authHeader?: string): string {
-    const header = String(authHeader || '');
-    if (!header.startsWith('Bearer ')) return '';
-    const token = header.slice(7).trim();
-    if (!token) return '';
-    if (!token.includes('.') || token.split('.').length !== 3) return '';
-    return token;
   }
 
   private extractCookieToken(request: Request): string {
@@ -107,23 +77,17 @@ export class JwtAuthGuard implements CanActivate {
     return token;
   }
 
-  private extractQueryToken(request: Request): string {
-    const raw = (request?.query as any)?.token;
-    return typeof raw === 'string' ? raw.trim() : '';
-  }
-
   private shouldUseSecureCookie(request: Request): boolean {
     const forwardedProto = String(request.headers['x-forwarded-proto'] || '').toLowerCase();
     return process.env.NODE_ENV === 'production' || Boolean((request as any).secure) || forwardedProto === 'https';
   }
 
-  private allowQueryToken(): boolean {
-    if (process.env.NODE_ENV !== 'production') return true;
-    return String(process.env.DEV_MODE || '').toLowerCase() === 'true';
-  }
-
   private getJwtSecret(): string {
-    return process.env.JWT_SECRET || process.env.ADMIN_TOKEN || 'feedfactory-dev-secret';
+    const secret = String(process.env.JWT_SECRET || '').trim();
+    if (!secret) {
+      throw new Error('JWT_SECRET is required');
+    }
+    return secret;
   }
 
   private getJwtExpiresIn(): NonNullable<SignOptions['expiresIn']> {
@@ -191,8 +155,11 @@ export class JwtAuthGuard implements CanActivate {
       const sessionId = String(payload?.sid || '');
       if (!userId || !sessionId) return false;
 
-      const sessions = await this.auditService.listActiveSessions(userId);
-      const activeSession = sessions.find((entry) => entry.id === sessionId);
+      const activeSession = await this.auditService.findActiveSession({
+        sessionId,
+        userId,
+        tokenHash: AuditService.hashToken(expiredToken),
+      });
       if (!activeSession) return false;
 
       const nextPayload = {
@@ -211,17 +178,20 @@ export class JwtAuthGuard implements CanActivate {
         expiresIn: this.getJwtExpiresIn(),
       });
 
-      if (source === 'cookie') {
-        response.cookie('feed_factory_jwt', refreshedToken, {
-          httpOnly: true,
-          secure: this.shouldUseSecureCookie(request),
-          sameSite: 'strict',
-          path: '/',
-          maxAge: 24 * 60 * 60 * 1000,
-        });
-      } else {
-        response.setHeader('x-access-token', refreshedToken);
-      }
+      const refreshedExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      await this.auditService.rotateSessionToken(
+        sessionId,
+        AuditService.hashToken(refreshedToken),
+        refreshedExpiresAt,
+      );
+
+      response.cookie('feed_factory_jwt', refreshedToken, {
+        httpOnly: true,
+        secure: this.shouldUseSecureCookie(request),
+        sameSite: 'strict',
+        path: '/',
+        maxAge: 24 * 60 * 60 * 1000,
+      });
 
       const user = await this.authService.verifyToken(refreshedToken);
       request.user = user;
@@ -238,8 +208,8 @@ export class JwtAuthGuard implements CanActivate {
         metadata: {
           source,
           sessionId,
-          cookieSameSite: source === 'cookie' ? 'Strict' : undefined,
-          cookieSecure: source === 'cookie' ? process.env.NODE_ENV === 'production' : undefined,
+          cookieSameSite: 'Strict',
+          cookieSecure: process.env.NODE_ENV === 'production',
         },
       });
 

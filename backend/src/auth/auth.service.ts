@@ -1,7 +1,5 @@
-﻿// ENTERPRISE FIX: Phase 6.2 - Final JSON to Prisma Cutover - 2026-03-12
-// ENTERPRISE FIX: Phase 6 - Final Polish & Production Handover - 2026-03-05
-// ENTERPRISE FIX: Phase 3 - Audit Logging & Advanced Security - 2026-03-03
-// FINAL ENTERPRISE FIX: Auto-Seed Admin Complete - 2026-02-26
+﻿// ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
+// Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
 // 7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½#ï؟½â¬‘"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½ 7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½#ï؟½â¬‘"ï؟½#ï؟½ï؟½ï؟½9 7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½#ï؟½â¬‘"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½#ï؟½â¬‘"ï؟½7ï؟½â¬©7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½ - Auto-Seed SuperAdmin + JWT Authentication
 
 // ENTERPRISE FIX: Phase 0 - Fatal Errors Fixed - 2026-03-02
@@ -21,7 +19,6 @@ type JwtUser = {
   sessionId?: string;
 };
 
-const ENTERPRISE_DEFAULT_PASSWORD = 'SecurePassword2026!';
 const LEGACY_WEAK_ADMIN_PASSWORDS = new Set(['admin123', 'admin123!', 'admin', 'password', '12345678', 'admin@123']);
 
 const DEFAULT_ROLES: Array<{
@@ -78,18 +75,21 @@ export class AuthService {
   }
 
   private getJwtSecret(): string {
-    return process.env.JWT_SECRET || process.env.ADMIN_TOKEN || 'feedfactory-dev-secret';
+    const secret = String(process.env.JWT_SECRET || '').trim();
+    if (!secret) {
+      throw new Error('JWT_SECRET is required');
+    }
+    return secret;
   }
 
   private getDefaultAdminPassword(): string {
     const rawPassword = String(process.env.ADMIN_PASSWORD || '').trim();
     if (!rawPassword) {
-      return ENTERPRISE_DEFAULT_PASSWORD;
+      throw new Error('ADMIN_PASSWORD is required for superadmin bootstrap');
     }
 
     if (LEGACY_WEAK_ADMIN_PASSWORDS.has(rawPassword.toLowerCase()) || !this.validatePasswordPolicy(rawPassword)) {
-      console.warn('[Auth Service] Ignoring weak ADMIN_PASSWORD value and enforcing enterprise default password.');
-      return ENTERPRISE_DEFAULT_PASSWORD;
+      throw new Error('ADMIN_PASSWORD does not meet the enterprise password policy');
     }
 
     return rawPassword;
@@ -427,33 +427,8 @@ export class AuthService {
     const sessionExpiresAt = new Date(Date.now() + sessionTimeoutMinutes * 60 * 1000);
     const sessionId = randomUUID();
     const deviceFingerprint = this.resolveDeviceFingerprint(normalized, clientMeta);
-
-    await this.auditService.createSession({
-      sessionId,
-      userId: user.id,
-      username: user.username || user.email || normalized || 'user',
-      role: user.role?.name || 'Viewer',
-      deviceFingerprint,
-      ipAddress: this.resolveClientIp(clientMeta),
-      userAgent: this.resolveUserAgent(clientMeta),
-      expiresAt: sessionExpiresAt,
-    });
-
-    await this.auditService.log({
-      action: 'SESSION_CREATED',
-      actorId: user.id,
-      actorUsername: user.username || user.email || normalized || 'user',
-      actorRole: user.role?.name || 'Viewer',
-      targetUserId: user.id,
-      targetResource: 'auth.session',
-      status: 'success',
-      message: 'New authenticated session created',
-      metadata: {
-        sessionId,
-        expiresAt: sessionExpiresAt.toISOString(),
-        deviceFingerprint,
-      },
-    });
+    const ipAddress = this.resolveClientIp(clientMeta);
+    const userAgent = this.resolveUserAgent(clientMeta);
 
     const payload = {
       sub: user.id,
@@ -475,6 +450,42 @@ export class AuthService {
       console.error('[Auth Service] JWT signing failed:', jwtError?.message || jwtError);
       throw new UnauthorizedException('تعذر إنشاء جلسة الدخول. يرجى المحاولة لاحقاً.');
     }
+
+    const tokenHash = AuditService.hashToken(accessToken);
+    const deviceInfo = JSON.stringify({
+      deviceFingerprint,
+      ipAddress,
+      userAgent,
+    });
+
+    await this.auditService.createSession({
+      sessionId,
+      userId: user.id,
+      tokenHash,
+      deviceInfo,
+      username: user.username || user.email || normalized || 'user',
+      role: user.role?.name || 'Viewer',
+      ipAddress,
+      userAgent,
+      expiresAt: sessionExpiresAt,
+    });
+
+    await this.auditService.log({
+      action: 'SESSION_CREATED',
+      actorId: user.id,
+      actorUsername: user.username || user.email || normalized || 'user',
+      actorRole: user.role?.name || 'Viewer',
+      targetUserId: user.id,
+      targetResource: 'auth.session',
+      status: 'success',
+      message: 'New authenticated session created',
+      metadata: {
+        sessionId,
+        expiresAt: sessionExpiresAt.toISOString(),
+        deviceFingerprint,
+        ipAddress,
+      },
+    });
 
     return {
       accessToken,
@@ -498,10 +509,10 @@ export class AuthService {
 
     const sessionId = payload?.sid ? String(payload.sid) : undefined;
     const userId = String(payload?.sub || '');
+    const tokenHash = AuditService.hashToken(token);
 
     if (sessionId && userId) {
-      const sessions = await this.auditService.listActiveSessions(userId);
-      const active = sessions.find((entry) => entry.id === sessionId);
+      const active = await this.auditService.findActiveSession({ sessionId, userId, tokenHash });
       if (!active) {
         await this.auditService.log({
           action: 'SESSION_EXPIRED',

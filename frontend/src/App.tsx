@@ -681,7 +681,7 @@ const AppContent = () => {
           )}
         />
         <Route path="/partners" element={renderProtectedRoute('partners.view', 'partners', withLazyFallback(<Partners partners={partners} onAddPartner={handleAddPartner} onUpdatePartner={handleUpdatePartner} onDeletePartner={handleDeletePartner} transactions={scopedTransactions} orders={scopedOrders} />))} />
-        <Route path="/orders" element={renderProtectedRoute('sales.view.orders', 'orders', withLazyFallback(<Orders orders={scopedOrders} partners={partners} items={scopedItems} onAddOrder={handleAddOrder} onUpdateOrder={handleUpdateOrder} onCompleteOrder={handleCompleteOrder} canExport={hasPermission(currentUser, 'sales.export.orders')} onExport={(rowCount) => logDataExport('orders', rowCount)} />))} />
+        <Route path="/orders" element={renderProtectedRoute('sales.view.orders', 'orders', withLazyFallback(<Orders orders={scopedOrders} partners={partners} items={scopedItems} onAddOrder={handleAddOrder} onUpdateOrder={handleUpdateOrder} onCompleteOrder={handleCompleteOrder} />))} />
         <Route path="/reports" element={renderProtectedRoute('reports.view', 'reports', withLazyFallback(<Reports />))} />
         <Route path="/formulation" element={renderProtectedRoute('formulation.view', 'formulation', withLazyFallback(<Formulation formulas={formulas} onAddFormula={handleAddFormula} onUpdateFormula={handleUpdateFormula} onDeleteFormula={handleDeleteFormula} />))} />
         <Route path="/opening-balance" element={renderProtectedRoute('inventory.view.opening_balances', 'opening-balance', withLazyFallback(<OpeningBalancePage columnConfig={openingBalanceReportConfig} onUpdateColumnConfig={setOpeningBalanceReportConfig} />))} />

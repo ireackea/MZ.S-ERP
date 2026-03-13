@@ -1,5 +1,5 @@
-// ENTERPRISE FIX: Phase 6.1 - Critical Red Flags Removal - 2026-03-12
-// ENTERPRISE FIX: Resilience & Path Bridging - 2026-02-26
+// ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
+// Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
 // Prisma Schema - Database Configuration
 
 generator client {
@@ -64,19 +64,20 @@ model User {
 
 model AuditLog {
   id             String   @id @default(uuid())
-  timestamp      DateTime @default(now())
+  userId         String?  @map("actorId")
   action         String
-  actorId        String?
+  details        String   @map("message")
+  timestamp      DateTime @default(now())
+  ipAddress      String?
+  metadata       String?
   actorUsername  String
   actorRole      String
   targetUserId   String?
   targetResource String?
   status         String
-  message        String
-  metadata       String?
-  actor          User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actor          User?    @relation("AuditActor", fields: [userId], references: [id], onDelete: SetNull)
 
-  @@index([actorId])
+  @@index([userId])
   @@index([action])
   @@index([status])
   @@index([timestamp])
@@ -86,18 +87,20 @@ model AuditLog {
 model ActiveSession {
   id                String   @id @default(uuid())
   userId            String
+  tokenHash         String?  @unique
+  expiresAt         DateTime
+  deviceInfo        String?  @map("deviceFingerprint")
+  isRevoked         Boolean  @default(false)
   username          String
   role              String
-  deviceFingerprint String
   ipAddress         String
   userAgent         String
   createdAt         DateTime @default(now())
   lastActivityAt    DateTime @default(now())
-  expiresAt         DateTime
-  isRevoked         Boolean  @default(false)
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([tokenHash])
   @@index([expiresAt])
   @@index([isRevoked])
   @@map("active_sessions")

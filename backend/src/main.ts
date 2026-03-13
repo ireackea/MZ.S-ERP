@@ -1,8 +1,5 @@
-// ENTERPRISE FIX: Phase 6.2 - Final JSON to Prisma Cutover - 2026-03-12
-// ENTERPRISE FIX: Phase 6.1 - Critical Red Flags Removal - 2026-03-12
-// ENTERPRISE FIX: Phase 5 - Final Production Readiness - 2026-03-05
-// ENTERPRISE FIX: Phase 4 - Production Polish & Final Integration - 2026-03-05
-// ENTERPRISE FIX: Phase 0 - Stabilization & UTF-8 Lockdown - 2026-03-05
+// ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
+// Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
@@ -90,8 +87,16 @@ function normalizeRequestPath(req: Request): string {
   return req.path || req.url.split('?')[0] || '/';
 }
 
+function requireJwtSecret() {
+  const secret = String(process.env.JWT_SECRET || '').trim();
+  if (!secret) {
+    throw new Error('JWT_SECRET is required');
+  }
+}
+
 async function bootstrap() {
   const envPath = loadBackendEnv();
+  requireJwtSecret();
   const app = await NestFactory.create(AppModule);
   const expressApp = app.getHttpAdapter().getInstance();
   expressApp.set('trust proxy', 1);
@@ -101,6 +106,12 @@ async function bootstrap() {
   AuditService.configurePrisma(prisma);
   await prisma.auditLog.count();
   await prisma.activeSession.count();
+  const runtimeAuditService = new AuditService(prisma);
+  setInterval(() => {
+    void runtimeAuditService.purgeExpiredSessions().catch((error) => {
+      console.error('[Audit Cleanup] Failed to purge expired sessions:', error instanceof Error ? error.message : String(error));
+    });
+  }, 5 * 60 * 1000);
 
   // ENTERPRISE FIX: Phase 0 - Fatal Errors Fixed - 2026-03-02
   app.use(cookieParser());

@@ -1,10 +1,5 @@
-// ENTERPRISE FIX: Phase 6 - Final Polish & Production Handover - 2026-03-05
-// ENTERPRISE FIX: Phase 5 - Final Production Readiness - 2026-03-05
-// ENTERPRISE FIX: Phase 4 - Production Polish & Final Integration - 2026-03-05
-// ENTERPRISE FIX: Phase 3 - Full Legacy Removal & Complete Single Source of Truth - 2026-03-05
-// ENTERPRISE FIX: Phase 2 - Full Single Source of Truth & Legacy Cleanup - 2026-03-05
-// ENTERPRISE FIX: Arabic Encoding Restoration - Full Components Folder - 2026-03-04
-// تم فحص وتصحيح كل سطر يحتوي على نص عربي
+// ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
+// Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
@@ -21,7 +16,6 @@ import {
     Plus, Layers, Receipt, Calculator, PlayCircle, Search, Loader2, Printer
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
-import * as XLSX from 'xlsx';
 import Fuse from 'fuse.js';
 import { toast } from '@services/toastService';
 import { useInventoryStore } from '../store/useInventoryStore';
@@ -1896,8 +1890,10 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
         setNormalizedImportPreview([]);
 
         const reader = new FileReader();
-        reader.onload = (evt) => {
+        reader.onload = async (evt) => {
             const bstr = evt.target?.result;
+            const xlsxModule = await import('xlsx');
+            const XLSX = xlsxModule;
             const wb = XLSX.read(bstr, { type: 'binary' });
             const ws = wb.Sheets[wb.SheetNames[0]];
             const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as unknown[][];

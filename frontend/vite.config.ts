@@ -1,9 +1,5 @@
-// ENTERPRISE FIX: Phase 6.1 - Critical Red Flags Removal - 2026-03-12
-// ENTERPRISE FIX: Phase 5 - Final Production Readiness - 2026-03-05
-// ENTERPRISE FIX: Phase 4 - Production Polish & Final Integration - 2026-03-05
-// ENTERPRISE FIX: Phase 0 - Stabilization & UTF-8 Lockdown - 2026-03-05
-// ENTERPRISE FIX: Phase 1 - Dual Mode Implementation - 2026-03-02
-// Vite config with explicit plugin path workaround (PWA Support via public/sw.js)
+// ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
+// Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
 import { defineConfig } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -66,5 +62,18 @@ export default defineConfig(({ mode }) => ({
   build: {
     target: 'es2020',
     sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'export-xlsx': ['xlsx'],
+          'export-exceljs': ['exceljs'],
+          'export-html2pdf': ['html2pdf.js'],
+        },
+      },
+    },
+  },
+
+  optimizeDeps: {
+    exclude: ['xlsx', 'exceljs', 'html2pdf.js'],
   },
 }));

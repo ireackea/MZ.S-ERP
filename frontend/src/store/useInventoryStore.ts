@@ -1,12 +1,5 @@
-// ENTERPRISE FIX: Phase 4 - Production Polish & Final Integration - 2026-03-05
-// ENTERPRISE FIX: Phase 3 - Full Legacy Removal & Complete Single Source of Truth - 2026-03-05
-// ENTERPRISE FIX: Phase 2 - Full Single Source of Truth & Legacy Cleanup - 2026-03-05
-// ENTERPRISE FIX: Phase 1 - Single Source of Truth & Integration - 2026-03-05
-// ENTERPRISE FIX: Phase 0 - Stabilization & UTF-8 Lockdown - 2026-03-05
-// ENTERPRISE FIX: Phase 7 - Single Source of Truth for Items - 2026-03-01
-// Zustand Store for Items - Single Owner Pattern
-
-// ENTERPRISE FIX: Phase 0 - Fatal Errors Fixed - Blueprint Compliant - 2026-03-02
+// ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
+// Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { toast } from '@services/toastService';
@@ -26,15 +19,6 @@ import {
 import { getTransactionsFromApi } from '@services/transactionsService';
 import { fetchRoles, fetchUsers, type RoleDto, type UserDto } from '@services/usersService';
 import apiClient from '@api/client';
-import {
-  addAuditLog,
-  getCategories,
-  getTransactions,
-  getUnits,
-  getUsers,
-  saveCategories,
-  saveUnits,
-} from '../services/storage';
 import { getIamConfig, normalizeUsers } from '../services/iamService';
 import type { GridColumnPreference, Item, ItemSortMode, RoleDefinition, Transaction, User } from '../types';
 
@@ -387,6 +371,24 @@ const triggerBlobDownload = (blob: Blob, fileName: string) => {
   URL.revokeObjectURL(url);
 };
 
+let xlsxLoader: Promise<typeof import('xlsx')> | null = null;
+let html2PdfLoader: Promise<any> | null = null;
+
+const loadXlsx = () => {
+  if (!xlsxLoader) {
+    xlsxLoader = import('xlsx');
+  }
+  return xlsxLoader;
+};
+
+const loadHtml2Pdf = async () => {
+  if (!html2PdfLoader) {
+    html2PdfLoader = import('html2pdf.js');
+  }
+  const module = await html2PdfLoader;
+  return (module as { default?: any }).default || module;
+};
+
 const initialSort = read<SortState>(SORT_KEY, { mode: 'manual_locked', manualOrder: [] });
 
 export const useInventoryStore = create<Store>()(
@@ -435,22 +437,24 @@ export const useInventoryStore = create<Store>()(
           });
 
           write(SORT_KEY, { mode: get().sortMode, manualOrder: normalized.manualOrder });
-          saveCategories(normalized.categories);
-          saveUnits(normalized.units);
         } catch (e: any) {
           set({ loading: false, error: e?.message || 'Failed to load items' });
         }
       },
 
       loadAll: async () => {
-        const localTransactions = getTransactions();
-        const localOpeningBalancesYear = currentFinancialYear();
-        const localOpeningBalances = normalizeOpeningBalanceRows(getOpeningBalancesByYear(localOpeningBalancesYear));
-        const localOpeningRows = localOpeningBalanceStoreRows(localOpeningBalancesYear);
-        const localUsers = normalizeUsers(getUsers());
-        const localRoles = getIamConfig().roles;
-        const localCategories = uniqueStrings(getCategories() || []);
-        const localUnits = uniqueStrings(getUnits() || []);
+        const localOpeningBalancesYear = get().openingBalancesYear ?? currentFinancialYear();
+        const localTransactions = get().transactions;
+        const localOpeningBalances = Object.keys(get().openingBalances).length > 0
+          ? get().openingBalances
+          : normalizeOpeningBalanceRows(getOpeningBalancesByYear(localOpeningBalancesYear));
+        const localOpeningRows = get().openingBalanceRows.length > 0
+          ? get().openingBalanceRows
+          : localOpeningBalanceStoreRows(localOpeningBalancesYear);
+        const localUsers = get().users;
+        const localRoles = get().roles.length > 0 ? get().roles : getIamConfig().roles;
+        const localCategories = uniqueStrings(get().categories || []);
+        const localUnits = uniqueStrings(get().units || []);
 
         set((state) => ({
           loading: true,
@@ -513,17 +517,17 @@ export const useInventoryStore = create<Store>()(
 
         const deletedIds = getPendingDeletedIds();
         const openingBalanceYear = get().openingBalancesYear ?? currentFinancialYear();
-        const fallbackTransactions = get().transactions.length > 0 ? get().transactions : getTransactions();
+        const fallbackTransactions = get().transactions;
         const fallbackOpeningBalances = Object.keys(get().openingBalances).length > 0
           ? get().openingBalances
           : normalizeOpeningBalanceRows(getOpeningBalancesByYear(openingBalanceYear));
         const fallbackOpeningBalanceRows = get().openingBalanceRows.length > 0
           ? get().openingBalanceRows
           : localOpeningBalanceStoreRows(openingBalanceYear);
-        const fallbackUsers = get().users.length > 0 ? get().users : normalizeUsers(getUsers());
+        const fallbackUsers = get().users;
         const fallbackRoles = get().roles.length > 0 ? get().roles : getIamConfig().roles;
-        const fallbackCategories = uniqueStrings([...(getCategories() || []), ...get().categories]);
-        const fallbackUnits = uniqueStrings([...(getUnits() || []), ...get().units]);
+        const fallbackCategories = uniqueStrings(get().categories);
+        const fallbackUnits = uniqueStrings(get().units);
 
         const [itemsResult, transactionsResult, openingBalancesResult, usersResult, rolesResult] = await Promise.allSettled([
           getItemsFromApi(),
@@ -577,8 +581,6 @@ export const useInventoryStore = create<Store>()(
         });
 
         write(SORT_KEY, { mode: get().sortMode, manualOrder: normalized.manualOrder });
-        saveCategories(normalized.categories);
-        saveUnits(normalized.units);
       },
 
       setTransactions: (transactions) => {
@@ -697,7 +699,7 @@ export const useInventoryStore = create<Store>()(
       },
 
       exportRowsToExcel: async ({ fileName, sheetName = 'Sheet1', rows }) => {
-        const XLSX = await import('xlsx');
+        const XLSX = await loadXlsx();
         const worksheet = XLSX.utils.json_to_sheet(rows);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, sheetName.slice(0, 31));
@@ -705,7 +707,7 @@ export const useInventoryStore = create<Store>()(
       },
 
       exportSheetsToExcel: async ({ fileName, sheets }) => {
-        const XLSX = await import('xlsx');
+        const XLSX = await loadXlsx();
         const workbook = XLSX.utils.book_new();
 
         sheets.forEach((sheet, index) => {
@@ -730,8 +732,7 @@ export const useInventoryStore = create<Store>()(
       },
 
       exportElementToPdf: async ({ element, fileName, jsPdfOptions = {} }) => {
-        const html2pdfModule = await import('html2pdf.js');
-        const html2pdf = (html2pdfModule as { default?: any }).default || html2pdfModule;
+        const html2pdf = await loadHtml2Pdf();
 
         await html2pdf()
           .set({
@@ -755,8 +756,6 @@ export const useInventoryStore = create<Store>()(
         set((state) => {
           const nextUnits = units ? uniqueStrings(units) : state.units;
           const nextCategories = categories ? uniqueStrings(categories) : state.categories;
-          saveUnits(nextUnits);
-          saveCategories(nextCategories);
           return { units: nextUnits, categories: nextCategories };
         });
       },
@@ -766,7 +765,6 @@ export const useInventoryStore = create<Store>()(
         if (!normalized) return;
         set((state) => {
           const units = uniqueStrings([...state.units, normalized]);
-          saveUnits(units);
           return { units };
         });
       },
@@ -775,7 +773,6 @@ export const useInventoryStore = create<Store>()(
         const target = String(unit || '').trim().toLowerCase();
         set((state) => {
           const units = state.units.filter((entry) => entry.trim().toLowerCase() !== target);
-          saveUnits(units);
           return { units };
         });
       },
@@ -785,7 +782,6 @@ export const useInventoryStore = create<Store>()(
         if (!normalized) return;
         set((state) => {
           const categories = uniqueStrings([...state.categories, normalized]);
-          saveCategories(categories);
           return { categories };
         });
       },
@@ -794,7 +790,6 @@ export const useInventoryStore = create<Store>()(
         const target = String(category || '').trim().toLowerCase();
         set((state) => {
           const categories = state.categories.filter((entry) => entry.trim().toLowerCase() !== target);
-          saveCategories(categories);
           return { categories };
         });
       },
@@ -861,10 +856,6 @@ export const useInventoryStore = create<Store>()(
           manualOrder: normalized.manualOrder,
         });
         write(SORT_KEY, { mode: get().sortMode, manualOrder: normalized.manualOrder });
-        saveCategories(normalized.categories);
-        saveUnits(normalized.units);
-
-        await addAuditLog({ userId: actorId, userName: actorName, action: 'CREATE', entity: 'ITEM', details: `Created item: ${item.name} (${item.id})` });
         toast.success('تم إضافة الصنف بنجاح');
       },
 
@@ -880,8 +871,6 @@ export const useInventoryStore = create<Store>()(
           units: normalized.units,
           manualOrder: normalized.manualOrder,
         });
-
-        await addAuditLog({ userId: actorId, userName: actorName, action: 'UPDATE', entity: 'ITEM', details: `Updated item: ${item.name} (${item.id})` });
         toast.success('تم تعديل الصنف بنجاح');
       },
 
@@ -902,8 +891,6 @@ export const useInventoryStore = create<Store>()(
           units: normalized.units,
           manualOrder: normalized.manualOrder,
         });
-
-        await addAuditLog({ userId: actorId, userName: actorName, action: 'UPDATE', entity: 'ITEM', details: `Bulk updated ${ids.length} items` });
         toast.success(`تم تعديل ${ids.length} صنف بنجاح`);
       },
 
@@ -971,14 +958,22 @@ export const useInventoryStore = create<Store>()(
         });
 
         write(SORT_KEY, { mode: get().sortMode, manualOrder: normalized.manualOrder });
-
-        await addAuditLog({ userId: actorId, userName: actorName, action: 'DELETE', entity: 'ITEM', details: `Permanently deleted ${ids.length} items: ${ids.join(', ')}` });
         toast.success('تم حذف الأصناف نهائياً بنجاح');
       },
     }),
     {
       name: 'ff_inventory_store_v1',
       partialize: (state) => ({
+        items: state.items,
+        balances: state.balances,
+        transactions: state.transactions,
+        openingBalances: state.openingBalances,
+        openingBalanceRows: state.openingBalanceRows,
+        openingBalancesYear: state.openingBalancesYear,
+        users: state.users,
+        roles: state.roles,
+        units: state.units,
+        categories: state.categories,
         soft: state.soft,
         sortMode: state.sortMode,
         manualOrder: state.manualOrder,

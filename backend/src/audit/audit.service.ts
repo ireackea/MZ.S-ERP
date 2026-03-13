@@ -1,7 +1,7 @@
-// ENTERPRISE FIX: Phase 6.2 - Final JSON to Prisma Cutover - 2026-03-12
-// ENTERPRISE FIX: Phase 3 - Audit Logging & Advanced Security - 2026-03-03
+// ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
+// Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
 import { Injectable } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma.service';
 
 export type AuditAction =
@@ -37,21 +37,23 @@ export interface AuditLogEntry {
   targetResource?: string;
   status: 'success' | 'failed';
   message: string;
+  ipAddress?: string;
   metadata?: Record<string, unknown>;
 }
 
 export interface ActiveSessionEntry {
   id: string;
   userId: string;
-  username: string;
-  role: string;
-  deviceFingerprint: string;
-  ipAddress: string;
-  userAgent: string;
-  createdAt: string;
-  lastActivityAt: string;
+  tokenHash?: string;
   expiresAt: string;
+  deviceInfo?: string;
   isRevoked: boolean;
+  username?: string;
+  role?: string;
+  ipAddress?: string;
+  userAgent?: string;
+  createdAt?: string;
+  lastActivityAt?: string;
 }
 
 @Injectable()
@@ -62,6 +64,10 @@ export class AuditService {
 
   static configurePrisma(prisma: PrismaService) {
     AuditService.prismaService = prisma;
+  }
+
+  static hashToken(token: string): string {
+    return createHash('sha256').update(String(token || '')).digest('hex');
   }
 
   private getPrisma(): PrismaService {
@@ -84,17 +90,37 @@ export class AuditService {
     return normalized;
   }
 
+  private extractIpAddress(metadata?: Record<string, unknown>): string | null {
+    const candidate = metadata?.ipAddress;
+    if (typeof candidate !== 'string') return null;
+    const normalized = candidate.trim();
+    return normalized || null;
+  }
+
+  private toMetadataJson(entry: Omit<AuditLogEntry, 'id' | 'timestamp'>): string | null {
+    const nextMetadata = {
+      ...(entry.metadata || {}),
+      actorUsername: entry.actorUsername,
+      actorRole: entry.actorRole,
+      targetUserId: entry.targetUserId,
+      targetResource: entry.targetResource,
+      status: entry.status,
+    };
+    return JSON.stringify(nextMetadata);
+  }
+
   private mapAuditLog(record: {
     id: string;
     timestamp: Date;
     action: string;
-    actorId: string | null;
+    userId: string | null;
+    details: string;
+    ipAddress: string | null;
     actorUsername: string;
     actorRole: string;
     targetUserId: string | null;
     targetResource: string | null;
     status: string;
-    message: string;
     metadata: string | null;
   }): AuditLogEntry {
     let metadata: Record<string, unknown> | undefined;
@@ -114,13 +140,14 @@ export class AuditService {
       id: record.id,
       timestamp: record.timestamp.toISOString(),
       action: record.action as AuditAction,
-      actorId: record.actorId || 'anonymous',
+      actorId: record.userId || 'anonymous',
       actorUsername: record.actorUsername,
       actorRole: record.actorRole,
       targetUserId: record.targetUserId || undefined,
       targetResource: record.targetResource || undefined,
       status: record.status as 'success' | 'failed',
-      message: record.message,
+      message: record.details,
+      ipAddress: record.ipAddress || undefined,
       metadata,
     };
   }
@@ -128,9 +155,10 @@ export class AuditService {
   private mapSession(record: {
     id: string;
     userId: string;
+    tokenHash: string | null;
+    deviceInfo: string | null;
     username: string;
     role: string;
-    deviceFingerprint: string;
     ipAddress: string;
     userAgent: string;
     createdAt: Date;
@@ -141,15 +169,16 @@ export class AuditService {
     return {
       id: record.id,
       userId: record.userId,
+      tokenHash: record.tokenHash || undefined,
+      expiresAt: record.expiresAt.toISOString(),
+      deviceInfo: record.deviceInfo || undefined,
+      isRevoked: record.isRevoked,
       username: record.username,
       role: record.role,
-      deviceFingerprint: record.deviceFingerprint,
       ipAddress: record.ipAddress,
       userAgent: record.userAgent,
       createdAt: record.createdAt.toISOString(),
       lastActivityAt: record.lastActivityAt.toISOString(),
-      expiresAt: record.expiresAt.toISOString(),
-      isRevoked: record.isRevoked,
     };
   }
 
@@ -166,15 +195,16 @@ export class AuditService {
         data: {
           id: nextEntry.id,
           timestamp: new Date(nextEntry.timestamp),
+          userId: this.normalizeUserReference(nextEntry.actorId),
           action: nextEntry.action,
-          actorId: this.normalizeUserReference(nextEntry.actorId),
+          details: nextEntry.message,
+          ipAddress: this.extractIpAddress(nextEntry.metadata),
+          metadata: this.toMetadataJson(nextEntry),
           actorUsername: nextEntry.actorUsername,
           actorRole: nextEntry.actorRole,
           targetUserId: this.normalizeUserReference(nextEntry.targetUserId),
           targetResource: nextEntry.targetResource || null,
           status: nextEntry.status,
-          message: nextEntry.message,
-          metadata: nextEntry.metadata ? JSON.stringify(nextEntry.metadata) : null,
         },
       });
     });
@@ -193,7 +223,7 @@ export class AuditService {
 
     const records = await prisma.auditLog.findMany({
       where: {
-        ...(params?.actorId ? { actorId: params.actorId } : {}),
+        ...(params?.actorId ? { userId: params.actorId } : {}),
         ...(params?.action ? { action: params.action } : {}),
         ...(params?.status ? { status: params.status } : {}),
       },
@@ -207,9 +237,10 @@ export class AuditService {
   async createSession(params: {
     sessionId?: string;
     userId: string;
+    tokenHash: string;
+    deviceInfo: string;
     username: string;
     role: string;
-    deviceFingerprint: string;
     ipAddress: string;
     userAgent: string;
     expiresAt: Date;
@@ -220,15 +251,16 @@ export class AuditService {
     const session: ActiveSessionEntry = {
       id: params.sessionId || randomUUID(),
       userId: params.userId,
+      tokenHash: params.tokenHash,
+      expiresAt: params.expiresAt.toISOString(),
+      deviceInfo: params.deviceInfo,
+      isRevoked: false,
       username: params.username,
       role: params.role,
-      deviceFingerprint: params.deviceFingerprint,
       ipAddress: params.ipAddress,
       userAgent: params.userAgent,
       createdAt: now.toISOString(),
       lastActivityAt: now.toISOString(),
-      expiresAt: params.expiresAt.toISOString(),
-      isRevoked: false,
     };
 
     await prisma.$transaction(async (tx) => {
@@ -236,9 +268,10 @@ export class AuditService {
         data: {
           id: session.id,
           userId: session.userId,
+          tokenHash: params.tokenHash,
+          deviceInfo: params.deviceInfo,
           username: session.username,
           role: session.role,
-          deviceFingerprint: session.deviceFingerprint,
           ipAddress: session.ipAddress,
           userAgent: session.userAgent,
           createdAt: now,
@@ -262,6 +295,20 @@ export class AuditService {
     });
   }
 
+  async rotateSessionToken(sessionId: string, tokenHash: string, expiresAt: Date): Promise<void> {
+    const prisma = this.getPrisma();
+    await prisma.$transaction(async (tx) => {
+      await tx.activeSession.updateMany({
+        where: { id: sessionId, isRevoked: false },
+        data: {
+          tokenHash,
+          expiresAt,
+          lastActivityAt: new Date(),
+        },
+      });
+    });
+  }
+
   async revokeSession(sessionId: string): Promise<void> {
     const prisma = this.getPrisma();
     await prisma.$transaction(async (tx) => {
@@ -275,16 +322,36 @@ export class AuditService {
   async purgeExpiredSessions(): Promise<void> {
     const prisma = this.getPrisma();
     await prisma.$transaction(async (tx) => {
-      await tx.activeSession.updateMany({
+      await tx.activeSession.deleteMany({
         where: {
           OR: [
             { isRevoked: true },
             { expiresAt: { lte: new Date() } },
           ],
         },
-        data: { isRevoked: true },
       });
     });
+  }
+
+  async findActiveSession(params: {
+    sessionId?: string;
+    userId?: string;
+    tokenHash?: string;
+  }): Promise<ActiveSessionEntry | null> {
+    await this.purgeExpiredSessions();
+    const prisma = this.getPrisma();
+    const session = await prisma.activeSession.findFirst({
+      where: {
+        isRevoked: false,
+        expiresAt: { gt: new Date() },
+        ...(params.sessionId ? { id: params.sessionId } : {}),
+        ...(params.userId ? { userId: params.userId } : {}),
+        ...(params.tokenHash ? { tokenHash: params.tokenHash } : {}),
+      },
+      orderBy: { lastActivityAt: 'desc' },
+    });
+
+    return session ? this.mapSession(session) : null;
   }
 
   async listActiveSessions(userId?: string): Promise<ActiveSessionEntry[]> {

@@ -1,3 +1,5 @@
+// ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
+// Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from '../auth/auth.service';
 
@@ -7,6 +9,7 @@ export class BackupGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
+    const cookieToken = String(request?.cookies?.['feed_factory_jwt'] || '').trim();
 
     const normalizeHeader = (value: unknown): string | undefined => {
       if (Array.isArray(value)) return String(value[0] ?? '').trim() || undefined;
@@ -15,12 +18,9 @@ export class BackupGuard implements CanActivate {
       return raw || undefined;
     };
 
-    const bearer = normalizeHeader(request.get?.('authorization') || request.headers?.authorization);
-    const bearerToken = bearer?.toLowerCase().startsWith('bearer ') ? bearer.slice(7).trim() : undefined;
-
-    if (bearerToken) {
+    if (cookieToken) {
       try {
-        const user = await this.authService.verifyToken(bearerToken);
+        const user = await this.authService.verifyToken(cookieToken);
         request.backupActor = {
           type: 'user',
           mode: 'manual',
@@ -38,9 +38,7 @@ export class BackupGuard implements CanActivate {
       normalizeHeader(request.get?.('x-backup-token')) ||
       normalizeHeader(request.get?.('x-admin-token')) ||
       normalizeHeader(request.headers?.['x-backup-token']) ||
-      normalizeHeader(request.headers?.['x-admin-token']) ||
-      normalizeHeader(request.headers?.['x-access-token']) ||
-      bearerToken;
+      normalizeHeader(request.headers?.['x-admin-token']);
 
     const expectedTokens = [process.env.BACKUP_API_TOKEN, process.env.ADMIN_TOKEN]
       .map((value) => String(value || '').trim())
