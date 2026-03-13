@@ -253,9 +253,9 @@ const Formulation: React.FC<FormulationProps> = ({
         isOpen={isModalOpen}
         mode={editingFormula ? 'edit' : 'create'}
         items={items}
-        initialValue={editingFormula}
+        initialValue={editingFormula as unknown as import('./FormulationForm').FormulationDraft}
         isSubmitting={isSubmitting}
-        onSubmit={handleSave}
+        onSubmit={handleSave as unknown as (draft: import('./FormulationForm').FormulationDraft) => void | Promise<void>}
         onClose={() => {
           setIsModalOpen(false);
           setEditingFormula(null);

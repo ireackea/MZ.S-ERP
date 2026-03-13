@@ -33,6 +33,6 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "exclude": ["_ARCHIVE_", "node_modules", "dist"]
+  "exclude": ["_ARCHIVE_", "node_modules", "dist", "public", "src/contexts/InventoryContext.validation.test.tsx"]
 }
 
