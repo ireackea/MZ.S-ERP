@@ -1,4 +1,4 @@
-// ENTERPRISE FIX: Phase 6.5 - Absolute 100% Cleanup & Global Verification - 2026-03-13
+// ENTERPRISE FIX: Phase 6.6 - Global 100% Cleanup & Absolute Verification - 2026-03-13
 
 import React, { Suspense, lazy, useState, useEffect, useRef } from 'react';
 import { Routes, Route } from 'react-router-dom';
@@ -11,7 +11,7 @@ import EnterpriseLoading from './components/EnterpriseLoading';
 import { useInventoryStore } from './store/useInventoryStore';
 import { Transaction, Partner, Order, User, Tag, SystemSettings, OperationAppearance, ReportColumnConfig, UnloadingRule, Formula, AuditLog } from './types';
 import { v4 as uuidv4 } from 'uuid';
-import { ensureAuthCredentialsSeeded, loginAsUser, logout, provisionInitialAdmin, resolveAuthenticatedUser } from './services/authController';
+import { ensureAuthCredentialsSeeded, loginAsUser, logout, provisionInitialAdmin } from './services/authController';
 import { getAuthToken, getAuthUser } from '@services/authService';
 import { filterByDataScope, getIamConfig, hasPermission, logUserActivity, normalizeUsers, upsertCurrentSession } from './services/iamService';
 import {
@@ -211,14 +211,6 @@ const AppContent = () => {
           console.log('[App.tsx] Setting currentUser from JWT:', targetUser.username);
           setCurrentUser(targetUser);
           upsertCurrentSession(targetUser);
-        } else {
-          // Fallback to local session (for backward compatibility)
-          const authenticatedUser = resolveAuthenticatedUser(loadedUsers);
-          if (authenticatedUser) {
-            console.log('[App.tsx] Setting currentUser from local session:', authenticatedUser.username);
-            setCurrentUser(authenticatedUser);
-            upsertCurrentSession(authenticatedUser);
-          }
         }
 
         // Mark auth as ready AFTER all checks are complete

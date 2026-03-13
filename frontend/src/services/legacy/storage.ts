@@ -1,4 +1,4 @@
-// ENTERPRISE FIX: Phase 6.5 - Absolute 100% Cleanup & Global Verification - 2026-03-13
+// ENTERPRISE FIX: Phase 6.6 - Global 100% Cleanup & Absolute Verification - 2026-03-13
 import { Item, Transaction, StockCheck, Partner, Order, User, Tag, SystemSettings, OperationAppearance, ReportColumnConfig, UnloadingRule, Formula, AuditLog, GridColumnPreference, UserGridPreference, ItemSortSettings } from '../../types';
 import { CATEGORIES as DEFAULT_CATEGORIES, INITIAL_ITEMS, UNITS } from '../../constants';
 import { cache } from './cacheService';

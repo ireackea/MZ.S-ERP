@@ -1,4 +1,4 @@
-// ENTERPRISE FIX: Phase 6.5 - Absolute 100% Cleanup & Global Verification - 2026-03-13
+// ENTERPRISE FIX: Phase 6.6 - Global 100% Cleanup & Absolute Verification - 2026-03-13
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { toast } from '@services/toastService';
@@ -28,6 +28,8 @@ const FORBIDDEN_LEGACY_JSON_KEYS = new Set([
   'active-user-sessions',
   'security-audit-log',
   'users-audit-log',
+  'feed_factory_auth_session',
+  'feed_factory_auth_session_persistent',
 ]);
 
 type SoftMap = Record<string, { deletedAt: number; deletedBy: string }>;
