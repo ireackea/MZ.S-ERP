@@ -1,4 +1,4 @@
-// ENTERPRISE FIX: Phase 7 - Production Deployment & Monitoring Setup - 2026-03-13
+// ENTERPRISE FIX: Phase 7 - Final Visual & Load Verification - 2026-03-13
 import { defineConfig } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -88,6 +88,13 @@ export default defineConfig(({ mode }) => ({
     chunkSizeWarningLimit: 1200,
     assetsInlineLimit: 4096,
     rollupOptions: {
+      onwarn(warning, warn) {
+        const message = String(warning.message || '');
+        if (message.includes('frontend/src/api/client.ts is dynamically imported')) {
+          return;
+        }
+        warn(warning);
+      },
       output: {
         manualChunks: {
           'export-xlsx': [heavyLazyLibraries[0]],
