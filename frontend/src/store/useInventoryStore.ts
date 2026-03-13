@@ -1,5 +1,4 @@
-// ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
-// Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
+// ENTERPRISE FIX: Phase 6.5 - Absolute 100% Cleanup & Global Verification - 2026-03-13
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { toast } from '@services/toastService';
@@ -24,6 +23,12 @@ import type { GridColumnPreference, Item, ItemSortMode, RoleDefinition, Transact
 
 const SOFT_KEY = 'ff_items_soft_v1';
 const SORT_KEY = 'ff_items_sort_v1';
+const FORBIDDEN_LEGACY_JSON_KEYS = new Set([
+  'feed_factory_audit_logs',
+  'active-user-sessions',
+  'security-audit-log',
+  'users-audit-log',
+]);
 
 type SoftMap = Record<string, { deletedAt: number; deletedBy: string }>;
 type SortState = { mode: ItemSortMode; manualOrder: string[] };
@@ -118,7 +123,23 @@ type Store = {
 
 const DEFAULT_ACTOR: ActorInfo = { id: 'system', name: 'InventoryStore' };
 
+const isForbiddenLegacyJsonKey = (key: string) => FORBIDDEN_LEGACY_JSON_KEYS.has(String(key || '').trim());
+
+const purgeForbiddenLegacyJsonKeys = () => {
+  if (typeof localStorage === 'undefined') return;
+
+  FORBIDDEN_LEGACY_JSON_KEYS.forEach((key) => {
+    if (localStorage.getItem(key) !== null) {
+      localStorage.removeItem(key);
+    }
+  });
+};
+
 const read = <T,>(k: string, f: T): T => {
+  if (isForbiddenLegacyJsonKey(k)) {
+    console.error(`[useInventoryStore] Forbidden legacy JSON key read blocked: ${k}`);
+    return f;
+  }
   try {
     const r = localStorage.getItem(k);
     return r ? (JSON.parse(r) as T) : f;
@@ -128,8 +149,16 @@ const read = <T,>(k: string, f: T): T => {
 };
 
 const write = <T,>(k: string, v: T) => {
+  if (isForbiddenLegacyJsonKey(k)) {
+    console.error(`[useInventoryStore] Forbidden legacy JSON key write blocked: ${k}`);
+    return;
+  }
   localStorage.setItem(k, JSON.stringify(v));
 };
+
+if (typeof window !== 'undefined') {
+  purgeForbiddenLegacyJsonKeys();
+}
 
 const getPendingDeletedIds = () => new Set(Object.keys(read<SoftMap>(SOFT_KEY, {})));
 

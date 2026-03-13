@@ -1,4 +1,4 @@
-// ENTERPRISE FIX: Phase 6.4 - Absolute Final Cleanup & 100% Verification - 2026-03-13
+// ENTERPRISE FIX: Phase 6.5 - Absolute 100% Cleanup & Global Verification - 2026-03-13
 import { Injectable } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma.service';
@@ -72,7 +72,7 @@ export class AuditService {
   private getPrisma(): PrismaService {
     const prisma = this.prisma || AuditService.prismaService;
     if (!prisma) {
-      throw new Error('AuditService Prisma is not configured');
+      throw new Error('AuditService Prisma is not configured. JSON fallback is forbidden.');
     }
     return prisma;
   }

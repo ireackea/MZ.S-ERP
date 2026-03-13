@@ -1,4 +1,4 @@
-// ENTERPRISE FIX: Phase 6.4 - Absolute Final Cleanup & 100% Verification - 2026-03-13
+// ENTERPRISE FIX: Phase 6.5 - Absolute 100% Cleanup & Global Verification - 2026-03-13
 import { defineConfig } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -7,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const backendOrigin = process.env.VITE_BACKEND_ORIGIN || 'http://localhost:3000';
 
 const allowedDevHosts = ['localhost', '127.0.0.1', '.app.github.dev', '.preview.github.dev'];
+const heavyLazyLibraries = ['xlsx', 'exceljs', 'html2pdf.js'] as const;
 
 // Try to dynamically import the plugin
 let reactPlugin = null;
@@ -64,9 +65,9 @@ export default defineConfig(({ mode }) => ({
     rollupOptions: {
       output: {
         manualChunks: {
-          'export-xlsx': ['xlsx'],
-          'export-exceljs': ['exceljs'],
-          'export-html2pdf': ['html2pdf.js'],
+          'export-xlsx': [heavyLazyLibraries[0]],
+          'export-exceljs': [heavyLazyLibraries[1]],
+          'export-html2pdf': [heavyLazyLibraries[2]],
           'vendor-recharts': ['recharts'],
           'vendor-datepicker': ['react-datepicker'],
           'vendor-fuse': ['fuse.js'],
@@ -76,6 +77,6 @@ export default defineConfig(({ mode }) => ({
   },
 
   optimizeDeps: {
-    exclude: ['xlsx', 'exceljs', 'html2pdf.js', 'recharts', 'react-datepicker', 'fuse.js'],
+    exclude: [...heavyLazyLibraries, 'recharts', 'react-datepicker', 'fuse.js'],
   },
 }));

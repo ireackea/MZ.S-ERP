@@ -1,17 +1,14 @@
-// ENTERPRISE FIX: Phase 3 - Full Legacy Removal & Complete Single Source of Truth - 2026-03-05
-// ENTERPRISE FIX: Phase 7 - Single Owner Pattern - 2026-03-01
-// Items.tsx - Single Owner of Items Data (state + sync + storage)
+// ENTERPRISE FIX: Phase 6.5 - Absolute 100% Cleanup & Global Verification - 2026-03-13
 
 import React, { FormEvent, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { CheckSquare, Edit3, Plus, Printer, RefreshCcw, Search, ShieldAlert, Square, Trash2 } from 'lucide-react';
 import { toast } from '@services/toastService';
-import { getAuthToken } from '../services/authService';
 import { usePermissions } from '@hooks/usePermissions';
 import { useSession } from '@hooks/useSession';
-import { addAuditLog } from '../services/legacy/storage';
+import { logUserActivity } from '../services/iamService';
 import type { Item, ItemSortMode } from '../types';
-import { useInventoryStore, sortItems, normOrder, read, write, SOFT_KEY, SORT_KEY, type SoftMap, type SortState, type ItemForm, type BulkForm } from '../store/useInventoryStore';
+import { useInventoryStore, sortItems, type ItemForm, type BulkForm } from '../store/useInventoryStore';
 
 const SORTS: Array<{ value: ItemSortMode; label: string }> = [
   { value: 'manual_locked', label: 'ترتيب يدوي مخصص' },
@@ -299,7 +296,7 @@ const ItemsPage: React.FC = () => {
               onClick={() => {
                 const ids = Array.from(selected);
                 softDelete(ids, actorName);
-                addAuditLog({ userId: actorId, userName: actorName, action: 'DELETE', entity: 'ITEM', details: `Soft delete (${ids.length})` });
+                logUserActivity({ userId: actorId, userName: actorName, event: 'items_soft_delete', details: `Soft delete (${ids.length})` });
                 toast.success('تم أرشفة الأصناف بنجاح');
                 setSelected(new Set());
               }}
@@ -313,7 +310,7 @@ const ItemsPage: React.FC = () => {
               onClick={() => {
                 const ids = Array.from(selected);
                 restore(ids);
-                addAuditLog({ userId: actorId, userName: actorName, action: 'UPDATE', entity: 'ITEM', details: `Restore (${ids.length})` });
+                logUserActivity({ userId: actorId, userName: actorName, event: 'items_restore', details: `Restore (${ids.length})` });
                 toast.success('تم استعادة الأصناف بنجاح');
                 setSelected(new Set());
               }}

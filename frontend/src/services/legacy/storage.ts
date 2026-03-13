@@ -1,4 +1,4 @@
-
+// ENTERPRISE FIX: Phase 6.5 - Absolute 100% Cleanup & Global Verification - 2026-03-13
 import { Item, Transaction, StockCheck, Partner, Order, User, Tag, SystemSettings, OperationAppearance, ReportColumnConfig, UnloadingRule, Formula, AuditLog, GridColumnPreference, UserGridPreference, ItemSortSettings } from '../../types';
 import { CATEGORIES as DEFAULT_CATEGORIES, INITIAL_ITEMS, UNITS } from '../../constants';
 import { cache } from './cacheService';
@@ -20,7 +20,6 @@ const OPENING_BALANCE_REPORT_CONFIG_KEY = 'feed_factory_opening_balance_report_c
 const ITEM_SORT_SETTINGS_KEY = 'feed_factory_item_sort_settings';
 const UNLOADING_RULES_KEY = 'feed_factory_unloading_rules';
 const FORMULAS_KEY = 'feed_factory_formulas';
-const AUDIT_LOGS_KEY = 'feed_factory_audit_logs';
 const INVENTORY_LEDGER_KEY = 'feed_factory_inventory_ledger';
 const STRICT_EMPTY_BOOT_KEY = 'feed_factory_strict_empty_boot';
 const USER_GRID_PREFERENCES_KEY = 'feed_factory_user_grid_preferences';
@@ -342,19 +341,9 @@ export const saveStockChecks = (checks: StockCheck[]) => saveToStorage(STOCK_CHE
 export const getFormulas = (): Formula[] => getFromStorage(FORMULAS_KEY, []);
 export const saveFormulas = (formulas: Formula[]) => saveToStorage(FORMULAS_KEY, formulas);
 
-// Audit Logs
-export const getAuditLogs = (): AuditLog[] => getFromStorage(AUDIT_LOGS_KEY, []);
-export const addAuditLog = (log: Omit<AuditLog, 'id' | 'timestamp'>) => {
-  const logs = getAuditLogs();
-  const newLog: AuditLog = {
-    id: crypto.randomUUID(),
-    timestamp: Date.now(),
-    ...log,
-    ipHash: 'simulated_hash_' + Math.random().toString(36).substring(7)
-  };
-  const updatedLogs = [newLog, ...logs].slice(0, 1000); 
-  saveToStorage(AUDIT_LOGS_KEY, updatedLogs);
-};
+// Audit Logs are no longer persisted in legacy storage.
+export const getAuditLogs = (): AuditLog[] => [];
+export const addAuditLog = (_log: Omit<AuditLog, 'id' | 'timestamp'>): void => undefined;
 
 // Ledger
 export interface LedgerEntry {

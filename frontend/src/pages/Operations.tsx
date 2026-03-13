@@ -1,22 +1,24 @@
-// ENTERPRISE FIX: Phase 3 - Full Legacy Removal & Complete Single Source of Truth - 2026-03-05
+// ENTERPRISE FIX: Phase 6.5 - Absolute 100% Cleanup & Global Verification - 2026-03-13
 import React, { useEffect, useMemo } from 'react';
 import DailyOperations from '../components/DailyOperations';
 import { getAuthUser } from '../services/authService';
 import {
-  getPartners,
-  getSettings,
-  getUnloadingRules,
-  saveTransactions,
-} from '../services/storage';
-import {
   bulkCreateTransactions,
   deleteTransactionsInApi,
-  getTransactionsFromApi,
   updateTransactionInApi,
 } from '../services/transactionsService';
 import { useInventoryStore } from '../store/useInventoryStore';
 import { toast } from '@services/toastService';
 import type { Partner, SystemSettings, Transaction, UnloadingRule } from '../types';
+
+const DEFAULT_SETTINGS: SystemSettings = {
+  companyName: '',
+  currency: 'EGP',
+  address: '',
+  phone: '',
+  defaultUnloadingDuration: 60,
+  defaultDelayPenalty: 0,
+};
 
 const OperationsPage: React.FC = () => {
   const items = useInventoryStore((state) => state.items);
@@ -26,9 +28,24 @@ const OperationsPage: React.FC = () => {
   const updateStockFromTransaction = useInventoryStore((state) => state.updateStockFromTransaction);
 
   const authUser = getAuthUser();
-  const partners = useMemo<Partner[]>(() => getPartners(), []);
-  const settings = useMemo<SystemSettings>(() => getSettings(), []);
-  const unloadingRules = useMemo<UnloadingRule[]>(() => getUnloadingRules(), []);
+  const partners = useMemo<Partner[]>(() => {
+    const uniqueNames = Array.from(
+      new Set(
+        transactions
+          .map((row) => String(row.supplierOrReceiver || '').trim())
+          .filter(Boolean)
+      )
+    );
+
+    return uniqueNames.map((name, index) => ({
+      id: `derived-partner-${index}`,
+      name,
+      type: 'supplier',
+      phone: '',
+    }));
+  }, [transactions]);
+  const settings = useMemo<SystemSettings>(() => DEFAULT_SETTINGS, []);
+  const unloadingRules = useMemo<UnloadingRule[]>(() => [], []);
 
   useEffect(() => {
     void loadAll();
@@ -45,15 +62,10 @@ const OperationsPage: React.FC = () => {
       const nextRows = created.length > 0 ? created : rows;
       const merged = [...transactions, ...nextRows];
       setInventoryTransactions(merged);
-      saveTransactions(merged);
       nextRows.forEach((row) => updateStockFromTransaction(row, 'add'));
     } catch (error) {
-      console.warn('[OperationsPage] Failed to create transactions in API, using local fallback:', error);
-      const merged = [...transactions, ...rows];
-      setInventoryTransactions(merged);
-      saveTransactions(merged);
-      rows.forEach((row) => updateStockFromTransaction(row, 'add'));
-      toast.error('تعذر مزامنة الحركات مع الخادم. تم حفظها محليًا فقط.');
+      console.error('[OperationsPage] Failed to create transactions in API:', error);
+      toast.error('تعذر إنشاء الحركات على الخادم. لم يتم تنفيذ حفظ محلي احتياطي.');
     }
   };
 
@@ -65,15 +77,10 @@ const OperationsPage: React.FC = () => {
       const saved = await updateTransactionInApi(row.id, row);
       const updated = transactions.map((entry) => (entry.id === saved.id ? saved : entry));
       setInventoryTransactions(updated);
-      saveTransactions(updated);
       updateStockFromTransaction(saved, 'update', previous);
     } catch (error) {
-      console.warn('[OperationsPage] Failed to update transaction in API, using local fallback:', error);
-      const updated = transactions.map((entry) => (entry.id === row.id ? row : entry));
-      setInventoryTransactions(updated);
-      saveTransactions(updated);
-      updateStockFromTransaction(row, 'update', previous);
-      toast.error('تعذر تحديث الحركة على الخادم. تم تحديث النسخة المحلية.');
+      console.error('[OperationsPage] Failed to update transaction in API:', error);
+      toast.error('تعذر تحديث الحركة على الخادم. لم يتم تطبيق fallback محلي.');
     }
   };
 
@@ -83,15 +90,10 @@ const OperationsPage: React.FC = () => {
       await deleteTransactionsInApi(ids);
       const nextRows = transactions.filter((row) => !ids.includes(String(row.id)));
       setInventoryTransactions(nextRows);
-      saveTransactions(nextRows);
       affected.forEach((row) => updateStockFromTransaction(row, 'remove'));
     } catch (error) {
-      console.warn('[OperationsPage] Failed to delete transactions in API, using local fallback:', error);
-      const nextRows = transactions.filter((row) => !ids.includes(String(row.id)));
-      setInventoryTransactions(nextRows);
-      saveTransactions(nextRows);
-      affected.forEach((row) => updateStockFromTransaction(row, 'remove'));
-      toast.error('تعذر حذف الحركات من الخادم. تمت إزالة النسخة المحلية.');
+      console.error('[OperationsPage] Failed to delete transactions in API:', error);
+      toast.error('تعذر حذف الحركات من الخادم. لم يتم تنفيذ fallback محلي.');
     }
   };
 
