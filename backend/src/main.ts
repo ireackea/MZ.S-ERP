@@ -1,5 +1,4 @@
-// ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
-// Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
+// ENTERPRISE FIX: Phase 7 - Production Deployment & Monitoring Setup - 2026-03-13
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
@@ -94,12 +93,80 @@ function requireJwtSecret() {
   }
 }
 
+type MetricsRegistry = {
+  startedAtMs: number;
+  requestsTotal: number;
+  requestDurationMsTotal: number;
+  statusCounts: Map<string, number>;
+  routeCounts: Map<string, number>;
+};
+
+function incrementCounter(bucket: Map<string, number>, key: string) {
+  bucket.set(key, (bucket.get(key) || 0) + 1);
+}
+
+function escapePrometheusLabel(value: string) {
+  return String(value || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, '\\n');
+}
+
+function renderMetrics(metrics: MetricsRegistry): string {
+  const memoryUsage = process.memoryUsage();
+  const lines = [
+    '# HELP process_uptime_seconds Node.js process uptime in seconds.',
+    '# TYPE process_uptime_seconds gauge',
+    `process_uptime_seconds ${process.uptime()}`,
+    '# HELP process_start_time_seconds Node.js process start time since unix epoch in seconds.',
+    '# TYPE process_start_time_seconds gauge',
+    `process_start_time_seconds ${Math.floor(metrics.startedAtMs / 1000)}`,
+    '# HELP nodejs_heap_used_bytes Used heap size in bytes.',
+    '# TYPE nodejs_heap_used_bytes gauge',
+    `nodejs_heap_used_bytes ${memoryUsage.heapUsed}`,
+    '# HELP nodejs_heap_total_bytes Total heap size in bytes.',
+    '# TYPE nodejs_heap_total_bytes gauge',
+    `nodejs_heap_total_bytes ${memoryUsage.heapTotal}`,
+    '# HELP nodejs_rss_bytes Resident set size in bytes.',
+    '# TYPE nodejs_rss_bytes gauge',
+    `nodejs_rss_bytes ${memoryUsage.rss}`,
+    '# HELP http_requests_total Total HTTP requests handled by the backend.',
+    '# TYPE http_requests_total counter',
+    `http_requests_total ${metrics.requestsTotal}`,
+    '# HELP http_request_duration_ms_sum Total accumulated HTTP request duration in milliseconds.',
+    '# TYPE http_request_duration_ms_sum counter',
+    `http_request_duration_ms_sum ${metrics.requestDurationMsTotal}`,
+  ];
+
+  metrics.statusCounts.forEach((count, statusCode) => {
+    lines.push(`http_requests_by_status_total{status_code="${escapePrometheusLabel(statusCode)}"} ${count}`);
+  });
+
+  metrics.routeCounts.forEach((count, route) => {
+    lines.push(`http_requests_by_route_total{route="${escapePrometheusLabel(route)}"} ${count}`);
+  });
+
+  return lines.join('\n');
+}
+
 async function bootstrap() {
   const envPath = loadBackendEnv();
   requireJwtSecret();
   const app = await NestFactory.create(AppModule);
   const expressApp = app.getHttpAdapter().getInstance();
+  const metrics: MetricsRegistry = {
+    startedAtMs: Date.now(),
+    requestsTotal: 0,
+    requestDurationMsTotal: 0,
+    statusCounts: new Map<string, number>(),
+    routeCounts: new Map<string, number>(),
+  };
+
   expressApp.set('trust proxy', 1);
+  expressApp.get('/metrics', (_req: Request, res: Response) => {
+    res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+    res.status(200).send(renderMetrics(metrics));
+  });
   app.setGlobalPrefix('api');
 
   const prisma = app.get(PrismaService);
@@ -153,12 +220,18 @@ async function bootstrap() {
   app.use((req: Request, res: Response, next: NextFunction) => {
     const start = Date.now();
     res.on('finish', () => {
+      const durationMs = Date.now() - start;
+      metrics.requestsTotal += 1;
+      metrics.requestDurationMsTotal += durationMs;
+      incrementCounter(metrics.statusCounts, String(res.statusCode));
+      incrementCounter(metrics.routeCounts, normalizeRequestPath(req));
+
       const logPayload = {
         event: 'http_request',
         method: req.method,
         path: normalizeRequestPath(req),
         statusCode: res.statusCode,
-        durationMs: Date.now() - start,
+        durationMs,
         ip: extractIp(req),
         userAgent: req.headers['user-agent'] || 'unknown',
         timestamp: new Date().toISOString(),
