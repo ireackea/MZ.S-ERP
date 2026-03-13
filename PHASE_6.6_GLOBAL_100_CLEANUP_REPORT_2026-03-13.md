@@ -3,11 +3,11 @@
 Date: 2026-03-13
 Repository: MZ.S-ERP
 Protocol: High-density surgical audit
-Scope executed: only the files explicitly allowed in the request, plus this mandatory report file.
+Scope executed: the originally allowed files, plus follow-up explicit permission from the user to finish the remaining global session cleanup in auth services.
 
 ## Executive Status
 
-Phase 6.6 was completed for the allowed files.
+Phase 6.6 was completed globally.
 
 Verified completed inside the allowed scope:
 - [frontend/src/pages/Items.tsx](frontend/src/pages/Items.tsx) remains Zustand-based and contains no InventoryContext or localStorage fallback path.
@@ -17,10 +17,12 @@ Verified completed inside the allowed scope:
 - [frontend/src/App.tsx](frontend/src/App.tsx) no longer falls back to local session resolution.
 - [frontend/src/store/useInventoryStore.ts](frontend/src/store/useInventoryStore.ts) now blocks both audit JSON keys and auth-session JSON keys.
 - [frontend/vite.config.ts](frontend/vite.config.ts) keeps heavy export libraries in dedicated lazy chunk boundaries.
+- [frontend/src/services/authController.ts](frontend/src/services/authController.ts) no longer persists session JSON and now delegates authenticated user state to auth service helpers.
+- [frontend/src/services/iamService.ts](frontend/src/services/iamService.ts) no longer persists current-session or user-session JSON locally.
 
 ## File-by-File Code Delta
 
-Measured with `git diff --numstat` for the allowed Phase 6.6 files.
+Measured with `git diff --numstat` for the original Phase 6.6 files plus the explicitly authorized follow-up auth/session cleanup files.
 
 1. [backend/src/audit/audit.service.ts](backend/src/audit/audit.service.ts)
 - Added: 1 line
@@ -68,6 +70,22 @@ Measured with `git diff --numstat` for the allowed Phase 6.6 files.
 - Removed: 1 line
 - Change summary:
   - Normalized Phase 6.6 header.
+
+8. [frontend/src/services/authController.ts](frontend/src/services/authController.ts)
+- Added: 33 lines
+- Removed: 73 lines
+- Change summary:
+  - Removed `feed_factory_auth_session` and `feed_factory_auth_session_persistent` persistence.
+  - Removed `getSessionFromStorage`, `saveSession`, and `clearSessionStorage` local JSON session flow.
+  - Switched `finalizeSuccessfulLogin`, `loginAsUser`, and `logout` to auth-service helpers.
+  - Reworked `resolveAuthenticatedUser` to derive from the authenticated user state instead of local session JSON.
+
+9. [frontend/src/services/iamService.ts](frontend/src/services/iamService.ts)
+- Added: 5 lines
+- Removed: 76 lines
+- Change summary:
+  - Removed `feed_factory_user_sessions` and `feed_factory_current_session_id` local session persistence.
+  - Replaced local session bookkeeping functions with compatibility no-op/empty-return implementations.
 
 ## Result of npm run build:full
 
@@ -169,6 +187,7 @@ Result:
 - No active audit JSON persistence path remains.
 - Remaining occurrences are only defensive forbidden-key guards in [frontend/src/store/useInventoryStore.ts](frontend/src/store/useInventoryStore.ts).
 - [frontend/src/services/legacy/storage.ts](frontend/src/services/legacy/storage.ts) returns empty audit logs and writes nothing.
+- [frontend/src/services/authController.ts](frontend/src/services/authController.ts) still imports `addAuditLog`, but it is a no-op compatibility shim and performs no persistence.
 
 Conclusion for audit logs:
 - Audit JSON persistence is globally removed.
@@ -181,11 +200,14 @@ Global search keys used:
 - `active-user-sessions`
 
 Result:
-- Defensive forbidden-key guards exist in [frontend/src/store/useInventoryStore.ts](frontend/src/store/useInventoryStore.ts).
-- Active session JSON persistence still exists in [frontend/src/services/authController.ts](frontend/src/services/authController.ts), which remains outside the allowed edit scope for this request.
+- No active session JSON persistence path remains.
+- Remaining occurrences are only:
+  - defensive forbidden-key guards in [frontend/src/store/useInventoryStore.ts](frontend/src/store/useInventoryStore.ts)
+  - auth-session change event naming in [frontend/src/services/authService.ts](frontend/src/services/authService.ts)
+  - auth storage cleanup key list in [frontend/src/services/authService.ts](frontend/src/services/authService.ts)
 
 Conclusion for sessions:
-- Session JSON persistence is not globally removed from the entire repository.
+- Session JSON persistence is globally removed.
 
 ## Production Readiness Verdict
 
@@ -196,4 +218,4 @@ Verdict for the allowed Phase 6.6 scope:
 
 Verdict for the stronger global claim:
 - Global audit JSON removal: verified
-- Global session JSON removal: not fully certifiable because [frontend/src/services/authController.ts](frontend/src/services/authController.ts) still persists session JSON outside the allowed edit scope
+- Global session JSON removal: verified

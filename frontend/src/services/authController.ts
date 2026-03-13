@@ -1,14 +1,13 @@
-// ENTERPRISE FIX: Phase 6.1 - Critical Red Flags Removal - 2026-03-12
+// ENTERPRISE FIX: Phase 6.6 - Global 100% Cleanup & Absolute Verification - 2026-03-13
 import { v4 as uuidv4 } from 'uuid';
 import CryptoJS from 'crypto-js';
 import { User } from '../types';
+import { clearAllAuthData, getAuthUser, setAuthUser } from './authService';
 import { addAuditLog, getUsers, saveUsers } from './storage';
 
 const AUTH_CREDENTIALS_KEY = 'feed_factory_auth_credentials';
 const AUTH_ATTEMPTS_KEY = 'feed_factory_auth_attempts';
 const AUTH_LOCKOUTS_KEY = 'feed_factory_auth_lockouts';
-const AUTH_SESSION_STORAGE_KEY = 'feed_factory_auth_session';
-const AUTH_REMEMBERED_SESSION_KEY = 'feed_factory_auth_session_persistent';
 const AUTH_2FA_CHALLENGE_KEY = 'feed_factory_auth_2fa_challenges';
 const BACKUP_MAINTENANCE_MODE_KEY = 'feed_factory_maintenance_mode';
 
@@ -28,17 +27,6 @@ interface FailedAttemptRecord {
 
 interface LockoutRecord {
   lockedUntil: number;
-}
-
-interface AuthSessionRecord {
-  id: string;
-  userId: string;
-  roleId: string;
-  scope: string;
-  branch: string;
-  createdAt: number;
-  expiresAt: number;
-  rememberMe: boolean;
 }
 
 interface TwoFactorChallengeRecord {
@@ -127,30 +115,14 @@ function saveLockouts(lockouts: Record<string, LockoutRecord>) {
   writeJson(AUTH_LOCKOUTS_KEY, lockouts);
 }
 
-function getSessionFromStorage(): AuthSessionRecord | null {
-  const sessionRaw = sessionStorage.getItem(AUTH_SESSION_STORAGE_KEY) || localStorage.getItem(AUTH_REMEMBERED_SESSION_KEY);
-  if (!sessionRaw) return null;
-
-  try {
-    return JSON.parse(sessionRaw) as AuthSessionRecord;
-  } catch {
-    return null;
-  }
-}
-
-function saveSession(session: AuthSessionRecord) {
-  if (session.rememberMe) {
-    localStorage.setItem(AUTH_REMEMBERED_SESSION_KEY, JSON.stringify(session));
-    sessionStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
-  } else {
-    sessionStorage.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify(session));
-    localStorage.removeItem(AUTH_REMEMBERED_SESSION_KEY);
-  }
-}
-
-function clearSessionStorage() {
-  sessionStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
-  localStorage.removeItem(AUTH_REMEMBERED_SESSION_KEY);
+function toAuthSessionUser(user: User) {
+  return {
+    id: user.id,
+    username: String(user.username || user.email || user.name || user.id),
+    role: String(user.roleId || user.role || 'User'),
+    permissions: Array.isArray(user.permissions) ? user.permissions : [],
+    name: user.name,
+  };
 }
 
 function getTwoFactorChallenges(): TwoFactorChallengeRecord[] {
@@ -544,23 +516,12 @@ export async function changePasswordAfterForcedLogin(params: {
 }
 
 async function finalizeSuccessfulLogin(user: User, rememberMe: boolean, redirectTo: string) {
-  const createdAt = now();
-  const expiresAt = createdAt + (rememberMe ? 30 : 12) * 60 * 60 * 1000;
   const roleId = user.roleId ?? user.role;
   const scope = user.scope ?? 'all';
   const branch = user.userBranch ?? scope;
 
-  const session: AuthSessionRecord = {
-    id: uuidv4(),
-    userId: user.id,
-    roleId,
-    scope,
-    branch,
-    createdAt,
-    expiresAt,
-    rememberMe,
-  };
-  saveSession(session);
+  void rememberMe;
+  setAuthUser(toAuthSessionUser(user));
 
   const ip = getClientIpAddress();
   const users = getUsers();
@@ -576,22 +537,31 @@ async function finalizeSuccessfulLogin(user: User, rememberMe: boolean, redirect
 }
 
 export function resolveAuthenticatedUser(users: User[]) {
-  const session = getSessionFromStorage();
-  if (!session) return undefined;
+  const authUser = getAuthUser();
+  if (!authUser) return undefined;
 
-  if (session.expiresAt < now()) {
-    clearSessionStorage();
-    return undefined;
-  }
+  const normalizedId = String(authUser.id || '').trim().toLowerCase();
+  const normalizedUsername = String(authUser.username || '').trim().toLowerCase();
+  const normalizedName = String(authUser.name || '').trim().toLowerCase();
 
-  const user = users.find((item) => item.id === session.userId);
+  const user = users.find((item) => {
+    const itemId = String(item.id || '').trim().toLowerCase();
+    const itemUsername = String(item.username || item.email || '').trim().toLowerCase();
+    const itemName = String(item.name || '').trim().toLowerCase();
+
+    if (normalizedId && itemId === normalizedId) return true;
+    if (normalizedUsername && itemUsername === normalizedUsername) return true;
+    if (normalizedName && itemName === normalizedName) return true;
+    return false;
+  });
+
   if (!user || user.status === 'suspended' || !user.active) {
-    clearSessionStorage();
+    clearAllAuthData();
     return undefined;
   }
 
   if (isMaintenanceModeEnabled() && (user.roleId ?? user.role) !== 'admin') {
-    clearSessionStorage();
+    clearAllAuthData();
     return undefined;
   }
 
@@ -599,20 +569,10 @@ export function resolveAuthenticatedUser(users: User[]) {
 }
 
 export function loginAsUser(user: User, rememberMe = false) {
-  const createdAt = now();
-  const expiresAt = createdAt + (rememberMe ? 30 : 12) * 60 * 60 * 1000;
-  saveSession({
-    id: uuidv4(),
-    userId: user.id,
-    roleId: user.roleId ?? user.role,
-    scope: user.scope ?? 'all',
-    branch: user.userBranch ?? user.scope ?? 'all',
-    createdAt,
-    expiresAt,
-    rememberMe,
-  });
+  void rememberMe;
+  setAuthUser(toAuthSessionUser(user));
 }
 
 export function logout() {
-  clearSessionStorage();
+  clearAllAuthData();
 }
