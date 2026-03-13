@@ -35,7 +35,8 @@
     "dev:full": "concurrently -n \"BACKEND,FRONTEND\" -c \"bgBlue,bgGreen\" \"npm run backend:dev\" \"npm run frontend:dev\"",
     "start:backend": "npm run backend:dev",
     "start:frontend": "npm run frontend:dev",
-    "db:sync": "npm run prisma:generate && npm run prisma:migrate:dev"
+    "db:sync": "npm run prisma:generate && npm run prisma:migrate:dev",
+    "lint": "echo 'Linting skipped at root'"
   },
   "devDependencies": {
     "@rollup/rollup-win32-x64-msvc": "^4.59.0",
