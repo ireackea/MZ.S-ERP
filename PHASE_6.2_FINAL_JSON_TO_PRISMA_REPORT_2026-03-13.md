@@ -20,6 +20,7 @@ The runtime cutover is now active in the backend:
 - backend/src/auth/jwt-auth.guard.ts now uses an AuditService instance initialized consistently with Prisma support and optional DI fallback
 - backend/src/main.ts configures the shared Prisma-backed AuditService during bootstrap
 - backend/src/users/users.service.ts uses Prisma-backed AuditService consistently
+- backend/src/users/users.service.ts no longer depends on users-audit-log.json and now serves user audit history from Prisma-backed audit logs
 
 ## Legacy File Isolation
 
@@ -76,6 +77,7 @@ What is now true:
 
 - audit log persistence is database-backed for the cutover path
 - active session persistence is database-backed for the cutover path
+- user audit history retrieval is database-backed for the users module path
 - the backend builds successfully after the cutover fixes
 - the live authentication flow was verified against Prisma-backed storage
 - legacy active JSON files for these two runtime concerns are no longer left in the active backup root
@@ -85,3 +87,5 @@ What is now true:
 This phase closes the specific red flag around `security-audit-log.json` and `active-user-sessions.json` as runtime persistence sources.
 
 Other JSON files under backend/backups, such as scheduling or module-specific files, were not changed unless directly related to this cutover.
+
+The remaining JSON classification was documented separately to distinguish legitimate backup-module metadata from runtime state that should no longer be treated as a source of truth.

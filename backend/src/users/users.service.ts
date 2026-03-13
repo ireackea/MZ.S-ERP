@@ -57,7 +57,6 @@ export class UsersService {
     actorId?: string;
     timestamp: string;
   }>();
-  private readonly auditFilePath = path.resolve(process.cwd(), 'backups', 'users-audit-log.json');
   private readonly invitationOutboxPath = path.resolve(process.cwd(), 'backups', 'invitation-emails-outbox.json');
   private readonly auditService: AuditService;
 
@@ -575,11 +574,14 @@ export class UsersService {
   }
 
   async getAuditLog(userId: string, limit = 200) {
-    const entries = await this.readAudit();
+    const take = Math.max(1, Math.min(1000, Number(limit || 200)));
+    const entries = await this.auditService.listLogs({ limit: take * 3 });
+
     return entries
-      .filter((entry) => entry.userId === userId)
-      .sort((a, b) => (a.timestamp > b.timestamp ? -1 : 1))
-      .slice(0, Math.max(1, Math.min(1000, Number(limit || 200))));
+      .filter((entry) => entry.targetUserId === userId)
+      .map((entry) => this.toUserAuditLog(entry, userId))
+      .filter((entry): entry is UserAuditLog => Boolean(entry))
+      .slice(0, take);
   }
 
   async updateRolePermissions(roleId: string, dto: UpdateRolePermissionsDto, actor: ActorContext) {
@@ -830,47 +832,65 @@ export class UsersService {
     await fs.writeFile(this.invitationOutboxPath, JSON.stringify(next, null, 2), 'utf8');
   }
 
-  private async readAudit(): Promise<UserAuditLog[]> {
-    try {
-      const raw = await fs.readFile(this.auditFilePath, 'utf8');
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? (parsed as UserAuditLog[]) : [];
-    } catch {
-      return [];
-    }
-  }
-
   private async writeAudit(params: {
     userId: string;
     actor: ActorContext;
     action: UserAuditLog['action'];
     details: string;
   }) {
-    const current = await this.readAudit();
-    const nextEntry: UserAuditLog = {
-      id: crypto.randomUUID(),
-      userId: params.userId,
-      actorId: params.actor.id,
-      actorUsername: params.actor.username,
-      actorRole: params.actor.role,
-      action: params.action,
-      details: params.details,
-      timestamp: new Date().toISOString(),
-    };
-    const next = [nextEntry, ...current].slice(0, 5000);
-    await fs.mkdir(path.dirname(this.auditFilePath), { recursive: true });
-    await fs.writeFile(this.auditFilePath, JSON.stringify(next, null, 2), 'utf8');
-
     await this.auditService.log({
       action: this.mapLegacyAction(params.action),
       actorId: params.actor.id,
       actorUsername: params.actor.username,
       actorRole: params.actor.role,
-      targetUserId: params.userId,
-      targetResource: 'users.legacy.audit',
+      targetUserId: params.userId === 'bulk' ? undefined : params.userId,
+      targetResource: 'users.audit',
       status: 'success',
       message: params.details,
     });
+  }
+
+  private toUserAuditLog(entry: Awaited<ReturnType<AuditService['listLogs']>>[number], userId: string): UserAuditLog | null {
+    const action = this.mapAuditActionToUserAction(entry.action);
+    if (!action) return null;
+
+    return {
+      id: entry.id,
+      userId,
+      actorId: entry.actorId,
+      actorUsername: entry.actorUsername,
+      actorRole: entry.actorRole,
+      action,
+      details: entry.message,
+      timestamp: entry.timestamp,
+    };
+  }
+
+  private mapAuditActionToUserAction(action: string): UserAuditLog['action'] | null {
+    switch (action) {
+      case 'USER_CREATE':
+        return 'create';
+      case 'USER_UPDATE':
+        return 'update';
+      case 'USER_LOCK':
+        return 'lock';
+      case 'USER_UNLOCK':
+        return 'unlock';
+      case 'USER_DELETE':
+        return 'delete';
+      case 'ROLE_PERMISSIONS_UPDATE':
+        return 'role_permissions_update';
+      case 'BULK_ASSIGN_ROLE':
+        return 'bulk_assign_role';
+      case 'BULK_DELETE_USERS':
+        return 'bulk_delete';
+      case 'INVITATION_SENT':
+        return 'invite';
+      case 'INVITATION_ACCEPTED':
+        return 'accept_invitation';
+      default:
+        return null;
+    }
   }
 
   private mapLegacyAction(action: UserAuditLog['action']) {
