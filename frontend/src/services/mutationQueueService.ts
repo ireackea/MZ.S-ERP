@@ -19,6 +19,7 @@ export const mutationQueueService = {
 
   init() {
     if (typeof window === 'undefined') return;
+    if (typeof indexedDB === 'undefined') return;
     this.dbPromise = new Promise((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
       request.onerror = () => reject(request.error);
@@ -35,7 +36,8 @@ export const mutationQueueService = {
   async enqueue(url: string, method: string, body: any) {
     // ENTERPRISE FIX: Phase 1.5 - PWA + Background Sync - 2026-03-02
     if (!this.dbPromise) this.init();
-    const db = await this.dbPromise!;
+    if (!this.dbPromise) return;
+    const db = await this.dbPromise;
     const task: MutationTask = {
       id: crypto.randomUUID(),
       url,
@@ -65,7 +67,8 @@ export const mutationQueueService = {
 
   async getQueue(): Promise<MutationTask[]> {
     if (!this.dbPromise) this.init();
-    const db = await this.dbPromise!;
+    if (!this.dbPromise) return [];
+    const db = await this.dbPromise;
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
@@ -76,7 +79,8 @@ export const mutationQueueService = {
   },
 
   async clearTask(id: string) {
-    const db = await this.dbPromise!;
+    if (!this.dbPromise) return;
+    const db = await this.dbPromise;
     return new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);

@@ -71,7 +71,7 @@ interface StocktakingPrintConfig {
   mergeColumns: boolean;
   mergeStrength: number;
   fontSize: number;
-  printSignatureBoxHeight?: number; // 7�7�7�8~7�7� 8&7�7�7�7�7� 7�87�8�7�88y7� 7�7�87�8�7�8
+  printSignatureBoxHeight?: number; // 7778~77 8&77777 7878788y7 7787878
   tableFontSize: number;
   showBorders: boolean;
   zebraStriping: boolean;
@@ -150,10 +150,10 @@ const getCardKeyForRow = (row: MonthlyAuditRow, categoryRaw: string | undefined)
   const itemName = normalizeText(row.itemName);
 
   if (category === 'مركّزات' || category === '8&78777') return 'concentrates';
-  if (category === 'مواد أولية' || category === 'مواد خام' || category === '8&877 7888y7') return 'rawMaterials';
+  if (category === 'مواد أولية' || category === 'مواد خام' || category === '8&877 7888y7') return 'rawMaterials';
   if (category === 'أكياس' || category === 'أجولة' || category === '788y77') return 'bags';
-  if (category === 'خيط خياطة' || category === 'خيط الخياطة' || category === '78y7 7878' || category === '78y7 787878') return 'bagThread';
-  if (category === 'كروت بيانات' || category === 'كروت بلاستيك' || category === 'كروت' || category === '8787 778y77' || category === '8787 878y8&7' || category === '8787') return 'cards';
+  if (category === 'خيط خياطة' || category === 'خيط الخياطة' || category === '78y7 7878' || category === '78y7 787878') return 'bagThread';
+  if (category === 'كروت بيانات' || category === 'كروت بلاستيك' || category === 'كروت' || category === '8787 778y77' || category === '8787 878y8&7' || category === '8787') return 'cards';
 
   if (category.includes('خيط') && category.includes('خياطة')) return 'bagThread';
 
@@ -1262,14 +1262,14 @@ const Stocktaking: React.FC<StocktakingProps> = ({
         <div className="space-y-4">
           <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-wrap gap-2 items-center justify-between">
             <div className="text-sm text-slate-700 font-bold">
-              7�88~7�7�7� 7�88&7�7�7�7�8y7�: {start.toLocaleDateString('en-GB')} 7�880 {end.toLocaleDateString('en-GB')}
+              788~777 788&77778y7: {start.toLocaleDateString('en-GB')} 7880 {end.toLocaleDateString('en-GB')}
             </div>
             <div className="flex flex-wrap gap-2">
-              <button className="px-3 py-2 rounded-lg border border-indigo-300 bg-indigo-50 text-indigo-700 text-sm font-bold" onClick={() => setShowPrintStudio(true)}><Printer size={14} className="inline ml-1" /> 7�7�7�8�7�8y8� 7�87�7�7�7�7�</button>
-              <button className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-bold" onClick={() => signedPdfInputRef.current?.click()}><FileUp size={14} className="inline ml-1" /> 7�8~7� PDF 8&7�7�8&7� 8y7�8�8y7�89</button>
-              <input ref={signedPdfInputRef} type="file" title="7�8~7� 8&88~ PDF 8&7�7�8&7�" accept="application/pdf" className="hidden" onChange={(event) => { void handleUploadSignedPdf(event.target.files?.[0] || null); event.currentTarget.value = ''; }} />
+              <button className="px-3 py-2 rounded-lg border border-indigo-300 bg-indigo-50 text-indigo-700 text-sm font-bold" onClick={() => setShowPrintStudio(true)}><Printer size={14} className="inline ml-1" /> 777878y8 7877777</button>
+              <button className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-bold" onClick={() => signedPdfInputRef.current?.click()}><FileUp size={14} className="inline ml-1" /> 78~7 PDF 8&778&7 8y788y789</button>
+              <input ref={signedPdfInputRef} type="file" title="" accept="application/pdf" className="hidden" onChange={(event) => { void handleUploadSignedPdf(event.target.files?.[0] || null); event.currentTarget.value = ''; }} />
               <button className="px-3 py-2 rounded-lg bg-slate-900 text-white text-sm font-bold disabled:opacity-60" onClick={() => void handleCloseMonth()} disabled={isClosing || isClosed}>
-                <CheckCircle2 size={14} className="inline ml-1" /> {isClosing ? '7�7�7�8� 7�87�7�7�8&7�7�...' : '7�7�7�8&7�7� 8�7�787�8 7�87�8!7�'}
+                <CheckCircle2 size={14} className="inline ml-1" /> {isClosing ? '7778 787778&77...' : '7778&77 877878 7878!7'}
               </button>
             </div>
           </div>
@@ -1280,8 +1280,8 @@ const Stocktaking: React.FC<StocktakingProps> = ({
 
           {(session.archivedPdfName || session.manualSignedPdfName) && (
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-sm text-emerald-800">
-              {session.archivedPdfName ? <div>7�7�7�8y8~ 7�88 7�7�8&: {session.archivedPdfName}</div> : null}
-              {session.manualSignedPdfName ? <div>7�88&88~ 7�88&7�7�8&7� 8y7�8�8y7�89: {session.manualSignedPdfName}</div> : null}
+              {session.archivedPdfName ? <div>7778y8~ 788 778&: {session.archivedPdfName}</div> : null}
+              {session.manualSignedPdfName ? <div>788&88~ 788&778&7 8y788y789: {session.manualSignedPdfName}</div> : null}
             </div>
           )}
         </div>
@@ -1292,77 +1292,77 @@ const Stocktaking: React.FC<StocktakingProps> = ({
           <div className="h-full w-full bg-slate-100 flex flex-col">
             <div className="bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between gap-3">
               <div>
-                <h3 className="font-bold text-slate-800 flex items-center gap-2"><Printer size={18} className="text-indigo-600" /> 7�7�7�8�7�8y8� 7�87�7�7�7�7� - 87�8& 7�87�7�7�</h3>
-                <p className="text-xs text-slate-500">8 7�7�7� 8&7�87�8&7� 8&8  7�7�7�8�7�8y8� 7�87�7�7�7�7� 8&7� 8&7�7�8y8 7� 8&7�7�7�7�7� 8&7�8�7�8~87� 8&7� 7�87�7�8y7� 7�87�7�7�.</p>
+                <h3 className="font-bold text-slate-800 flex items-center gap-2"><Printer size={18} className="text-indigo-600" /> 777878y8 7877777 - 878& 78777</h3>
+                <p className="text-xs text-slate-500">8 777 8&7878&7 8&8  777878y8 7877777 8&7 8&778y8 7 8&77777 8&7878~87 8&7 78778y7 78777.</p>
               </div>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
                   value={printTemplateName}
                   onChange={(e) => setPrintTemplateName(e.target.value)}
-                  placeholder="7�7�8& 7�887�87� (8&7�7�8: 7�87�8y7� 7�88&7�8y7�)"
-                  title="7�7�8& 87�87� 7�87�7�7�7�7�"
+                  placeholder=""
+                  title=""
                   className="px-3 py-2 border border-slate-300 rounded-lg text-xs min-w-52"
                 />
-                <button onClick={savePrintTemplate} className="px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg hover:bg-slate-50">7�8~7� 87�87�</button>
+                <button onClick={savePrintTemplate} className="px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg hover:bg-slate-50">78~7 8787</button>
                 <select
                   className="px-3 py-2 border border-slate-300 rounded-lg text-xs"
                   value={selectedTemplateId}
-                  title="7�7�8&8y8 87�87� 8&7�8~8�7�"
+                  title=""
                   onChange={(e) => applyPrintTemplate(e.target.value)}
                 >
-                  <option value="">7�7�8&8y8 87�87� 8&7�8~8�7�...</option>
+                  <option value="">778&8y8 8787 8&78~87...</option>
                   {printTemplates.map((template) => (
                     <option key={template.id} value={template.id}>{template.name}</option>
                   ))}
                 </select>
-                <button onClick={deleteSelectedPrintTemplate} className="px-3 py-2 text-xs bg-red-50 border border-red-200 text-red-700 rounded-lg hover:bg-red-100">7�7�8~ 87�87�</button>
-                <button onClick={() => setShowPrintStudio(false)} className="px-3 py-2 rounded-lg border border-slate-300 text-slate-600 hover:text-red-600">7�787�8</button>
+                <button onClick={deleteSelectedPrintTemplate} className="px-3 py-2 text-xs bg-red-50 border border-red-200 text-red-700 rounded-lg hover:bg-red-100">778~ 8787</button>
+                <button onClick={() => setShowPrintStudio(false)} className="px-3 py-2 rounded-lg border border-slate-300 text-slate-600 hover:text-red-600">77878</button>
               </div>
             </div>
 
             <div className="flex-1 grid grid-cols-12 min-h-0">
               <div className="col-span-3 border-r border-slate-200 bg-white overflow-y-auto">
                 <div className="p-3 border-b border-slate-200 bg-slate-50 flex gap-2">
-                  <button onClick={() => setActivePrintTab('layout')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${activePrintTab === 'layout' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-300 text-slate-600'}`}>7�87�7�7�8y7�</button>
-                  <button onClick={() => setActivePrintTab('content')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${activePrintTab === 'content' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-300 text-slate-600'}`}>7�88&7�7�8�80</button>
-                  <button onClick={() => setActivePrintTab('branding')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${activePrintTab === 'branding' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-300 text-slate-600'}`}>7�87�87�8&7�7�</button>
+                  <button onClick={() => setActivePrintTab('layout')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${activePrintTab === 'layout' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-300 text-slate-600'}`}>787778y7</button>
+                  <button onClick={() => setActivePrintTab('content')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${activePrintTab === 'content' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-300 text-slate-600'}`}>788&77880</button>
+                  <button onClick={() => setActivePrintTab('branding')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${activePrintTab === 'branding' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-300 text-slate-600'}`}>787878&77</button>
                 </div>
 
                 <div className="p-4 space-y-4 text-xs">
                   {activePrintTab === 'layout' && (
                     <>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">7�8 8�7�8  7�87�87�8y7�</label>
-                        <input title="7�8 8�7�8  7�87�87�8y7�" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.reportTitle} onChange={(e) => setPrintConfig((prev) => ({ ...prev, reportTitle: e.target.value }))} />
+                        <label className="block text-slate-500 mb-1 font-bold">78 878  787878y7</label>
+                        <input title="" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.reportTitle} onChange={(e) => setPrintConfig((prev) => ({ ...prev, reportTitle: e.target.value }))} />
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">7�7�7�7�8! 7�87�8~7�7�</label>
-                        <select title="7�7�7�7�8! 7�87�8~7�7�" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.orientation} onChange={(e) => setPrintConfig((prev) => ({ ...prev, orientation: e.target.value as StocktakingPrintConfig['orientation'] }))}>
-                          <option value="portrait">7�8�88y</option>
-                          <option value="landscape">7�7�7�8y</option>
+                        <label className="block text-slate-500 mb-1 font-bold">77778! 7878~77</label>
+                        <select title="" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.orientation} onChange={(e) => setPrintConfig((prev) => ({ ...prev, orientation: e.target.value as StocktakingPrintConfig['orientation'] }))}>
+                          <option value="portrait">7888y</option>
+                          <option value="landscape">7778y</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">8&87�7� 7�88�7�8</label>
-                        <select title="8&87�7� 7�88�7�8" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.paperSize} onChange={(e) => setPrintConfig((prev) => ({ ...prev, paperSize: e.target.value as StocktakingPrintConfig['paperSize'] }))}>
+                        <label className="block text-slate-500 mb-1 font-bold">8&877 78878</label>
+                        <select title="" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.paperSize} onChange={(e) => setPrintConfig((prev) => ({ ...prev, paperSize: e.target.value as StocktakingPrintConfig['paperSize'] }))}>
                           <option value="a4">A4</option>
                           <option value="a3">A3</option>
                           <option value="legal">Legal</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">7�88!8�7�8&7�</label>
-                        <select title="7�88!8�7�8&7�" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.margins} onChange={(e) => setPrintConfig((prev) => ({ ...prev, margins: e.target.value as StocktakingPrintConfig['margins'] }))}>
-                          <option value="narrow">7�8y87�</option>
-                          <option value="normal">8&7�8�7�7�7�</option>
-                          <option value="wide">8�7�7�7�7�</option>
+                        <label className="block text-slate-500 mb-1 font-bold">788!878&7</label>
+                        <select title="" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.margins} onChange={(e) => setPrintConfig((prev) => ({ ...prev, margins: e.target.value as StocktakingPrintConfig['margins'] }))}>
+                          <option value="narrow">78y87</option>
+                          <option value="normal">8&78777</option>
+                          <option value="wide">87777</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">7�7� 7�87�8~7�7� 8&8  7�87�7�880 ({printConfig.topPageMarginMm}mm)</label>
+                        <label className="block text-slate-500 mb-1 font-bold">77 7878~77 8&8  7877880 ({printConfig.topPageMarginMm}mm)</label>
                         <input
-                          title="7�7� 7�87�8~7�7� 8&8  7�87�7�880"
+                          title=""
                           type="range"
                           min={0}
                           max={50}
@@ -1372,9 +1372,9 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">7�7� 7�87�8~7�7� 8&8  7�87�7�8~8 ({printConfig.bottomPageMarginMm}mm)</label>
+                        <label className="block text-slate-500 mb-1 font-bold">77 7878~77 8&8  78778~8 ({printConfig.bottomPageMarginMm}mm)</label>
                         <input
-                          title="7�7� 7�87�8~7�7� 8&8  7�87�7�8~8"
+                          title=""
                           type="range"
                           min={0}
                           max={50}
@@ -1384,7 +1384,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                         />
                       </div>
                       <label className="flex items-center justify-between p-2 border border-slate-200 rounded-lg">
-                        <span>7�7�7�8y8 7�887�7�8y 7�8y8  7�87�8~7�7�7�</span>
+                        <span>7778y8 788778y 78y8  7878~777</span>
                         <input
                           type="checkbox"
                           checked={printConfig.smartPaginationEnabled}
@@ -1394,9 +1394,9 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                       {printConfig.smartPaginationEnabled && (
                         <>
                           <div>
-                            <label className="block text-slate-500 mb-1 font-bold">8 7�7�7� 7�8&7�87�7 7�87�8~7�7� 87�8 7�87�7�7�8y8 ({printConfig.pageFillPercent}%)</label>
+                            <label className="block text-slate-500 mb-1 font-bold">8 777 78&7877 7878~77 878 787778y8 ({printConfig.pageFillPercent}%)</label>
                             <input
-                              title="8 7�7�7� 7�8&7�87�7 7�87�8~7�7� 87�8 7�87�7�7�8y8"
+                              title=""
                               type="range"
                               min={80}
                               max={99}
@@ -1406,9 +1406,9 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                             />
                           </div>
                           <div>
-                            <label className="block text-slate-500 mb-1 font-bold">8!7�8&7� 7�87�8&7�8  887�7�7�8y8 ({printConfig.pageSafetyRows} 7�8~)</label>
+                            <label className="block text-slate-500 mb-1 font-bold">8!78&7 7878&78  887778y8 ({printConfig.pageSafetyRows} 78~)</label>
                             <input
-                              title="8!7�8&7� 7�87�8&7�8  887�7�7�8y8"
+                              title=""
                               type="range"
                               min={0}
                               max={6}
@@ -1418,7 +1418,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                             />
                           </div>
                           <label className="flex items-center justify-between p-2 border border-slate-200 rounded-lg">
-                            <span>7�8�7�7�7� 7�7�7� 7�87�87�8y7� 8~8y 8�8 7�8~7�7�</span>
+                            <span>78777 777 787878y7 8~8y 88 78~77</span>
                             <input
                               type="checkbox"
                               checked={printConfig.repeatHeaderEachPage}

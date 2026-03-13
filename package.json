@@ -38,7 +38,9 @@
     "db:sync": "npm run prisma:generate && npm run prisma:migrate:dev"
   },
   "devDependencies": {
-    "@rollup/rollup-win32-x64-msvc": "^4.59.0",
     "concurrently": "^9.2.1"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-win32-x64-msvc": "^4.59.0"
   }
 }
