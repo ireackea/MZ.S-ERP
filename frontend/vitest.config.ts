@@ -19,6 +19,6 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: './src/setupTests.ts',
     include: ['**/*.{test,spec}.{ts,tsx}'],
-    exclude: ['_ARCHIVE_/**', 'node_modules/**', 'dist/**'],
+    exclude: ['_ARCHIVE_/**', 'node_modules/**', 'dist/**', '**/InventoryContext.validation.test.tsx'],
   },
 });

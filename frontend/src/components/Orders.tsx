@@ -15,6 +15,8 @@ interface OrdersProps {
   onAddOrder: (order: Order) => void;
   onUpdateOrder: (order: Order) => void;
   onCompleteOrder: (order: Order) => void; // Trigger transaction creation
+  canExport?: boolean;
+  onExport?: (rowCount: any) => void;
 }
 
 const Orders: React.FC<OrdersProps> = ({ orders, items, partners, onAddOrder, onUpdateOrder, onCompleteOrder }) => {

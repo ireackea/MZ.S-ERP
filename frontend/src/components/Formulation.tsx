@@ -4,7 +4,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Beaker, Edit2, Plus, Search, Trash2 } from 'lucide-react';
 import { toast } from '@services/toastService';
-import FormulationForm from './FormulationForm';
+import FormulationForm, { type FormulationDraft } from './FormulationForm';
 import type { Formula, Item } from '../types';
 import { useInventoryStore } from '../store/useInventoryStore';
 
@@ -253,9 +253,9 @@ const Formulation: React.FC<FormulationProps> = ({
         isOpen={isModalOpen}
         mode={editingFormula ? 'edit' : 'create'}
         items={items}
-        initialValue={editingFormula}
+        initialValue={editingFormula as unknown as FormulationDraft}
         isSubmitting={isSubmitting}
-        onSubmit={handleSave}
+        onSubmit={handleSave as unknown as (draft: FormulationDraft) => void | Promise<void>}
         onClose={() => {
           setIsModalOpen(false);
           setEditingFormula(null);
