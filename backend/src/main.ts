@@ -54,6 +54,13 @@ function isTrustedLocalOrigin(origin: string): boolean {
   return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
 }
 
+function isCodespacesOrigin(origin: string): boolean {
+  // Allow GitHub Codespaces forwarded ports (*.app.github.dev).
+  // This is intentionally broad to support any Codespace in this org;
+  // tighten by setting CORS_ORIGINS to the exact Codespace URL in production.
+  return /^https:\/\/[a-z0-9-]+-\d+\.app\.github\.dev(:\d+)?$/i.test(origin);
+}
+
 function extractIp(req: Request): string {
   const forwarded = req.headers['x-forwarded-for'];
   if (Array.isArray(forwarded) && forwarded[0]) return forwarded[0].split(',')[0].trim();
@@ -153,6 +160,7 @@ async function bootstrap() {
         return callback(null, true);
       }
       if (isTrustedLocalOrigin(normalizedOrigin)) return callback(null, true);
+      if (isCodespacesOrigin(normalizedOrigin)) return callback(null, true);
       return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,

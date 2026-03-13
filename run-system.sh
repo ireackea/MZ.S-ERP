@@ -169,14 +169,15 @@ clear_cache() {
 run_health_check() {
     log_step "Running health check..."
     
+    local BACKEND_PORT="${BACKEND_PORT:-3001}"
     # Wait for backend to start
     log_info "Waiting for backend to be ready (max 30 seconds)..."
     MAX_ATTEMPTS=30
     ATTEMPT=0
     
     while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-        if curl -s http://localhost:3000/api/health &> /dev/null; then
-            HEALTH_RESPONSE=$(curl -s http://localhost:3000/api/health)
+        if curl -s "http://localhost:${BACKEND_PORT}/api/health" &> /dev/null; then
+            HEALTH_RESPONSE=$(curl -s "http://localhost:${BACKEND_PORT}/api/health")
             log_success "Backend health check passed: $HEALTH_RESPONSE"
             return 0
         fi
@@ -194,12 +195,13 @@ run_health_check() {
 
 launch_system() {
     log_step "Step 3: Launching Backend & Frontend in Watch Mode..."
+    local BACKEND_PORT="${BACKEND_PORT:-3001}"
     echo ""
     echo "============================================================================="
     echo "  FeedFactory Pro Enterprise System"
-    echo "  - Backend:  http://localhost:3000"
+    echo "  - Backend:  http://localhost:${BACKEND_PORT}"
     echo "  - Frontend: http://localhost:5173"
-    echo "  - Health:   http://localhost:3000/api/health"
+    echo "  - Health:   http://localhost:${BACKEND_PORT}/api/health"
     echo "============================================================================="
     echo ""
     
@@ -230,6 +232,15 @@ main() {
     
     # Parse command line arguments
     case "${1:-full}" in
+        "codespaces")
+            log_info "Running system startup for GitHub Codespaces..."
+            export BACKEND_PORT="${BACKEND_PORT:-3001}"
+            log_info "Backend port: $BACKEND_PORT | Frontend port: 5173"
+            log_info "Ensure ports $BACKEND_PORT and 5173 are forwarded in your Codespace."
+            preflight_checks
+            clear_cache
+            launch_system
+            ;;
         "full")
             log_info "Running FULL system startup..."
             preflight_checks
@@ -256,8 +267,9 @@ main() {
             echo "Usage: $0 [command]"
             echo ""
             echo "Commands:"
-            echo "  full     - Full system startup (default)"
-            echo "  no-db    - Start without database sync"
+            echo "  full       - Full system startup (default)"
+            echo "  codespaces - Start in GitHub Codespaces mode (no DB sync)"
+            echo "  no-db      - Start without database sync"
             echo "  health   - Run health check only"
             echo "  clean    - Clean cache only"
             echo "  help     - Show this help message"
