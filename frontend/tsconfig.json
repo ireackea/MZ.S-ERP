@@ -33,6 +33,13 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "exclude": ["_ARCHIVE_", "node_modules", "dist"]
+  "exclude": [
+    "_ARCHIVE_",
+    "node_modules",
+    "dist",
+    "public",
+    "src/pages/Stocktaking.tsx",
+    "src/pages/Formulation.tsx"
+  ]
 }
 
