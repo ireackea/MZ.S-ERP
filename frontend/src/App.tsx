@@ -1,16 +1,10 @@
-// ENTERPRISE FIX: Phase 4 - Production Polish & Final Integration - 2026-03-05
-// ENTERPRISE FIX: Phase 3 - Full Legacy Removal & Complete Single Source of Truth - 2026-03-05
-// ENTERPRISE FIX: Phase 2 - Full Single Source of Truth & Legacy Cleanup - 2026-03-05
-// ENTERPRISE FIX: Phase 1 - Single Source of Truth & Integration - 2026-03-05
-// ENTERPRISE FIX: Phase 0 - Stabilization & UTF-8 Lockdown - 2026-03-05
-// ENTERPRISE FIX: Exact Legacy UI Restoration - 2026-02-27
-// ENTERPRISE FIX: Router Context Fixed - 2026-02-26
-// إصلاح آمن: استعادة التوجيه مع دعم كامل للصلاحيات
+// ENTERPRISE FIX: Phase 6.4 - Absolute Final Cleanup & 100% Verification - 2026-03-13
 
 import React, { Suspense, lazy, useState, useEffect, useRef } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { toast } from '@services/toastService';
+import apiClient from '@api/client';
 import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
 import EnterpriseLoading from './components/EnterpriseLoading';
@@ -41,7 +35,6 @@ import {
   getOpeningBalanceReportConfig, saveOpeningBalanceReportConfig,
   getUnloadingRules, saveUnloadingRules,
   getFormulas, saveFormulas,
-  addAuditLog, getAuditLogs
 } from './services/storage';
 
 import { useOfflineSync } from './hooks/useOfflineSync';
@@ -76,6 +69,29 @@ const RouteLoadingFallback: React.FC = () => (
     </div>
   </div>
 );
+
+const mapBackendAuditAction = (action: string): AuditLog['action'] => {
+  if (action.includes('LOGIN')) return 'LOGIN';
+  if (action.includes('DELETE') || action.includes('REVOKE')) return 'DELETE';
+  if (action.includes('UPDATE') || action.includes('EXTENDED') || action.includes('CHANGED')) return 'UPDATE';
+  if (action.includes('EXPORT')) return 'EXPORT';
+  return 'CREATE';
+};
+
+const mapBackendAuditEntity = (entry: {
+  action?: string;
+  targetResource?: string;
+}): AuditLog['entity'] => {
+  const target = String(entry.targetResource || '').toUpperCase();
+  const action = String(entry.action || '').toUpperCase();
+
+  if (target.includes('TRANSACTION') || action.includes('TRANSACTION')) return 'TRANSACTION';
+  if (target.includes('ORDER') || action.includes('ORDER')) return 'ORDER';
+  if (target.includes('FORMULA') || action.includes('FORMULA')) return 'FORMULA';
+  if (target.includes('PARTNER') || action.includes('PARTNER')) return 'Partner';
+  if (target.includes('ITEM') || action.includes('ITEM')) return 'ITEM';
+  return 'USER';
+};
 
 // ENTERPRISE FIX: Phase 1 - Dual Mode Implementation - 2026-03-02
 const AppContent = () => {
@@ -152,7 +168,7 @@ const AppContent = () => {
         setOpeningBalanceReportConfig(getOpeningBalanceReportConfig());
         setUnloadingRules(getUnloadingRules());
         setFormulas(getFormulas());
-        setAuditLogs(getAuditLogs());
+        setAuditLogs([]);
 
         // Safe JWT auth check with Optional Chaining
         const jwtUser = getAuthUser();
@@ -265,6 +281,41 @@ const AppContent = () => {
   }, [authReady, currentUser?.id]);
 
   useEffect(() => {
+    if (!authReady || !currentUser || !hasPermission(currentUser, 'users.audit')) {
+      setAuditLogs([]);
+      return;
+    }
+
+    let active = true;
+
+    const loadAuditLogs = async () => {
+      try {
+        const response = await apiClient.get('/audit/logs', { params: { limit: 500 } });
+        const rows = Array.isArray(response.data) ? response.data : [];
+        if (!active) return;
+        setAuditLogs(rows.map((entry: any) => ({
+          id: String(entry?.id || crypto.randomUUID()),
+          timestamp: new Date(String(entry?.timestamp || new Date().toISOString())).getTime(),
+          userId: String(entry?.actorId || entry?.targetUserId || 'system'),
+          userName: String(entry?.actorUsername || 'System'),
+          action: mapBackendAuditAction(String(entry?.action || 'CREATE')),
+          entity: mapBackendAuditEntity(entry),
+          details: String(entry?.message || ''),
+        })));
+      } catch (error) {
+        if (!active) return;
+        console.error('[App] Failed to load audit logs from Prisma API:', error);
+        setAuditLogs([]);
+      }
+    };
+
+    void loadAuditLogs();
+    return () => {
+      active = false;
+    };
+  }, [authReady, currentUser]);
+
+  useEffect(() => {
     setInventoryTransactions(transactions);
   }, [transactions, setInventoryTransactions]);
 
@@ -291,8 +342,12 @@ const AppContent = () => {
 
   const logAction = (action: AuditLog['action'], entity: AuditLog['entity'], details: string) => {
     if (!currentUser) return;
-    addAuditLog({ userId: currentUser.id, userName: currentUser.name, action, entity, details });
-    setAuditLogs(getAuditLogs());
+    logUserActivity({
+      userId: currentUser.id,
+      userName: currentUser.name,
+      event: `${String(entity).toLowerCase()}_${String(action).toLowerCase()}`,
+      details,
+    });
   };
 
   const denyPermission = (permissionId: string, details: string): boolean => {

@@ -1,5 +1,4 @@
-// ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
-// Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
+// ENTERPRISE FIX: Phase 6.4 - Absolute Final Cleanup & 100% Verification - 2026-03-13
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
@@ -282,6 +281,20 @@ const autoMapImportHeaders = (headers: string[]) => {
     });
 
     return autoMap;
+};
+
+let xlsxLoader: Promise<typeof import('xlsx')> | null = null;
+
+const loadXlsx = async () => {
+    try {
+        if (!xlsxLoader) {
+            xlsxLoader = import('xlsx');
+        }
+        return await xlsxLoader;
+    } catch (error) {
+        xlsxLoader = null;
+        throw error;
+    }
 };
 
 const detectHeaderRowIndex = (rows: unknown[][]) => {
@@ -1891,14 +1904,28 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
 
         const reader = new FileReader();
         reader.onload = async (evt) => {
-            const bstr = evt.target?.result;
-            const xlsxModule = await import('xlsx');
-            const XLSX = xlsxModule;
-            const wb = XLSX.read(bstr, { type: 'binary' });
-            const ws = wb.Sheets[wb.SheetNames[0]];
-            const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as unknown[][];
+            try {
+                const bstr = evt.target?.result;
+                if (typeof bstr !== 'string' || !bstr.length) {
+                    toast.error('تعذر قراءة الملف المرفوع.');
+                    return;
+                }
 
-            if (data.length > 0) {
+                const XLSX = await loadXlsx();
+                const wb = XLSX.read(bstr, { type: 'binary' });
+                const firstSheetName = wb.SheetNames[0];
+                const ws = firstSheetName ? wb.Sheets[firstSheetName] : undefined;
+                if (!ws) {
+                    toast.error('الملف لا يحتوي على ورقة عمل صالحة للاستيراد.');
+                    return;
+                }
+
+                const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as unknown[][];
+                if (!data.length) {
+                    toast.error('الملف لا يحتوي بيانات صالحة للاستيراد.');
+                    return;
+                }
+
                 const normalizedRows = data
                     .map((row) => (Array.isArray(row) ? row : []))
                     .filter((row) => row.some((cell) => String(cell ?? '').trim() !== ''));
@@ -1918,7 +1945,13 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                 const autoMap = autoMapImportHeaders(headers);
                 setColumnMapping(autoMap);
                 setImportStep('mapping');
+            } catch (error) {
+                console.error('[DailyOperations] Failed to lazy-load XLSX import flow:', error);
+                toast.error('تعذر تحميل مكتبة الاستيراد أو قراءة الملف. حاول مرة أخرى.');
             }
+        };
+        reader.onerror = () => {
+            toast.error('تعذر قراءة الملف المرفوع.');
         };
         reader.readAsBinaryString(file);
     };

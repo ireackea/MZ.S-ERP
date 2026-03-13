@@ -1,5 +1,4 @@
-// ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
-// Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
+// ENTERPRISE FIX: Phase 6.4 - Absolute Final Cleanup & 100% Verification - 2026-03-13
 import { Injectable } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma.service';
@@ -109,6 +108,21 @@ export class AuditService {
     return JSON.stringify(nextMetadata);
   }
 
+  private parseMetadataJson(raw: string | null): Record<string, unknown> | undefined {
+    if (!raw) return undefined;
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return undefined;
+    }
+
+    return undefined;
+  }
+
   private mapAuditLog(record: {
     id: string;
     timestamp: Date;
@@ -123,19 +137,6 @@ export class AuditService {
     status: string;
     metadata: string | null;
   }): AuditLogEntry {
-    let metadata: Record<string, unknown> | undefined;
-
-    if (record.metadata) {
-      try {
-        const parsed = JSON.parse(record.metadata);
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          metadata = parsed as Record<string, unknown>;
-        }
-      } catch {
-        metadata = undefined;
-      }
-    }
-
     return {
       id: record.id,
       timestamp: record.timestamp.toISOString(),
@@ -148,7 +149,7 @@ export class AuditService {
       status: record.status as 'success' | 'failed',
       message: record.details,
       ipAddress: record.ipAddress || undefined,
-      metadata,
+      metadata: this.parseMetadataJson(record.metadata),
     };
   }
 

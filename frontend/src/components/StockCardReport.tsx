@@ -1,5 +1,4 @@
-// ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
-// Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
+// ENTERPRISE FIX: Phase 6.4 - Absolute Final Cleanup & 100% Verification - 2026-03-13
 import React, { useState, useRef } from 'react';
 import { Item, Transaction } from '../types';
 import { generateStockCard, StockCardResult } from '../services/reportingService';

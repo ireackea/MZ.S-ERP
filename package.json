@@ -25,6 +25,7 @@
     "backend:build": "npm run build --workspace=backend",
     "backend:start": "npm run start:prod --workspace=backend",
     "start:prod": "concurrently -n \"BACKEND,FRONTEND\" -c \"bgBlue,bgGreen\" \"npm run backend:start\" \"npm run preview --workspace=frontend -- --host 0.0.0.0 --port 4173\"",
+    "start:prod-full": "npm run prisma:migrate:prod && npm run build:full && npm run start:prod",
     "prisma:generate": "cd backend && npx prisma generate",
     "prisma:migrate:dev": "cd backend && npx prisma migrate dev",
     "prisma:migrate:prod": "cd backend && npx prisma migrate deploy",

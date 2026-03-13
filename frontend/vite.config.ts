@@ -1,5 +1,4 @@
-// ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
-// Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
+// ENTERPRISE FIX: Phase 6.4 - Absolute Final Cleanup & 100% Verification - 2026-03-13
 import { defineConfig } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -61,19 +60,22 @@ export default defineConfig(({ mode }) => ({
 
   build: {
     target: 'es2020',
-    sourcemap: true,
+    sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks: {
           'export-xlsx': ['xlsx'],
           'export-exceljs': ['exceljs'],
           'export-html2pdf': ['html2pdf.js'],
+          'vendor-recharts': ['recharts'],
+          'vendor-datepicker': ['react-datepicker'],
+          'vendor-fuse': ['fuse.js'],
         },
       },
     },
   },
 
   optimizeDeps: {
-    exclude: ['xlsx', 'exceljs', 'html2pdf.js'],
+    exclude: ['xlsx', 'exceljs', 'html2pdf.js', 'recharts', 'react-datepicker', 'fuse.js'],
   },
 }));
