@@ -1,7 +1,6 @@
 // ENTERPRISE FIX: Exact Legacy UI Restoration - 2026-02-27
 // ENTERPRISE FIX: Legacy Migration Phase 5 - Final Stabilization & Production - 2026-02-27
 import { io, type Socket } from 'socket.io-client';
-import { getAuthToken } from '@services/authService';
 import { useRealtimeSyncStore, type RealtimeSyncEvent } from '@/shared/store/realtimeSync.store';
 
 let socket: Socket | null = null;
@@ -30,12 +29,10 @@ const attachListeners = (client: Socket) => {
 export const startRealtimeSync = () => {
   if (socket) return socket;
 
-  const token = getAuthToken();
   socket = io(`${getRealtimeBaseUrl()}/realtime`, {
     path: '/socket.io',
     withCredentials: true,
     transports: ['websocket', 'polling'],
-    auth: token ? { token } : undefined,
   });
 
   attachListeners(socket);

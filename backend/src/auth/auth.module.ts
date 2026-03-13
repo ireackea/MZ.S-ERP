@@ -10,6 +10,6 @@ import { RbacGuard } from './rbac.guard';
   imports: [JwtModule.register({})],
   controllers: [AuthController],
   providers: [AuthService, JwtAuthGuard, RbacGuard, PrismaService],
-  exports: [AuthService, JwtAuthGuard, RbacGuard],
+  exports: [AuthService, JwtAuthGuard, RbacGuard, JwtModule],
 })
 export class AuthModule {}

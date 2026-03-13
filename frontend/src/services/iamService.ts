@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 6.1 - Critical Red Flags Removal - 2026-03-12
 import { v4 as uuidv4 } from 'uuid';
 import {
   DataScope,

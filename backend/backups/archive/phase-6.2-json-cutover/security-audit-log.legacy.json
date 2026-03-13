@@ -1,0 +1,404 @@
+[
+  {
+    "id": "c799b237-e60a-48b4-911f-12799ae84054",
+    "timestamp": "2026-03-13T16:30:49.453Z",
+    "action": "PERMISSION_CHECK",
+    "actorId": "anonymous",
+    "actorUsername": "anonymous",
+    "actorRole": "Viewer",
+    "targetResource": "auth.jwt-guard",
+    "status": "failed",
+    "message": "JWT validation failed via cookie: انتهت صلاحية الجلسة، يرجى تسجيل الدخول مجدداً.",
+    "metadata": {
+      "source": "cookie",
+      "method": "GET",
+      "path": "/api/opening-balances/2026",
+      "ipAddress": "::1",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+    }
+  },
+  {
+    "id": "61772df1-7bb6-44e9-b543-8bc62cdfac90",
+    "timestamp": "2026-03-13T16:30:49.453Z",
+    "action": "SESSION_EXPIRED",
+    "actorId": "3bafe087-dc09-44b2-a9fe-6606b12d43e1",
+    "actorUsername": "superadmin",
+    "actorRole": "SuperAdmin",
+    "targetUserId": "3bafe087-dc09-44b2-a9fe-6606b12d43e1",
+    "targetResource": "auth.verify",
+    "status": "failed",
+    "message": "Token verification failed due to expired/revoked session"
+  },
+  {
+    "id": "afc94b93-3220-470a-85aa-08e4149cd30f",
+    "timestamp": "2026-03-13T16:30:49.451Z",
+    "action": "PERMISSION_CHECK",
+    "actorId": "anonymous",
+    "actorUsername": "anonymous",
+    "actorRole": "Viewer",
+    "targetResource": "auth.jwt-guard",
+    "status": "success",
+    "message": "JWT guard validation attempt started via cookie",
+    "metadata": {
+      "source": "cookie",
+      "method": "GET",
+      "path": "/api/opening-balances/2026",
+      "ipAddress": "::1",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+    }
+  },
+  {
+    "id": "255b34cf-4b0e-4aa3-a13b-0dde8c0acdfa",
+    "timestamp": "2026-03-13T16:30:49.252Z",
+    "action": "PERMISSION_CHECK",
+    "actorId": "anonymous",
+    "actorUsername": "anonymous",
+    "actorRole": "Viewer",
+    "targetResource": "auth.jwt-guard",
+    "status": "failed",
+    "message": "JWT validation failed via cookie: انتهت صلاحية الجلسة، يرجى تسجيل الدخول مجدداً.",
+    "metadata": {
+      "source": "cookie",
+      "method": "GET",
+      "path": "/api/opening-balances/2026",
+      "ipAddress": "::1",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+    }
+  },
+  {
+    "id": "9453c88b-684d-488b-bb20-fcc3cba5201b",
+    "timestamp": "2026-03-13T16:30:49.252Z",
+    "action": "SESSION_EXPIRED",
+    "actorId": "3bafe087-dc09-44b2-a9fe-6606b12d43e1",
+    "actorUsername": "superadmin",
+    "actorRole": "SuperAdmin",
+    "targetUserId": "3bafe087-dc09-44b2-a9fe-6606b12d43e1",
+    "targetResource": "auth.verify",
+    "status": "failed",
+    "message": "Token verification failed due to expired/revoked session"
+  },
+  {
+    "id": "68c9343f-43c3-470b-aba9-9f0769694f67",
+    "timestamp": "2026-03-13T16:30:49.250Z",
+    "action": "PERMISSION_CHECK",
+    "actorId": "anonymous",
+    "actorUsername": "anonymous",
+    "actorRole": "Viewer",
+    "targetResource": "auth.jwt-guard",
+    "status": "success",
+    "message": "JWT guard validation attempt started via cookie",
+    "metadata": {
+      "source": "cookie",
+      "method": "GET",
+      "path": "/api/opening-balances/2026",
+      "ipAddress": "::1",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+    }
+  },
+  {
+    "id": "24423f7e-67cb-4dfd-aca8-7eb56e14c2fa",
+    "timestamp": "2026-03-13T16:30:42.899Z",
+    "action": "PERMISSION_CHECK",
+    "actorId": "anonymous",
+    "actorUsername": "anonymous",
+    "actorRole": "Viewer",
+    "targetResource": "auth.jwt-guard",
+    "status": "failed",
+    "message": "JWT validation failed via cookie: انتهت صلاحية الجلسة، يرجى تسجيل الدخول مجدداً.",
+    "metadata": {
+      "source": "cookie",
+      "method": "GET",
+      "path": "/api/users?page=1&limit=20",
+      "ipAddress": "::1",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+    }
+  },
+  {
+    "id": "200b0550-f8d9-43ea-b5aa-b2542c4a7c2d",
+    "timestamp": "2026-03-13T16:30:42.898Z",
+    "action": "SESSION_EXPIRED",
+    "actorId": "3bafe087-dc09-44b2-a9fe-6606b12d43e1",
+    "actorUsername": "superadmin",
+    "actorRole": "SuperAdmin",
+    "targetUserId": "3bafe087-dc09-44b2-a9fe-6606b12d43e1",
+    "targetResource": "auth.verify",
+    "status": "failed",
+    "message": "Token verification failed due to expired/revoked session"
+  },
+  {
+    "id": "e5855aa1-6b5f-48aa-ae34-12bdaf0ff37e",
+    "timestamp": "2026-03-13T16:30:42.896Z",
+    "action": "PERMISSION_CHECK",
+    "actorId": "anonymous",
+    "actorUsername": "anonymous",
+    "actorRole": "Viewer",
+    "targetResource": "auth.jwt-guard",
+    "status": "success",
+    "message": "JWT guard validation attempt started via cookie",
+    "metadata": {
+      "source": "cookie",
+      "method": "GET",
+      "path": "/api/users?page=1&limit=20",
+      "ipAddress": "::1",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+    }
+  },
+  {
+    "id": "deabca1c-3f2b-498f-af18-beffb47a8fd8",
+    "timestamp": "2026-03-13T16:30:42.701Z",
+    "action": "PERMISSION_CHECK",
+    "actorId": "anonymous",
+    "actorUsername": "anonymous",
+    "actorRole": "Viewer",
+    "targetResource": "auth.jwt-guard",
+    "status": "failed",
+    "message": "JWT validation failed via cookie: انتهت صلاحية الجلسة، يرجى تسجيل الدخول مجدداً.",
+    "metadata": {
+      "source": "cookie",
+      "method": "GET",
+      "path": "/api/users?page=1&limit=20",
+      "ipAddress": "::1",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+    }
+  },
+  {
+    "id": "ad005d5a-26cd-4bc9-8276-703e376120f2",
+    "timestamp": "2026-03-13T16:30:42.700Z",
+    "action": "SESSION_EXPIRED",
+    "actorId": "3bafe087-dc09-44b2-a9fe-6606b12d43e1",
+    "actorUsername": "superadmin",
+    "actorRole": "SuperAdmin",
+    "targetUserId": "3bafe087-dc09-44b2-a9fe-6606b12d43e1",
+    "targetResource": "auth.verify",
+    "status": "failed",
+    "message": "Token verification failed due to expired/revoked session"
+  },
+  {
+    "id": "bdb19fe2-6925-4689-a299-1a3aafa9dded",
+    "timestamp": "2026-03-13T16:30:42.698Z",
+    "action": "PERMISSION_CHECK",
+    "actorId": "anonymous",
+    "actorUsername": "anonymous",
+    "actorRole": "Viewer",
+    "targetResource": "auth.jwt-guard",
+    "status": "success",
+    "message": "JWT guard validation attempt started via cookie",
+    "metadata": {
+      "source": "cookie",
+      "method": "GET",
+      "path": "/api/users?page=1&limit=20",
+      "ipAddress": "::1",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+    }
+  },
+  {
+    "id": "3025a141-0753-4df1-b569-b11063e4ff69",
+    "timestamp": "2026-03-13T16:30:42.423Z",
+    "action": "PERMISSION_CHECK",
+    "actorId": "anonymous",
+    "actorUsername": "anonymous",
+    "actorRole": "Viewer",
+    "targetResource": "auth.jwt-guard",
+    "status": "failed",
+    "message": "JWT validation failed via cookie: انتهت صلاحية الجلسة، يرجى تسجيل الدخول مجدداً.",
+    "metadata": {
+      "source": "cookie",
+      "method": "GET",
+      "path": "/api/users?page=1&limit=20",
+      "ipAddress": "::1",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+    }
+  },
+  {
+    "id": "b727c990-dfdc-4a26-bd50-9bfd4101e10f",
+    "timestamp": "2026-03-13T16:30:42.422Z",
+    "action": "SESSION_EXPIRED",
+    "actorId": "3bafe087-dc09-44b2-a9fe-6606b12d43e1",
+    "actorUsername": "superadmin",
+    "actorRole": "SuperAdmin",
+    "targetUserId": "3bafe087-dc09-44b2-a9fe-6606b12d43e1",
+    "targetResource": "auth.verify",
+    "status": "failed",
+    "message": "Token verification failed due to expired/revoked session"
+  },
+  {
+    "id": "fe9232b4-b168-4f11-b926-a454f97dffc3",
+    "timestamp": "2026-03-13T16:30:42.420Z",
+    "action": "PERMISSION_CHECK",
+    "actorId": "anonymous",
+    "actorUsername": "anonymous",
+    "actorRole": "Viewer",
+    "targetResource": "auth.jwt-guard",
+    "status": "success",
+    "message": "JWT guard validation attempt started via cookie",
+    "metadata": {
+      "source": "cookie",
+      "method": "GET",
+      "path": "/api/users?page=1&limit=20",
+      "ipAddress": "::1",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+    }
+  },
+  {
+    "id": "6ff9f52e-6d01-48e6-9f31-dfe10767115f",
+    "timestamp": "2026-03-13T16:30:42.254Z",
+    "action": "PERMISSION_CHECK",
+    "actorId": "anonymous",
+    "actorUsername": "anonymous",
+    "actorRole": "Viewer",
+    "targetResource": "auth.jwt-guard",
+    "status": "failed",
+    "message": "JWT validation failed via cookie: انتهت صلاحية الجلسة، يرجى تسجيل الدخول مجدداً.",
+    "metadata": {
+      "source": "cookie",
+      "method": "GET",
+      "path": "/api/users/roles",
+      "ipAddress": "::1",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+    }
+  },
+  {
+    "id": "b05a9c5d-7ceb-402e-9e2e-f121d9e9c47a",
+    "timestamp": "2026-03-13T16:30:42.252Z",
+    "action": "SESSION_EXPIRED",
+    "actorId": "3bafe087-dc09-44b2-a9fe-6606b12d43e1",
+    "actorUsername": "superadmin",
+    "actorRole": "SuperAdmin",
+    "targetUserId": "3bafe087-dc09-44b2-a9fe-6606b12d43e1",
+    "targetResource": "auth.verify",
+    "status": "failed",
+    "message": "Token verification failed due to expired/revoked session"
+  },
+  {
+    "id": "8de98264-fda2-4d60-b420-ab5a4f3baf25",
+    "timestamp": "2026-03-13T16:30:42.250Z",
+    "action": "PERMISSION_CHECK",
+    "actorId": "anonymous",
+    "actorUsername": "anonymous",
+    "actorRole": "Viewer",
+    "targetResource": "auth.jwt-guard",
+    "status": "success",
+    "message": "JWT guard validation attempt started via cookie",
+    "metadata": {
+      "source": "cookie",
+      "method": "GET",
+      "path": "/api/users/roles",
+      "ipAddress": "::1",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+    }
+  },
+  {
+    "id": "4d1999bc-ac77-4cfd-8a88-a631d236a8a4",
+    "timestamp": "2026-03-13T16:30:42.085Z",
+    "action": "PERMISSION_CHECK",
+    "actorId": "anonymous",
+    "actorUsername": "anonymous",
+    "actorRole": "Viewer",
+    "targetResource": "auth.jwt-guard",
+    "status": "failed",
+    "message": "JWT validation failed via cookie: انتهت صلاحية الجلسة، يرجى تسجيل الدخول مجدداً.",
+    "metadata": {
+      "source": "cookie",
+      "method": "GET",
+      "path": "/api/users?page=1&limit=20",
+      "ipAddress": "::1",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+    }
+  },
+  {
+    "id": "5c47d7a6-ceb8-4e1d-b772-77e6ec85505a",
+    "timestamp": "2026-03-13T16:30:42.084Z",
+    "action": "SESSION_EXPIRED",
+    "actorId": "3bafe087-dc09-44b2-a9fe-6606b12d43e1",
+    "actorUsername": "superadmin",
+    "actorRole": "SuperAdmin",
+    "targetUserId": "3bafe087-dc09-44b2-a9fe-6606b12d43e1",
+    "targetResource": "auth.verify",
+    "status": "failed",
+    "message": "Token verification failed due to expired/revoked session"
+  },
+  {
+    "id": "8798ca67-ebf6-4ed1-8557-8fc7e6521c34",
+    "timestamp": "2026-03-13T16:30:42.082Z",
+    "action": "PERMISSION_CHECK",
+    "actorId": "anonymous",
+    "actorUsername": "anonymous",
+    "actorRole": "Viewer",
+    "targetResource": "auth.jwt-guard",
+    "status": "success",
+    "message": "JWT guard validation attempt started via cookie",
+    "metadata": {
+      "source": "cookie",
+      "method": "GET",
+      "path": "/api/users?page=1&limit=20",
+      "ipAddress": "::1",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+    }
+  },
+  {
+    "id": "5897e7a1-5a10-438d-a525-7290e30d89cb",
+    "timestamp": "2026-03-13T16:30:42.004Z",
+    "action": "PERMISSION_CHECK",
+    "actorId": "anonymous",
+    "actorUsername": "anonymous",
+    "actorRole": "Viewer",
+    "targetResource": "auth.jwt-guard",
+    "status": "failed",
+    "message": "JWT validation failed via cookie: انتهت صلاحية الجلسة، يرجى تسجيل الدخول مجدداً.",
+    "metadata": {
+      "source": "cookie",
+      "method": "GET",
+      "path": "/api/users/roles",
+      "ipAddress": "::1",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+    }
+  },
+  {
+    "id": "ec44ee49-00f5-44c7-8b18-5a93f56a4ceb",
+    "timestamp": "2026-03-13T16:30:42.004Z",
+    "action": "SESSION_EXPIRED",
+    "actorId": "3bafe087-dc09-44b2-a9fe-6606b12d43e1",
+    "actorUsername": "superadmin",
+    "actorRole": "SuperAdmin",
+    "targetUserId": "3bafe087-dc09-44b2-a9fe-6606b12d43e1",
+    "targetResource": "auth.verify",
+    "status": "failed",
+    "message": "Token verification failed due to expired/revoked session"
+  },
+  {
+    "id": "3b4605c0-30db-4669-9d2e-03f1e3cf01c6",
+    "timestamp": "2026-03-13T16:30:42.001Z",
+    "action": "PERMISSION_CHECK",
+    "actorId": "anonymous",
+    "actorUsername": "anonymous",
+    "actorRole": "Viewer",
+    "targetResource": "auth.jwt-guard",
+    "status": "success",
+    "message": "JWT guard validation attempt started via cookie",
+    "metadata": {
+      "source": "cookie",
+      "method": "GET",
+      "path": "/api/users/roles",
+      "ipAddress": "::1",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+    }
+  },
+  {
+    "id": "d95c4873-00f4-4a26-90c8-161b9e3d640e",
+    "timestamp": "2026-03-13T16:30:38.877Z",
+    "action": "PERMISSION_CHECK",
+    "actorId": "anonymous",
+    "actorUsername": "anonymous",
+    "actorRole": "Viewer",
+    "targetResource": "auth.jwt-guard",
+    "status": "failed",
+    "message": "JWT validation failed via cookie: انتهت صلاحية الجلسة، يرجى تسجيل الدخول مجدداً.",
+    "metadata": {
+      "source": "cookie",
+      "method": "GET",
+      "path": "/api/users?page=1&limit=200",
+      "ipAddress": "::1",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+    }
+  }
+]

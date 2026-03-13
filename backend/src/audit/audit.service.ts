@@ -1,8 +1,8 @@
+// ENTERPRISE FIX: Phase 6.2 - Final JSON to Prisma Cutover - 2026-03-12
 // ENTERPRISE FIX: Phase 3 - Audit Logging & Advanced Security - 2026-03-03
 import { Injectable } from '@nestjs/common';
-import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { PrismaService } from '../prisma.service';
 
 export type AuditAction =
   | 'LOGIN_SUCCESS'
@@ -56,19 +56,129 @@ export interface ActiveSessionEntry {
 
 @Injectable()
 export class AuditService {
-  private readonly auditFilePath = path.resolve(process.cwd(), 'backups', 'security-audit-log.json');
-  private readonly sessionsFilePath = path.resolve(process.cwd(), 'backups', 'active-user-sessions.json');
+  private static prismaService: PrismaService | null = null;
+
+  constructor(private readonly prisma?: PrismaService) {}
+
+  static configurePrisma(prisma: PrismaService) {
+    AuditService.prismaService = prisma;
+  }
+
+  private getPrisma(): PrismaService {
+    const prisma = this.prisma || AuditService.prismaService;
+    if (!prisma) {
+      throw new Error('AuditService Prisma is not configured');
+    }
+    return prisma;
+  }
+
+  private normalizeUserReference(userId?: string | null): string | null {
+    const normalized = String(userId || '').trim();
+    if (!normalized) return null;
+
+    const syntheticActors = new Set(['anonymous', 'system', 'unknown']);
+    if (syntheticActors.has(normalized.toLowerCase())) {
+      return null;
+    }
+
+    return normalized;
+  }
+
+  private mapAuditLog(record: {
+    id: string;
+    timestamp: Date;
+    action: string;
+    actorId: string | null;
+    actorUsername: string;
+    actorRole: string;
+    targetUserId: string | null;
+    targetResource: string | null;
+    status: string;
+    message: string;
+    metadata: string | null;
+  }): AuditLogEntry {
+    let metadata: Record<string, unknown> | undefined;
+
+    if (record.metadata) {
+      try {
+        const parsed = JSON.parse(record.metadata);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          metadata = parsed as Record<string, unknown>;
+        }
+      } catch {
+        metadata = undefined;
+      }
+    }
+
+    return {
+      id: record.id,
+      timestamp: record.timestamp.toISOString(),
+      action: record.action as AuditAction,
+      actorId: record.actorId || 'anonymous',
+      actorUsername: record.actorUsername,
+      actorRole: record.actorRole,
+      targetUserId: record.targetUserId || undefined,
+      targetResource: record.targetResource || undefined,
+      status: record.status as 'success' | 'failed',
+      message: record.message,
+      metadata,
+    };
+  }
+
+  private mapSession(record: {
+    id: string;
+    userId: string;
+    username: string;
+    role: string;
+    deviceFingerprint: string;
+    ipAddress: string;
+    userAgent: string;
+    createdAt: Date;
+    lastActivityAt: Date;
+    expiresAt: Date;
+    isRevoked: boolean;
+  }): ActiveSessionEntry {
+    return {
+      id: record.id,
+      userId: record.userId,
+      username: record.username,
+      role: record.role,
+      deviceFingerprint: record.deviceFingerprint,
+      ipAddress: record.ipAddress,
+      userAgent: record.userAgent,
+      createdAt: record.createdAt.toISOString(),
+      lastActivityAt: record.lastActivityAt.toISOString(),
+      expiresAt: record.expiresAt.toISOString(),
+      isRevoked: record.isRevoked,
+    };
+  }
 
   async log(entry: Omit<AuditLogEntry, 'id' | 'timestamp'>): Promise<AuditLogEntry> {
-    const current = await this.readAuditLogs();
     const nextEntry: AuditLogEntry = {
       id: randomUUID(),
       timestamp: new Date().toISOString(),
       ...entry,
     };
 
-    const next = [nextEntry, ...current].slice(0, 10000);
-    await this.writeAuditLogs(next);
+    const prisma = this.getPrisma();
+    await prisma.$transaction(async (tx) => {
+      await tx.auditLog.create({
+        data: {
+          id: nextEntry.id,
+          timestamp: new Date(nextEntry.timestamp),
+          action: nextEntry.action,
+          actorId: this.normalizeUserReference(nextEntry.actorId),
+          actorUsername: nextEntry.actorUsername,
+          actorRole: nextEntry.actorRole,
+          targetUserId: this.normalizeUserReference(nextEntry.targetUserId),
+          targetResource: nextEntry.targetResource || null,
+          status: nextEntry.status,
+          message: nextEntry.message,
+          metadata: nextEntry.metadata ? JSON.stringify(nextEntry.metadata) : null,
+        },
+      });
+    });
+
     return nextEntry;
   }
 
@@ -78,14 +188,20 @@ export class AuditService {
     status?: 'success' | 'failed';
     limit?: number;
   }): Promise<AuditLogEntry[]> {
-    const logs = await this.readAuditLogs();
+    const prisma = this.getPrisma();
     const limit = Math.max(1, Math.min(5000, Number(params?.limit || 500)));
 
-    return logs
-      .filter((log) => (params?.actorId ? log.actorId === params.actorId : true))
-      .filter((log) => (params?.action ? log.action === params.action : true))
-      .filter((log) => (params?.status ? log.status === params.status : true))
-      .slice(0, limit);
+    const records = await prisma.auditLog.findMany({
+      where: {
+        ...(params?.actorId ? { actorId: params.actorId } : {}),
+        ...(params?.action ? { action: params.action } : {}),
+        ...(params?.status ? { status: params.status } : {}),
+      },
+      orderBy: { timestamp: 'desc' },
+      take: limit,
+    });
+
+    return records.map((record) => this.mapAuditLog(record));
   }
 
   async createSession(params: {
@@ -98,8 +214,8 @@ export class AuditService {
     userAgent: string;
     expiresAt: Date;
   }): Promise<ActiveSessionEntry> {
-    const sessions = await this.readSessions();
-    const nowIso = new Date().toISOString();
+    const prisma = this.getPrisma();
+    const now = new Date();
 
     const session: ActiveSessionEntry = {
       id: params.sessionId || randomUUID(),
@@ -109,89 +225,79 @@ export class AuditService {
       deviceFingerprint: params.deviceFingerprint,
       ipAddress: params.ipAddress,
       userAgent: params.userAgent,
-      createdAt: nowIso,
-      lastActivityAt: nowIso,
+      createdAt: now.toISOString(),
+      lastActivityAt: now.toISOString(),
       expiresAt: params.expiresAt.toISOString(),
       isRevoked: false,
     };
 
-    const next = [session, ...sessions].slice(0, 20000);
-    await this.writeSessions(next);
+    await prisma.$transaction(async (tx) => {
+      await tx.activeSession.create({
+        data: {
+          id: session.id,
+          userId: session.userId,
+          username: session.username,
+          role: session.role,
+          deviceFingerprint: session.deviceFingerprint,
+          ipAddress: session.ipAddress,
+          userAgent: session.userAgent,
+          createdAt: now,
+          lastActivityAt: now,
+          expiresAt: params.expiresAt,
+          isRevoked: false,
+        },
+      });
+    });
+
     return session;
   }
 
   async touchSession(sessionId: string): Promise<void> {
-    const sessions = await this.readSessions();
-    const nowIso = new Date().toISOString();
-
-    const next = sessions.map((session) =>
-      session.id === sessionId
-        ? {
-            ...session,
-            lastActivityAt: nowIso,
-          }
-        : session,
-    );
-
-    await this.writeSessions(next);
+    const prisma = this.getPrisma();
+    await prisma.$transaction(async (tx) => {
+      await tx.activeSession.updateMany({
+        where: { id: sessionId, isRevoked: false },
+        data: { lastActivityAt: new Date() },
+      });
+    });
   }
 
   async revokeSession(sessionId: string): Promise<void> {
-    const sessions = await this.readSessions();
-    const next = sessions.map((session) =>
-      session.id === sessionId
-        ? {
-            ...session,
-            isRevoked: true,
-          }
-        : session,
-    );
-    await this.writeSessions(next);
+    const prisma = this.getPrisma();
+    await prisma.$transaction(async (tx) => {
+      await tx.activeSession.updateMany({
+        where: { id: sessionId },
+        data: { isRevoked: true },
+      });
+    });
   }
 
   async purgeExpiredSessions(): Promise<void> {
-    const now = Date.now();
-    const sessions = await this.readSessions();
-    const next = sessions.filter((session) => {
-      if (session.isRevoked) return false;
-      return new Date(session.expiresAt).getTime() > now;
+    const prisma = this.getPrisma();
+    await prisma.$transaction(async (tx) => {
+      await tx.activeSession.updateMany({
+        where: {
+          OR: [
+            { isRevoked: true },
+            { expiresAt: { lte: new Date() } },
+          ],
+        },
+        data: { isRevoked: true },
+      });
     });
-    await this.writeSessions(next);
   }
 
   async listActiveSessions(userId?: string): Promise<ActiveSessionEntry[]> {
     await this.purgeExpiredSessions();
-    const sessions = await this.readSessions();
-    return sessions.filter((session) => !session.isRevoked && (userId ? session.userId === userId : true));
-  }
-
-  private async readAuditLogs(): Promise<AuditLogEntry[]> {
-    try {
-      const raw = await fs.readFile(this.auditFilePath, 'utf8');
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? (parsed as AuditLogEntry[]) : [];
-    } catch {
-      return [];
-    }
-  }
-
-  private async writeAuditLogs(logs: AuditLogEntry[]): Promise<void> {
-    await fs.mkdir(path.dirname(this.auditFilePath), { recursive: true });
-    await fs.writeFile(this.auditFilePath, JSON.stringify(logs, null, 2), 'utf8');
-  }
-
-  private async readSessions(): Promise<ActiveSessionEntry[]> {
-    try {
-      const raw = await fs.readFile(this.sessionsFilePath, 'utf8');
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? (parsed as ActiveSessionEntry[]) : [];
-    } catch {
-      return [];
-    }
-  }
-
-  private async writeSessions(sessions: ActiveSessionEntry[]): Promise<void> {
-    await fs.mkdir(path.dirname(this.sessionsFilePath), { recursive: true });
-    await fs.writeFile(this.sessionsFilePath, JSON.stringify(sessions, null, 2), 'utf8');
+    const prisma = this.getPrisma();
+    const sessions = await prisma.activeSession.findMany({
+      where: {
+        isRevoked: false,
+        expiresAt: { gt: new Date() },
+        ...(userId ? { userId } : {}),
+      },
+      orderBy: { lastActivityAt: 'desc' },
+    });
+    return sessions.map((session) => this.mapSession(session));
   }
 }

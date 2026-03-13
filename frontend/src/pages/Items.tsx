@@ -179,9 +179,6 @@ const ItemsPage: React.FC = () => {
 
   const onPrintItemsPdf = async () => {
     try {
-      const token = getAuthToken();
-      if (!token) throw new Error('No auth token.');
-
       const payload = {
         type: 'items_list',
         data: {
@@ -208,7 +205,6 @@ const ItemsPage: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
       });

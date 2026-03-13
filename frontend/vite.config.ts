@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 6.1 - Critical Red Flags Removal - 2026-03-12
 // ENTERPRISE FIX: Phase 5 - Final Production Readiness - 2026-03-05
 // ENTERPRISE FIX: Phase 4 - Production Polish & Final Integration - 2026-03-05
 // ENTERPRISE FIX: Phase 0 - Stabilization & UTF-8 Lockdown - 2026-03-05
@@ -8,6 +9,9 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const backendOrigin = process.env.VITE_BACKEND_ORIGIN || 'http://localhost:3000';
+
+const allowedDevHosts = ['localhost', '127.0.0.1', '.app.github.dev', '.preview.github.dev'];
 
 // Try to dynamically import the plugin
 let reactPlugin = null;
@@ -40,16 +44,18 @@ export default defineConfig(({ mode }) => ({
   },
 
   server: {
+    host: '0.0.0.0',
     port: 5173,
     open: mode !== 'production',
+    allowedHosts: allowedDevHosts,
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: backendOrigin,
         changeOrigin: true,
         secure: false,
       },
       '/socket.io': {
-        target: 'http://localhost:3001',
+        target: backendOrigin,
         changeOrigin: true,
         secure: false,
         ws: true,

@@ -150,7 +150,6 @@ const Dashboard: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${getAuthToken() || ''}`,
         },
         body: JSON.stringify(payload),
       });

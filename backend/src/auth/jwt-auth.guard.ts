@@ -4,6 +4,7 @@ import {
   CanActivate,
   ExecutionContext,
   Injectable,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
@@ -11,6 +12,7 @@ import { JwtService } from '@nestjs/jwt';
 import type { SignOptions } from 'jsonwebtoken';
 import { Request, Response } from 'express';
 import { AuditService } from '../audit/audit.service';
+import { PrismaService } from '../prisma.service';
 import { IS_PUBLIC_KEY } from './auth.constants';
 import { AuthService } from './auth.service';
 
@@ -27,13 +29,16 @@ type TokenSource = 'authorization' | 'cookie' | 'query';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  private readonly auditService = new AuditService();
+  private readonly auditService: AuditService;
 
   constructor(
     private readonly authService: AuthService,
     private readonly reflector: Reflector,
     private readonly jwtService: JwtService,
-  ) {}
+    @Optional() private readonly prisma?: PrismaService,
+  ) {
+    this.auditService = new AuditService(this.prisma);
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
@@ -105,6 +110,11 @@ export class JwtAuthGuard implements CanActivate {
   private extractQueryToken(request: Request): string {
     const raw = (request?.query as any)?.token;
     return typeof raw === 'string' ? raw.trim() : '';
+  }
+
+  private shouldUseSecureCookie(request: Request): boolean {
+    const forwardedProto = String(request.headers['x-forwarded-proto'] || '').toLowerCase();
+    return process.env.NODE_ENV === 'production' || Boolean((request as any).secure) || forwardedProto === 'https';
   }
 
   private allowQueryToken(): boolean {
@@ -204,7 +214,7 @@ export class JwtAuthGuard implements CanActivate {
       if (source === 'cookie') {
         response.cookie('feed_factory_jwt', refreshedToken, {
           httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
+          secure: this.shouldUseSecureCookie(request),
           sameSite: 'strict',
           path: '/',
           maxAge: 24 * 60 * 60 * 1000,

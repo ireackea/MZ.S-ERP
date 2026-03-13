@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "frequency": "daily",
+  "hour": 2,
+  "minute": 0,
+  "dayOfWeek": 0,
+  "dayOfMonth": 1,
+  "retentionDays": 30,
+  "storageTargets": [
+    "local"
+  ],
+  "encryptionEnabled": true,
+  "updatedAt": "2026-03-13T14:04:11.244Z"
+}

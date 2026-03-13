@@ -59,9 +59,11 @@ export class UsersService {
   }>();
   private readonly auditFilePath = path.resolve(process.cwd(), 'backups', 'users-audit-log.json');
   private readonly invitationOutboxPath = path.resolve(process.cwd(), 'backups', 'invitation-emails-outbox.json');
-  private readonly auditService = new AuditService();
+  private readonly auditService: AuditService;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) {
+    this.auditService = new AuditService(this.prisma);
+  }
 
   stream(): Observable<MessageEvent> {
     return this.updates$.pipe(map((payload) => ({ data: payload } as MessageEvent)));

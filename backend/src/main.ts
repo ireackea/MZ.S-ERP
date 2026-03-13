@@ -1,3 +1,5 @@
+// ENTERPRISE FIX: Phase 6.2 - Final JSON to Prisma Cutover - 2026-03-12
+// ENTERPRISE FIX: Phase 6.1 - Critical Red Flags Removal - 2026-03-12
 // ENTERPRISE FIX: Phase 5 - Final Production Readiness - 2026-03-05
 // ENTERPRISE FIX: Phase 4 - Production Polish & Final Integration - 2026-03-05
 // ENTERPRISE FIX: Phase 0 - Stabilization & UTF-8 Lockdown - 2026-03-05
@@ -9,6 +11,8 @@ import * as fs from 'fs';
 import { json, urlencoded } from 'express';
 import { NextFunction, Request, Response } from 'express';
 import cookieParser from 'cookie-parser';
+import { PrismaService } from './prisma.service';
+import { AuditService } from './audit/audit.service';
 
 // ENTERPRISE FIX: Phase 0 - Fatal Errors Fixed - 2026-03-02
 
@@ -50,6 +54,27 @@ function getAllowedOrigins() {
     .filter(Boolean);
 }
 
+function normalizeOrigin(origin: string): string {
+  return origin.trim().replace(/\/+$/, '').toLowerCase();
+}
+
+function isGithubCodespacesOrigin(origin: string): boolean {
+  return /^https:\/\/[a-z0-9-]+\.(app|preview)\.github\.dev$/i.test(origin);
+}
+
+function matchesConfiguredOrigin(origin: string, allowedOrigins: string[]): boolean {
+  const normalizedOrigin = normalizeOrigin(origin);
+
+  return allowedOrigins.some((candidate) => {
+    const normalizedCandidate = normalizeOrigin(candidate);
+    if (normalizedCandidate.startsWith('*.')) {
+      const suffix = normalizedCandidate.slice(1);
+      return normalizedOrigin.endsWith(suffix);
+    }
+    return normalizedCandidate === normalizedOrigin;
+  });
+}
+
 function isTrustedLocalOrigin(origin: string): boolean {
   return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
 }
@@ -68,7 +93,14 @@ function normalizeRequestPath(req: Request): string {
 async function bootstrap() {
   const envPath = loadBackendEnv();
   const app = await NestFactory.create(AppModule);
+  const expressApp = app.getHttpAdapter().getInstance();
+  expressApp.set('trust proxy', 1);
   app.setGlobalPrefix('api');
+
+  const prisma = app.get(PrismaService);
+  AuditService.configurePrisma(prisma);
+  await prisma.auditLog.count();
+  await prisma.activeSession.count();
 
   // ENTERPRISE FIX: Phase 0 - Fatal Errors Fixed - 2026-03-02
   app.use(cookieParser());
@@ -144,19 +176,30 @@ async function bootstrap() {
   app.enableCors({
     origin(origin, callback) {
       if (!origin) return callback(null, true);
-      const normalizedOrigin =
-        typeof origin === 'string' ? origin.trim().replace(/\/+$/, '') : '';
-      if (process.env.NODE_ENV !== 'production') return callback(null, true);
-      if (
-        allowedOrigins.some((candidate) => candidate.replace(/\/+$/, '') === normalizedOrigin)
-      ) {
+      const normalizedOrigin = typeof origin === 'string' ? normalizeOrigin(origin) : '';
+      const allowCodespacesOrigin = String(process.env.ALLOW_CODESPACES_ORIGINS || '').toLowerCase() === 'true';
+
+      if (process.env.NODE_ENV !== 'production') {
+        if (isTrustedLocalOrigin(normalizedOrigin) || isGithubCodespacesOrigin(normalizedOrigin)) {
+          return callback(null, true);
+        }
+        if (matchesConfiguredOrigin(normalizedOrigin, allowedOrigins)) {
+          return callback(null, true);
+        }
+        return callback(new Error('Not allowed by CORS'));
+      }
+
+      if (matchesConfiguredOrigin(normalizedOrigin, allowedOrigins)) {
         return callback(null, true);
       }
-      if (isTrustedLocalOrigin(normalizedOrigin)) return callback(null, true);
+      if (allowCodespacesOrigin && isGithubCodespacesOrigin(normalizedOrigin)) {
+        return callback(null, true);
+      }
       return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
     allowedHeaders: ['Authorization', 'Content-Type'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));

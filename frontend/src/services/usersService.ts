@@ -57,6 +57,8 @@ type StreamEvent = {
   timestamp: string;
 };
 
+const MAX_USERS_PAGE_SIZE = 200;
+
 const roleFromApi = (row: any): RoleDto => ({
   id: String(row?.id || ''),
   name: String(row?.name || ''),
@@ -93,13 +95,18 @@ export async function fetchUsers(params?: {
   role?: string;
   status?: UsersStatusFilter;
 }): Promise<UsersListResponse> {
-  const response = await apiClient.get('/users', { params });
+  const normalizedParams = {
+    ...params,
+    limit: Math.min(Math.max(Number(params?.limit || 20), 1), MAX_USERS_PAGE_SIZE),
+  };
+
+  const response = await apiClient.get('/users', { params: normalizedParams });
   const payload = response.data || {};
   return {
     data: Array.isArray(payload.data) ? payload.data.map(userFromApi) : [],
     total: Number(payload.total || 0),
-    page: Number(payload.page || params?.page || 1),
-    limit: Number(payload.limit || params?.limit || 20),
+    page: Number(payload.page || normalizedParams.page || 1),
+    limit: Number(payload.limit || normalizedParams.limit || 20),
   };
 }
 
@@ -242,11 +249,8 @@ export function subscribeToUsersStream(
   onEvent: (event: StreamEvent) => void,
   onError?: (error: unknown) => void,
 ) {
-  const token = getAuthToken();
-  if (!token) return () => {};
-
   const base = String(import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
-  const url = `${base}/users/stream?token=${encodeURIComponent(token)}`;
+  const url = `${base}/users/stream`;
   const source = new EventSource(url);
 
   source.onmessage = (event) => {

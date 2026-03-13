@@ -1,4 +1,5 @@
-﻿// ENTERPRISE FIX: Phase 6 - Final Polish & Production Handover - 2026-03-05
+﻿// ENTERPRISE FIX: Phase 6.2 - Final JSON to Prisma Cutover - 2026-03-12
+// ENTERPRISE FIX: Phase 6 - Final Polish & Production Handover - 2026-03-05
 // ENTERPRISE FIX: Phase 3 - Audit Logging & Advanced Security - 2026-03-03
 // FINAL ENTERPRISE FIX: Auto-Seed Admin Complete - 2026-02-26
 // 7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½#ï؟½â¬‘"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½ 7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½#ï؟½â¬‘"ï؟½#ï؟½ï؟½ï؟½9 7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½#ï؟½â¬‘"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½#ï؟½â¬‘"ï؟½7ï؟½â¬©7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½7ï؟½"ï؟½ - Auto-Seed SuperAdmin + JWT Authentication
@@ -67,12 +68,14 @@ const DEFAULT_ROLES: Array<{
 
 @Injectable()
 export class AuthService {
-  private readonly auditService = new AuditService();
+  private readonly auditService: AuditService;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
-  ) { }
+  ) {
+    this.auditService = new AuditService(this.prisma);
+  }
 
   private getJwtSecret(): string {
     return process.env.JWT_SECRET || process.env.ADMIN_TOKEN || 'feedfactory-dev-secret';

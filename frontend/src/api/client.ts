@@ -29,7 +29,9 @@ apiClient.interceptors.request.use((config) => {
     config.url = hasApiPrefix(path) || baseIncludesApiPrefix(baseURL) ? path : `/api${path}`;
   }
 
-  if (token) {
+  const hasJwtBearer = token && token.includes('.') && token.split('.').length === 3;
+
+  if (hasJwtBearer) {
     headers.Authorization = `Bearer ${token}`;
   } else {
     delete headers.Authorization;

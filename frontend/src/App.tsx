@@ -155,13 +155,12 @@ const AppContent = () => {
         setAuditLogs(getAuditLogs());
 
         // Safe JWT auth check with Optional Chaining
-        const jwtToken = getAuthToken();
         const jwtUser = getAuthUser();
 
-        console.log('[App.tsx] Auth Check - JWT Token:', jwtToken ? 'EXISTS' : 'NONE');
+        console.log('[App.tsx] Auth Check - JWT Token:', getAuthToken() ? 'EXISTS' : 'NONE');
         console.log('[App.tsx] Auth Check - JWT User:', jwtUser);
 
-        if (jwtToken && jwtUser) {
+        if (jwtUser) {
           // ENTERPRISE FIX: Server-First + Robust Matching + Full Permissions Guard - 2026-02-28
           const normalizeValue = (value?: string | null) => (value ?? '').trim().toLowerCase();
           const normalizedJwtId = normalizeValue(jwtUser?.id);

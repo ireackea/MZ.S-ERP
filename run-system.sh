@@ -19,8 +19,8 @@ NC='\033[0m' # No Color
 # Configuration
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$PROJECT_ROOT/backend"
-FRONTEND_DIR="$PROJECT_ROOT"
-PRISMA_DIR="$PROJECT_ROOT/prisma"
+FRONTEND_DIR="$PROJECT_ROOT/frontend"
+PRISMA_DIR="$BACKEND_DIR/prisma"
 
 # =============================================================================
 # Helper Functions
@@ -113,16 +113,19 @@ sync_database() {
     
     # Generate Prisma Client
     log_info "Generating Prisma Client..."
-    npx prisma generate
+    npm run prisma:generate
     
     # Run migrations (development mode)
     log_info "Running database migrations..."
-    npx prisma migrate dev --name sync
+    if ! (cd "$BACKEND_DIR" && npx prisma migrate dev --name sync); then
+        log_warning "Prisma migrate dev failed. Falling back to prisma db push for the local development database."
+        (cd "$BACKEND_DIR" && npx prisma db push)
+    fi
     
     # Seed database if seed file exists
     if [ -f "$PRISMA_DIR/seed.ts" ]; then
         log_info "Seeding database..."
-        npx prisma db seed
+        npm run prisma:seed
     fi
     
     log_success "Database synchronization completed"
@@ -203,17 +206,7 @@ launch_system() {
     echo "============================================================================="
     echo ""
     
-    # Use concurrently to run both servers with colored output
-    npx concurrently \
-        --prefix "[{name}]" \
-        --names "BACKEND,FRONTEND" \
-        --colors "bgBlue,bgGreen" \
-        --kill-others \
-        --kill-others-on-fail \
-        --restart-tries 3 \
-        --restart-delay 2000 \
-        "cd \"$BACKEND_DIR\" && npm run start:dev" \
-        "npm run dev"
+    PORT=3000 npm run dev:full
 }
 
 # =============================================================================

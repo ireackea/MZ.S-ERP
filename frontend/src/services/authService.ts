@@ -28,6 +28,11 @@ export type AuthLoginResponse = {
 
 export type AuthSessionUser = AuthLoginResponse['user'];
 
+const isBearerJwtToken = (value: string | null | undefined) => {
+  const token = String(value || '').trim();
+  return token.includes('.') && token.split('.').length === 3;
+};
+
 const emitSessionChanged = () => {
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new Event(AUTH_SESSION_EVENT));
@@ -57,7 +62,10 @@ export const clearAllAuthData = () => {
   emitSessionChanged();
 };
 
-export const getAuthToken = () => localStorage.getItem(AUTH_TOKEN_KEY) || '';
+export const getAuthToken = () => {
+  const token = localStorage.getItem(AUTH_TOKEN_KEY);
+  return isBearerJwtToken(token) ? String(token) : '';
+};
 
 export const getAuthUser = () => {
   const raw = localStorage.getItem(AUTH_USER_KEY);
@@ -94,7 +102,11 @@ export const login = async (username: string, password: string): Promise<AuthLog
       throw new Error('Invalid response from server');
     }
 
-    localStorage.setItem(AUTH_TOKEN_KEY, payload.accessToken);
+    if (isBearerJwtToken(payload.accessToken)) {
+      localStorage.setItem(AUTH_TOKEN_KEY, payload.accessToken);
+    } else {
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+    }
     setAuthUser(payload.user);
 
     console.log('[authService] Login successful:', {
