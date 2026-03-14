@@ -1,4 +1,4 @@
-// ENTERPRISE FIX: Phase 7 - Final Visual & Load Verification - 2026-03-13
+// ENTERPRISE FIX: Phase 8 - Absolute Final Visual & Offline Proof - 2026-03-13
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
@@ -18,6 +18,7 @@ import { v4 as uuidv4 } from 'uuid';
 import Fuse from 'fuse.js';
 import { toast } from '@services/toastService';
 import { useInventoryStore } from '../store/useInventoryStore';
+import { useOfflineSync } from '../hooks/useOfflineSync';
 
 interface DailyOperationsProps {
     items?: Item[];
@@ -334,8 +335,11 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
     onImport
 }) => {
     const location = useLocation();
+    const { executeWithSync } = useOfflineSync();
     const storeItems = useInventoryStore((state) => state.items);
     const storeTransactions = useInventoryStore((state) => state.transactions);
+    const setInventoryTransactions = useInventoryStore((state) => state.setTransactions);
+    const updateStockFromTransaction = useInventoryStore((state) => state.updateStockFromTransaction);
     const loadAll = useInventoryStore((state) => state.loadAll);
     const lastLoadedAt = useInventoryStore((state) => state.lastLoadedAt);
     const storedOperationPrintConfig = useInventoryStore((state) => state.operationPrintConfig);
@@ -350,6 +354,59 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
     const exportSheetsToExcel = useInventoryStore((state) => state.exportSheetsToExcel);
     const items = storeItems.length > 0 ? storeItems : (itemsProp || []);
     const transactions = storeTransactions.length > 0 ? storeTransactions : (transactionsProp || []);
+
+    const appendTransactionsLocally = async (rows: Transaction[]) => {
+        const nextRows = [...transactions, ...rows];
+        setInventoryTransactions(nextRows);
+        rows.forEach((row) => updateStockFromTransaction(row, 'add'));
+    };
+
+    const addTransactionsWithOfflineProof = async (rows: Transaction[]) => {
+        const payload = {
+            transactions: rows.map((row) => ({
+                itemId: row.itemId,
+                date: row.date,
+                type: row.type,
+                quantity: Number(row.quantity ?? 0),
+                supplierOrReceiver: row.supplierOrReceiver,
+                warehouseId: row.warehouseId,
+                warehouseInvoice: row.warehouseInvoice,
+                supplierInvoice: row.supplierInvoice,
+                supplierNet: row.supplierNet,
+                difference: row.difference,
+                packageCount: row.packageCount,
+                weightSlip: row.weightSlip,
+                truckNumber: row.truckNumber,
+                trailerNumber: row.trailerNumber,
+                driverName: row.driverName,
+                entryTime: row.entryTime,
+                exitTime: row.exitTime,
+                unloadingRuleId: row.unloadingRuleId,
+                unloadingDuration: row.unloadingDuration,
+                delayDuration: row.delayDuration,
+                delayPenalty: row.delayPenalty,
+                calculatedFine: row.calculatedFine,
+                notes: row.notes,
+                attachmentData: row.attachmentData,
+                attachmentName: row.attachmentName,
+                attachmentType: row.attachmentType,
+                googleDriveLink: row.googleDriveLink,
+                createdByUserId: row.createdByUserId,
+                timestamp: row.timestamp,
+            })),
+        };
+
+        const result = await executeWithSync('/transactions/bulk', 'POST', payload, async () => {
+            await appendTransactionsLocally(rows);
+        });
+
+        if (!(result as { offline?: boolean }).offline) {
+            setInventoryTransactions(transactions);
+            onAddTransaction(rows);
+        }
+
+        return result;
+    };
 
     // --- Constants & Config ---
     const ROWS_COUNT = 5;
@@ -796,7 +853,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
         }
     };
 
-    const saveInvoice = () => {
+    const saveInvoice = async () => {
         // 1. Validate Header
         if (!invoiceHeader.date || !invoiceHeader.warehouseInvoice || !invoiceHeader.supplierOrReceiver) {
             toast.error('يرجى تعبئة الحقول الأساسية لترويسة الفاتورة (التاريخ، الفاتورة، المورد/العميل)');
@@ -877,7 +934,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
             } as Transaction;
         });
 
-        onAddTransaction(newTransactions);
+        await addTransactionsWithOfflineProof(newTransactions);
 
         // 6. Reset
         setInvoiceHeader(prev => ({
@@ -960,7 +1017,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
         return !transactions.some(t => t.warehouseInvoice === invoice && t.type === type && t.id !== excludeId);
     };
 
-    const saveBatchRow = (index: number) => {
+    const saveBatchRow = async (index: number) => {
         const form = batchForms[index];
         if (!form.date) return toast.error('التاريخ مطلوب');
         if (!form.type) return toast.error('نوع العملية مطلوب');
@@ -997,7 +1054,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
             timestamp: Date.now()
         };
 
-        onAddTransaction([newTransaction]);
+        await addTransactionsWithOfflineProof([newTransaction]);
         const newForms = [...batchForms];
         newForms[index] = getEmptyForm();
         setBatchForms(newForms);
@@ -2252,8 +2309,8 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
         setImportStep('preview');
     };
 
-    const commitImport = () => {
-        onAddTransaction(importPreview.valid);
+    const commitImport = async () => {
+        await addTransactionsWithOfflineProof(importPreview.valid);
         onImport?.(importPreview.valid.length);
         setImportStep('finish');
     };

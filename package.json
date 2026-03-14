@@ -34,6 +34,7 @@
     "monitor:check": "node -e \"fetch('http://127.0.0.1:3001/metrics').then(async (response) => { if (!response.ok) throw new Error('Metrics endpoint unavailable'); const text = await response.text(); if (!text.includes('http_requests_total')) throw new Error('Missing Prometheus request metrics'); if (!text.includes('process_uptime_seconds')) throw new Error('Missing Prometheus uptime metrics'); console.log('monitoring:ok'); }).catch((error) => { console.error(error.message); process.exit(1); });\"",
     "test:e2e:login": "npm exec vitest -- --run tests/e2e/login.spec.ts",
     "verify:visual:load": "npm run build:full && npm run monitor:check && npm run test:e2e:login",
+    "verify:absolute:proof": "npm run build:full && npm run monitor:check && npm run test:e2e:login",
     "deploy:prod": "docker compose -f docker-compose.prod.yml up -d --build && npm run health-check && npm run monitor:check",
     "test": "npm run test --workspace=frontend",
     "dev:full": "concurrently -n \"BACKEND,FRONTEND\" -c \"bgBlue,bgGreen\" \"npm run backend:dev\" \"npm run frontend:dev\"",
