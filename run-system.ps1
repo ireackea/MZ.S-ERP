@@ -11,7 +11,7 @@ $ErrorActionPreference = "Stop"
 $PROJECT_ROOT = Split-Path -Parent $MyInvocation.MyCommand.Path
 $BACKEND_DIR = Join-Path $PROJECT_ROOT "backend"
 $FRONTEND_DIR = $PROJECT_ROOT
-$PRISMA_DIR = Join-Path $PROJECT_ROOT "prisma"
+$PRISMA_DIR = Join-Path $BACKEND_DIR "prisma"
 
 # =============================================================================
 # Helper Functions
@@ -80,6 +80,33 @@ function Invoke-PreflightChecks {
     Test-Directory (Join-Path $FRONTEND_DIR "src")
     Test-Directory $PRISMA_DIR
     Log-Success "All required directories found"
+    
+    # Ensure backend/.env exists (required for JWT_SECRET and other settings)
+    $backendEnv = Join-Path $BACKEND_DIR ".env"
+    $envExample = Join-Path $PROJECT_ROOT ".env.example"
+    if (-not (Test-Path $backendEnv)) {
+        if (Test-Path $envExample) {
+            Log-Warning "backend/.env not found. Creating development .env from .env.example..."
+            # Read example, substitute dev-appropriate values, and write backend/.env
+            $content = Get-Content $envExample | Where-Object { $_ -notmatch '^(NODE_ENV|PORT|CORS_ORIGINS|HEALTH_URL)=' }
+            $content += "NODE_ENV=development"
+            $content += "PORT=3001"
+            $content += "CORS_ORIGINS=http://localhost:5173,http://localhost:5174"
+            $content += "HEALTH_URL=http://localhost:3001/api/health"
+            $content | Set-Content $backendEnv
+            Write-Host ""
+            Log-Warning "=============================================================="
+            Log-Warning "  backend/.env created with PLACEHOLDER secrets."
+            Log-Warning "  You MUST update JWT_SECRET and other secrets before"
+            Log-Warning "  using this in any production or shared environment."
+            Log-Warning "  File location: $backendEnv"
+            Log-Warning "=============================================================="
+            Write-Host ""
+        } else {
+            Log-Error "backend/.env is missing and no .env.example found. Please create backend/.env manually."
+            exit 1
+        }
+    }
     
     # Check if node_modules exist
     if (-not (Test-Path (Join-Path $PROJECT_ROOT "node_modules"))) {
@@ -181,7 +208,7 @@ function Invoke-HealthCheck {
     
     while ($ATTEMPT -lt $MAX_ATTEMPTS) {
         try {
-            $response = Invoke-WebRequest -Uri "http://localhost:3000/api/health" -UseBasicParsing -ErrorAction SilentlyContinue
+            $response = Invoke-WebRequest -Uri "http://localhost:3001/api/health" -UseBasicParsing -ErrorAction SilentlyContinue
             if ($response.StatusCode -eq 200) {
                 Log-Success "Backend health check passed: $($response.Content)"
                 return $true
@@ -206,9 +233,9 @@ function Invoke-SystemLaunch {
     Write-Host ""
     Write-Host "=============================================================================" -ForegroundColor Cyan
     Write-Host "  FeedFactory Pro Enterprise System" -ForegroundColor Cyan
-    Write-Host "  - Backend:  http://localhost:3000" -ForegroundColor White
+    Write-Host "  - Backend:  http://localhost:3001" -ForegroundColor White
     Write-Host "  - Frontend: http://localhost:5173" -ForegroundColor White
-    Write-Host "  - Health:   http://localhost:3000/api/health" -ForegroundColor White
+    Write-Host "  - Health:   http://localhost:3001/api/health" -ForegroundColor White
     Write-Host "=============================================================================" -ForegroundColor Cyan
     Write-Host ""
     

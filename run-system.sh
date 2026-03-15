@@ -83,6 +83,32 @@ preflight_checks() {
     check_directory "$PRISMA_DIR"
     log_success "All required directories found"
     
+    # Ensure backend/.env exists (required for JWT_SECRET and other settings)
+    if [ ! -f "$BACKEND_DIR/.env" ]; then
+        if [ -f "$PROJECT_ROOT/.env.example" ]; then
+            log_warning "backend/.env not found. Creating development .env from .env.example..."
+            # Write a dev-appropriate .env by substituting key values
+            {
+                grep -v '^NODE_ENV=\|^PORT=\|^CORS_ORIGINS=\|^HEALTH_URL=' "$PROJECT_ROOT/.env.example"
+                echo "NODE_ENV=development"
+                echo "PORT=3001"
+                echo "CORS_ORIGINS=http://localhost:5173,http://localhost:5174"
+                echo "HEALTH_URL=http://localhost:3001/api/health"
+            } > "$BACKEND_DIR/.env"
+            echo ""
+            log_warning "=============================================================="
+            log_warning "  backend/.env created with PLACEHOLDER secrets."
+            log_warning "  You MUST update JWT_SECRET and other secrets before"
+            log_warning "  using this in any production or shared environment."
+            log_warning "  File location: $BACKEND_DIR/.env"
+            log_warning "=============================================================="
+            echo ""
+        else
+            log_error "backend/.env is missing and no .env.example found. Please create backend/.env manually."
+            exit 1
+        fi
+    fi
+    
     # Check if node_modules exist
     if [ ! -d "$PROJECT_ROOT/node_modules" ]; then
         log_warning "Frontend dependencies not installed. Running npm install..."
@@ -178,8 +204,8 @@ run_health_check() {
     ATTEMPT=0
     
     while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-        if curl -s http://localhost:3000/api/health &> /dev/null; then
-            HEALTH_RESPONSE=$(curl -s http://localhost:3000/api/health)
+        if curl -s http://localhost:3001/api/health &> /dev/null; then
+            HEALTH_RESPONSE=$(curl -s http://localhost:3001/api/health)
             log_success "Backend health check passed: $HEALTH_RESPONSE"
             return 0
         fi
@@ -200,13 +226,13 @@ launch_system() {
     echo ""
     echo "============================================================================="
     echo "  FeedFactory Pro Enterprise System"
-    echo "  - Backend:  http://localhost:3000"
+    echo "  - Backend:  http://localhost:3001"
     echo "  - Frontend: http://localhost:5173"
-    echo "  - Health:   http://localhost:3000/api/health"
+    echo "  - Health:   http://localhost:3001/api/health"
     echo "============================================================================="
     echo ""
     
-    PORT=3000 npm run dev:full
+    PORT=3001 npm run dev:full
 }
 
 # =============================================================================
