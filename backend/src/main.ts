@@ -1,4 +1,4 @@
-// ENTERPRISE FIX: Phase 7 - Production Deployment & Monitoring Setup - 2026-03-13
+// ENTERPRISE FIX: Phase 0 - التنظيف الأساسي والتحضير - 2026-03-13
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
@@ -241,7 +241,8 @@ async function bootstrap() {
     next();
   });
 
-  // 7"#"7"77"#⬑"#%  // [AUTH REQUEST MONITOR]
+  // ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
+  // Auth request monitor
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.url.includes('auth') || req.url.includes('/auth')) {
       console.log(`\n[Auth Monitor] [Backend Entry] Incoming: ${req.method} ${req.url}`);

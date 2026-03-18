@@ -1,9 +1,9 @@
+# ENTERPRISE FIX: Phase 0 - التنظيف الأساسي والتحضير - 2026-03-13
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
 COPY package*.json ./
-COPY prisma ./prisma
 RUN npm ci
 
 COPY . .
@@ -11,7 +11,7 @@ COPY . .
 ARG VITE_API_URL=/api
 ENV VITE_API_URL=${VITE_API_URL}
 
-RUN npx vite build
+RUN npm run build
 
 FROM nginx:alpine
 

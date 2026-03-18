@@ -1,4 +1,4 @@
-// ENTERPRISE FIX: Phase 6.6 - Global 100% Cleanup & Absolute Verification - 2026-03-13
+// ENTERPRISE FIX: Phase 0 - التنظيف الأساسي والتحضير - 2026-03-13
 
 import React, { Suspense, lazy, useState, useEffect, useRef } from 'react';
 import { Routes, Route } from 'react-router-dom';
@@ -8,11 +8,12 @@ import apiClient from '@api/client';
 import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
 import EnterpriseLoading from './components/EnterpriseLoading';
-import { useInventoryStore } from './store/useInventoryStore';
+import ProtectedRoute from './components/ProtectedRoute';
+import { clearLegacyInventoryBootstrapState, useInventoryStore } from './store/useInventoryStore';
 import { Transaction, Partner, Order, User, Tag, SystemSettings, OperationAppearance, ReportColumnConfig, UnloadingRule, Formula, AuditLog } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { ensureAuthCredentialsSeeded, loginAsUser, logout, provisionInitialAdmin } from './services/authController';
-import { getAuthToken, getAuthUser } from '@services/authService';
+import { clearAllAuthData, getAuthToken, getAuthUser } from '@services/authService';
 import { filterByDataScope, getIamConfig, hasPermission, logUserActivity, normalizeUsers, upsertCurrentSession } from './services/iamService';
 import {
   bulkCreateTransactions,
@@ -35,6 +36,7 @@ import {
   getOpeningBalanceReportConfig, saveOpeningBalanceReportConfig,
   getUnloadingRules, saveUnloadingRules,
   getFormulas, saveFormulas,
+  clearStrictEmptyBootFlag,
 } from './services/storage';
 
 import { useOfflineSync } from './hooks/useOfflineSync';
@@ -143,8 +145,6 @@ const AppContent = () => {
   // ENTERPRISE FIX: Auth initialization with try/catch
   // ENTERPRISE FIX: Server-First Sync + Optimistic UI - 2026-02-28
   useEffect(() => {
-    let mounted = true;
-
     const initializeAuth = async () => {
       try {
         console.log('[App.tsx] Starting auth initialization...');
@@ -217,10 +217,8 @@ const AppContent = () => {
         setAuthReady(true);
         console.log('[App.tsx] Auth initialization complete, authReady = true');
 
-        // ENTERPRISE FIX: Server-First Items Sync - Clear LocalStorage items to prevent stale data
-        // Inventory hydration is now owned بالكامل بواسطة Zustand store.
-        localStorage.removeItem('feed_factory_items');
-        console.log('[App.tsx] LocalStorage items cleared (Server-First strategy)');
+        clearLegacyInventoryBootstrapState();
+        console.log('[App.tsx] Legacy inventory bootstrap state cleared');
 
       } catch (error) {
         console.error('[App.tsx] Auth initialization failed:', error);
@@ -229,10 +227,6 @@ const AppContent = () => {
     };
 
     initializeAuth();
-
-    return () => {
-      mounted = false;
-    };
   }, [setInventoryRoles, setInventoryTransactions, setInventoryUsers, setReferenceData]);
 
   useEffect(() => {
@@ -246,6 +240,7 @@ const AppContent = () => {
     if (!authReady) return;
 
     if (!currentUser) {
+      clearAllAuthData();
       setInventoryRouteReady(false);
       return;
     }
@@ -574,7 +569,7 @@ const AppContent = () => {
           return;
         }
 
-        localStorage.removeItem('feed_factory_strict_empty_boot');
+        clearStrictEmptyBootFlag();
         const updatedUsers = normalizeUsers(getUsers());
         setUsers(updatedUsers);
         setCurrentUser(result.user);
@@ -626,7 +621,6 @@ const AppContent = () => {
     );
   }
 
-  // ENTERPRISE FIX: Permission Guard Fixed - 2026-02-26
   const renderProtectedRoute = (permissionId: string, routeId: string, element: React.ReactNode) => {
     if (!inventoryRouteReady || inventoryStoreLoading) {
       return (
@@ -650,22 +644,27 @@ const AppContent = () => {
     const permissions = currentUser?.permissions || [];
     console.log(`[Permission Guard] Checking ${routeId} with permissions:`, permissions);
 
-    if (hasPermission(currentUser, permissionId)) {
-      return element;
-    }
-
-    if (currentUser) {
-      const deniedKey = `${currentUser.id}:${routeId}:${permissionId}`;
-      if (!deniedAccessLogRef.current.has(deniedKey)) {
-        deniedAccessLogRef.current.add(deniedKey);
-        logUserActivity({ userId: currentUser.id, userName: currentUser.name, event: 'access_denied', details: `تم رفض الوصول إلى ${routeId} - permission=${permissionId}` });
-      }
-    }
-
     return (
-      <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-red-800 font-bold">
-        ليس لديك صلاحية الوصول لهذه الصفحة. يرجى التواصل مع مدير النظام للحصول على الصلاحيات المناسبة.
-      </div>
+      <ProtectedRoute
+        permission={permissionId}
+        fallback={(
+          <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-red-800 font-bold">
+            {(() => {
+              if (currentUser) {
+                const deniedKey = `${currentUser.id}:${routeId}:${permissionId}`;
+                if (!deniedAccessLogRef.current.has(deniedKey)) {
+                  deniedAccessLogRef.current.add(deniedKey);
+                  logUserActivity({ userId: currentUser.id, userName: currentUser.name, event: 'access_denied', details: `تم رفض الوصول إلى ${routeId} - permission=${permissionId}` });
+                }
+              }
+
+              return 'ليس لديك صلاحية الوصول لهذه الصفحة. يرجى التواصل مع مدير النظام للحصول على الصلاحيات المناسبة.';
+            })()}
+          </div>
+        )}
+      >
+        {element}
+      </ProtectedRoute>
     );
   };
 

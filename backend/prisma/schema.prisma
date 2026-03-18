@@ -1,4 +1,4 @@
-// ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
+// ENTERPRISE FIX: Phase 0 - التنظيف الأساسي والتحضير - 2026-03-13
 // Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
 // Prisma Schema - Database Configuration
 
@@ -6,13 +6,9 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// Default local dev uses SQLite for zero-dependency setup. To use PostgreSQL, change
-// provider to "postgresql" and set the DATABASE_URL environment variable accordingly.
-
 datasource db {
-  provider = "sqlite"
-  // ✅ ENTERPRISE FIX: Direct URL for prisma db push compatibility
-  url      = "file:./dev.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model Role {

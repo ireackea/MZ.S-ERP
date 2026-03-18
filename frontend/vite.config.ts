@@ -1,10 +1,10 @@
-// ENTERPRISE FIX: Phase 8 - Absolute Final Visual & Offline Proof - 2026-03-13
+// ENTERPRISE FIX: Phase 0 - التنظيف الأساسي والتحضير - 2026-03-13
 import { defineConfig } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const backendOrigin = process.env.VITE_BACKEND_ORIGIN || 'http://localhost:3000';
+const backendOrigin = process.env.VITE_BACKEND_ORIGIN || 'http://localhost:3001';
 const monitoringProvider = (process.env.VITE_MONITORING_PROVIDER || 'sentry').trim().toLowerCase();
 const monitoringEnabled = Boolean(process.env.VITE_SENTRY_DSN || process.env.VITE_LOGROCKET_APP_ID);
 const monitoringConfig = {

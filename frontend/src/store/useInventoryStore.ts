@@ -1,4 +1,4 @@
-// ENTERPRISE FIX: Phase 6.6 - Global 100% Cleanup & Absolute Verification - 2026-03-13
+// ENTERPRISE FIX: Phase 0 - التنظيف الأساسي والتحضير - 2026-03-13
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { toast } from '@services/toastService';
@@ -23,6 +23,7 @@ import type { GridColumnPreference, Item, ItemSortMode, RoleDefinition, Transact
 
 const SOFT_KEY = 'ff_items_soft_v1';
 const SORT_KEY = 'ff_items_sort_v1';
+const LEGACY_ITEM_STORAGE_KEY = 'feed_factory_items';
 const FORBIDDEN_LEGACY_JSON_KEYS = new Set([
   'feed_factory_audit_logs',
   'active-user-sessions',
@@ -121,6 +122,11 @@ type Store = {
   softDelete: (ids: string[], actorName: string) => void;
   restore: (ids: string[]) => void;
   purge: (ids: string[], actorId: string, actorName: string) => Promise<void>;
+};
+
+export const clearLegacyInventoryBootstrapState = () => {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.removeItem(LEGACY_ITEM_STORAGE_KEY);
 };
 
 const DEFAULT_ACTOR: ActorInfo = { id: 'system', name: 'InventoryStore' };

@@ -35,7 +35,7 @@
     "test:e2e:login": "npm exec vitest -- --run tests/e2e/login.spec.ts",
     "verify:visual:load": "npm run build:full && npm run monitor:check && npm run test:e2e:login",
     "verify:absolute:proof": "npm run build:full && npm run monitor:check && npm run test:e2e:login",
-    "deploy:prod": "docker compose -f docker-compose.prod.yml up -d --build && npm run health-check && npm run monitor:check",
+    "deploy:prod": "docker compose up -d --build && npm run health-check && npm run monitor:check",
     "test": "npm run test --workspace=frontend",
     "dev:full": "concurrently -n \"BACKEND,FRONTEND\" -c \"bgBlue,bgGreen\" \"npm run backend:dev\" \"npm run frontend:dev\"",
     "start:backend": "npm run backend:dev",

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Item, Transaction } from '../types';
-import { getTransactions } from '../services/legacy/storage';
+import { getTransactions } from '../services/storage';
 import { calculateBalancesMap, getFinancialYearFromDate } from '../services/legacy/openingBalanceService';
 import { getComputedBalancesFromApi, getTransactionsFromApi } from '@services/transactionsService';
 
