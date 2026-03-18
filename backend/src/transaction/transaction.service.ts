@@ -1,3 +1,5 @@
+// ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
+// ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Legacy Migration Phase 5 - Final Stabilization & Production - 2026-02-27
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, Transaction as DbTransaction } from '@prisma/client';
@@ -70,17 +72,17 @@ export class TransactionService {
       'incoming',
       'import',
       'production',
-      '7�"�7�"�7�"�#���"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�',
-      '7�"�7�"�7�"�7�"�7�"�7�"�7�"�#�⬑"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�',
-      '7�"�7�"�7�"�7�"�7�"�7�"�7�"�#�⬑"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�',
+      '7"7"7"#"7"7"7"7"7"7"7"7"7"7"7"7"',
+      '7"7"7"7"7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"7"',
+      '7"7"7"7"7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"7"',
     ];
     const outboundKeywords = [
       'out',
       'sale',
       'outgoing',
       'export',
-      '7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�',
-      '7�"�7�"�7�"�#�⬑"�7�%7�"�7�"�7�"�7�"�7�"�7�"�7�"�#�⬑"�#���9 7�"�7�"�7�"�#�����',
+      '7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"',
+      '7"7"7"#⬑"7%7"7"7"7"7"7"7"#⬑"#9 7"7"7"#',
     ];
 
     if (inboundKeywords.some((keyword) => normalized.includes(keyword))) return quantity;
@@ -245,7 +247,7 @@ export class TransactionService {
         limit,
       };
     } catch (dbError: any) {
-      console.error('7�"�7�"�7�"�#�⬑"�7��"7�"�#����� Transaction list DB failure:', dbError?.message || dbError);
+      console.error('7"7"7"#⬑"7"7"# Transaction list DB failure:', dbError?.message || dbError);
       return {
         data: [],
         total: 0,
@@ -644,7 +646,7 @@ export class TransactionService {
         data,
       };
     } catch (dbError: any) {
-      console.error('7�"�7�"�7�"�#�⬑"�7��"7�"�#����� getComputedBalances DB failure:', dbError?.message || dbError);
+      console.error('7"7"7"#⬑"7"7"# getComputedBalances DB failure:', dbError?.message || dbError);
       return {
         financialYear: year,
         total: 0,

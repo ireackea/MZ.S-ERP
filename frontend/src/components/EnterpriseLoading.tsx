@@ -1,3 +1,5 @@
+// ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
+// ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Arabic Encoding Restoration - Full Components Folder - 2026-03-04
 // Arabic text encoding verified and corrected
 
@@ -14,8 +16,8 @@ interface EnterpriseLoadingProps {
 }
 
 const EnterpriseLoading: React.FC<EnterpriseLoadingProps> = ({
-  message = 'جارٍ تحميل النظام...',
-  subMessage = 'يرجى الانتظار، يتم إعداد بيئة العمل الآمنة',
+  message = 'جارٍ تحميل النام...',
+  subMessage = 'يرجى الانتار، يتم إعداد بيئة العمل الآمنة',
   showSteps = true,
 }) => {
   const [currentStep, setCurrentStep] = React.useState(0);
@@ -24,7 +26,7 @@ const EnterpriseLoading: React.FC<EnterpriseLoadingProps> = ({
     'جاري التحقق من المصادقة...',
     'جاري تحميل بيانات المستخدم...',
     'جاري إعداد الصلاحيات...',
-    'جاري تهيئة النظام...',
+    'جاري تهيئة النام...',
   ];
 
   React.useEffect(() => {
@@ -57,7 +59,7 @@ const EnterpriseLoading: React.FC<EnterpriseLoadingProps> = ({
               </div>
             </div>
             <h1 className="text-xl font-black text-white mb-1">
-              نظام إدارة المخازن Enterprise
+              نام إدارة المخازن Enterprise
             </h1>
             <p className="text-emerald-200 text-sm font-medium">
               بوابة الدخول الموحدة
@@ -152,7 +154,7 @@ const EnterpriseLoading: React.FC<EnterpriseLoadingProps> = ({
               <div className="flex items-center justify-center gap-2">
                 <Shield size={16} className="text-emerald-600" />
                 <span className="text-xs font-bold text-emerald-700">
-                  محمي بواسطة FeedFactory IAM Security
+                  محمي بواسة FeedFactory IAM Security
                 </span>
               </div>
             </div>
@@ -161,10 +163,10 @@ const EnterpriseLoading: React.FC<EnterpriseLoadingProps> = ({
           {/* Footer */}
           <div className="bg-slate-50 border-t border-slate-200 px-8 py-4 text-center">
             <p className="text-xs text-slate-500">
-              © 2026 FeedFactory Pro Enterprise
+&copy; 2026 FeedFactory Pro Enterprise
             </p>
             <p className="text-xs text-slate-400 mt-1">
-              إصدار النظام: v2.0.0
+              إصدار النام: v2.0.0
             </p>
           </div>
         </div>

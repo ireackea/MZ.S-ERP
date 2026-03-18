@@ -1,3 +1,5 @@
+// ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
+// ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Phase 1.6 - Final Perfection Pass - 2026-03-02
 import apiClient from '../api/client';
 import { toast } from '@services/toastService';
@@ -117,9 +119,9 @@ export const mutationQueueService = {
         if (error.response && error.response.status === 409) {
           console.warn('[MutationQueue] Conflict detected (Server Wins). Dropping local mutation.');
           
-          toast('7�8& 7�7�7�8y8 7�87�7�8y7� 8&8  87�8 7�7�7� 7�7�7�. 7�7�7�8� 7�7�7�8y7� 7�8y7�8 7�7�8�.', {
+          toast('78& 7778y8 78778y7 8&8  878 777 777. 7778 7778y7 78y78 778.', {
             action: {
-              label: '7�7�7� 7�87�8~7�7�8y8',
+              label: '777 7878~778y8',
               onClick: () => {
                 window.dispatchEvent(new CustomEvent('show-conflict-modal', {
                   detail: { task, serverData: error.response.data }

@@ -1,3 +1,5 @@
+// ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
+// ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Arabic Encoding Restoration - Full Components Folder - 2026-03-04
 // Arabic text encoding verified and corrected
 
@@ -26,7 +28,7 @@ const AcceptInvitation: React.FC = () => {
   useEffect(() => {
     const run = async () => {
       if (!token) {
-        setError('7�7�7�7� 7�87�7�8�7� 78y7� 7�7�87�');
+        setError('7777 787787 78y7 7787');
         setLoading(false);
         return;
       }
@@ -35,7 +37,7 @@ const AcceptInvitation: React.FC = () => {
         setEmail(result.email);
         setRoleName(result.role?.name || 'User');
       } catch (err: any) {
-        setError(err?.response?.data?.message || '7�7�7�7� 7�87�7�88 8&8  7�87�7�8�7�');
+        setError(err?.response?.data?.message || '7777 787788 8&8  787787');
       } finally {
         setLoading(false);
       }
@@ -48,24 +50,24 @@ const AcceptInvitation: React.FC = () => {
     e.preventDefault();
     if (!token) return;
     if (!password || password.length < 8) {
-      toast.error('8�88&7� 7�88&7�8�7� 8y7�7� 7�87� 7�88 7�8  8 7�7�7�8~');
+      toast.error('888&7 788&787 8y77 787 788 78  8 7778~');
       return;
     }
 
     setSubmitting(true);
     try {
       await acceptInvitation({ token, password, username: username || undefined, firstName: firstName || undefined, lastName: lastName || undefined });
-      toast.success('7�8& 7�8~7�8y8 7�87�7�7�7� 7�8 7�7�7�. 8y8&8�8 8� 7�7�7�8y8 7�87�7�8�8 7�87�8 .');
+      toast.success('78& 78~78y8 787777 78 777. 8y8&88 8 7778y8 787788 7878 .');
       navigate('/', { replace: true });
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || '8~7�8 87�8�8 7�87�7�8�7�');
+      toast.error(err?.response?.data?.message || '8~78 8788 787787');
     } finally {
       setSubmitting(false);
     }
   };
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center">7�7�7�8y 7�87�7�88 8&8  7�87�7�8�7�...</div>;
+    return <div className="min-h-screen flex items-center justify-center">7778y 787788 8&8  787787...</div>;
   }
 
   return (
@@ -75,38 +77,38 @@ const AcceptInvitation: React.FC = () => {
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-lg bg-white rounded-2xl shadow-xl border border-slate-200 p-6"
       >
-        <h1 className="text-2xl font-bold text-slate-800 mb-2">87�8�8 7�7�8�7� 7�87�8 7�8&7�8&</h1>
+        <h1 className="text-2xl font-bold text-slate-800 mb-2">8788 7787 7878 78&78&</h1>
         {error ? (
           <div className="rounded-xl border border-red-200 bg-red-50 text-red-700 p-4">{error}</div>
         ) : (
           <>
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 mb-4 text-sm text-emerald-900">
-              7�87�7�8y7�: <span className="font-bold">{email}</span> | 7�87�8�7�: <span className="font-bold">{roleName}</span>
+              78778y7: <span className="font-bold">{email}</span> | 78787: <span className="font-bold">{roleName}</span>
             </div>
             <form onSubmit={handleSubmit} className="space-y-3">
               <input
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="7�7�8& 7�88&7�7�7�7�8& (7�7�7�8y7�7�8y)"
+                placeholder="778& 788&77778& (7778y778y)"
                 className="w-full rounded-xl border border-slate-200 px-4 py-3"
               />
               <input
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
-                placeholder="7�87�7�8& 7�87�8�8"
+                placeholder="78778& 78788"
                 className="w-full rounded-xl border border-slate-200 px-4 py-3"
               />
               <input
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
-                placeholder="7�7�8& 7�87�7�7�87�"
+                placeholder="778& 7877787"
                 className="w-full rounded-xl border border-slate-200 px-4 py-3"
               />
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="8�88&7� 7�88&7�8�7� 7�87�7�8y7�7�"
+                placeholder="888&7 788&787 78778y77"
                 className="w-full rounded-xl border border-slate-200 px-4 py-3"
                 required
               />
@@ -115,7 +117,7 @@ const AcceptInvitation: React.FC = () => {
                 disabled={submitting}
                 className="w-full rounded-xl bg-emerald-600 text-white py-3 font-bold hover:bg-emerald-700 disabled:opacity-60"
               >
-                {submitting ? '7�7�7�8� 7�87�8~7�8y8...' : '7�8~7�8y8 7�87�7�7�7�'}
+                {submitting ? '7778 7878~78y8...' : '78~78y8 787777'}
               </button>
             </form>
           </>

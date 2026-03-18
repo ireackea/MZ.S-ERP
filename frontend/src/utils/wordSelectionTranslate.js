@@ -1,3 +1,5 @@
+// ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
+// ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // Utility: getValidSelectionDetails
 // - Accepts either a Selection object (window.getSelection()) or a plain string
 // - Returns a detailed object describing whether the selection is valid for translation
@@ -66,7 +68,7 @@ function _cleanText(s) {
 function _isLetterWord(token) {
   if (!token) return false;
   // allow letters, combining marks, hyphen, apostrophe
-  return /^\p{L}[\p{L}\p{M}\p{Pd}'7�"�7�"�7�"�#���97�"�7�"�#���⬆7�"�`]*$/u.test(token);
+  return /^\p{L}[\p{L}\p{M}\p{Pd}'7"7"7"#97"7"#⬆7"`]*$/u.test(token);
 }
 
 /**

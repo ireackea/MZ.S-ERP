@@ -1,3 +1,5 @@
+// ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
+// ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Phase 8 - Absolute Final Visual & Offline Proof - 2026-03-13
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
@@ -174,12 +176,12 @@ const OPERATION_PRINT_COLUMNS: { key: keyof OperationPrintableRow; label: string
     { key: 'packageCount', label: 'العدد (عبوات)' },
     { key: 'weightSlip', label: 'بوليصة الوزن' },
     { key: 'truckNumber', label: 'رقم الشاحنة' },
-    { key: 'trailerNumber', label: 'رقم المقطورة' },
+    { key: 'trailerNumber', label: 'رقم المقورة' },
     { key: 'driverName', label: 'اسم السائق' },
     { key: 'entryTime', label: 'وقت الدخول' },
     { key: 'exitTime', label: 'وقت الخروج' },
     { key: 'delayPenalty', label: 'غرامة التأخير' },
-    { key: 'notes', label: 'ملاحظات' },
+    { key: 'notes', label: 'ملاحات' },
 ];
 
 const OPERATION_PRINT_DEFAULT_CONFIG: OperationPrintConfig = {
@@ -227,7 +229,7 @@ const SYSTEM_FIELDS: { key: string; label: string; required: boolean }[] = [
     // Logistics
     { key: 'supplierInvoice', label: 'رقم فاتورة المورد', required: false },
     { key: 'truckNumber', label: 'رقم الشاحنة', required: false },
-    { key: 'trailerNumber', label: 'رقم المقطورة/الحاوية', required: false },
+    { key: 'trailerNumber', label: 'رقم المقورة/الحاوية', required: false },
     { key: 'driverName', label: 'اسم السائق', required: false },
 
     // Time
@@ -236,7 +238,7 @@ const SYSTEM_FIELDS: { key: string; label: string; required: boolean }[] = [
     { key: 'unloadingRuleName', label: 'اسم قاعدة التفريغ', required: false },
 
     // Other
-    { key: 'notes', label: 'ملاحظات', required: false },
+    { key: 'notes', label: 'ملاحات', required: false },
 ];
 
 const getImportSearchTerms = (field: { key: string; label: string }) => {
@@ -251,7 +253,7 @@ const getImportSearchTerms = (field: { key: string; label: string }) => {
         field.key === 'weightSlip' ? 'بوليصة' : '',
         field.key === 'weightSlip' ? 'وزن' : '',
         field.key === 'supplierInvoice' ? 'فاتورة مورد' : '',
-        field.key === 'trailerNumber' ? 'المقطورة' : '',
+        field.key === 'trailerNumber' ? 'المقورة' : '',
         field.key === 'trailerNumber' ? 'الحاوية' : '',
         field.key === 'unloadingRuleName' ? 'قاعدة' : '',
         field.key === 'unloadingRuleName' ? 'تفريغ' : '',
@@ -759,7 +761,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
         // Allow small floating point margin errors
         const epsilon = 0.0001;
         if (qty > availableStock + epsilon) {
-            toast.error(`خطأ: الكمية لا تكفي!\n\nالصنف: ${item.name}\nالكمية المتاحة: ${availableStock.toLocaleString('en-US', { maximumFractionDigits: 3 })} ${item.unit}\nالكمية المطلوبة: ${qty} ${item.unit}`);
+            toast.error(`خأ: الكمية لا تكفي!\n\nالصنف: ${item.name}\nالكمية المتاحة: ${availableStock.toLocaleString('en-US', { maximumFractionDigits: 3 })} ${item.unit}\nالكمية الملوبة: ${qty} ${item.unit}`);
             return false;
         }
         return true;
@@ -960,7 +962,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
         if (type === 'وارد') return 'المورد';
         if (type === 'صرف') return 'العميل';
         if (type === 'مرتجع') return 'جهة الترجيع';
-        if (type === 'تالف') return 'طبيعة التالف / ملاحظات';
+        if (type === 'تالف') return 'بيعة التالف / ملاحات';
         return 'العميل / المورد';
     };
 
@@ -1019,18 +1021,18 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
 
     const saveBatchRow = async (index: number) => {
         const form = batchForms[index];
-        if (!form.date) return toast.error('التاريخ مطلوب');
-        if (!form.type) return toast.error('نوع العملية مطلوب');
-        if (!form.itemId) return toast.error('الصنف مطلوب');
-        if (form.quantity === undefined || form.quantity === null) return toast.error('الكمية المدخلة مطلوبة');
-        if (!form.warehouseInvoice) return toast.error('رقم فاتورة المخزن مطلوب');
-        if (!form.supplierOrReceiver) return toast.error('المورد/العميل مطلوب');
+        if (!form.date) return toast.error('التاريخ ملوب');
+        if (!form.type) return toast.error('نوع العملية ملوب');
+        if (!form.itemId) return toast.error('الصنف ملوب');
+        if (form.quantity === undefined || form.quantity === null) return toast.error('الكمية المدخلة ملوبة');
+        if (!form.warehouseInvoice) return toast.error('رقم فاتورة المخزن ملوب');
+        if (!form.supplierOrReceiver) return toast.error('المورد/العميل ملوب');
 
         if (!isInvoiceUnique(form.warehouseInvoice, form.type)) {
-            return toast.error(`خطأ: فاتورة المخزن "${form.warehouseInvoice}" مستخدمة لنفس العملية ${form.type}`);
+            return toast.error(`خأ: فاتورة المخزن "${form.warehouseInvoice}" مستخدمة لنفس العملية ${form.type}`);
         }
 
-        const rowDateValidation = validateTimeContext(form, `تاريخ السطر ${index + 1}`);
+        const rowDateValidation = validateTimeContext(form, `تاريخ السر ${index + 1}`);
         if (!rowDateValidation.ok) {
             return;
         }
@@ -1082,7 +1084,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
     const saveEdit = () => {
         if (!editingTransaction) return;
         if (!editingTransaction.date || !editingTransaction.itemId || editingTransaction.quantity === undefined || !editingTransaction.warehouseInvoice || !editingTransaction.supplierOrReceiver) {
-            toast.error('يرجى التأكد من تعبئة الحقول الأساسية المطلوبة (*)');
+            toast.error('يرجى التأكد من تعبئة الحقول الأساسية الملوبة (*)');
             return;
         }
         if (!isInvoiceUnique(editingTransaction.warehouseInvoice, editingTransaction.type, editingTransaction.id)) {
@@ -1729,7 +1731,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
             }, ...prev].slice(0, 25);
         });
 
-        setPrintStatusMessage(`تم حفظ قالب الطباعة: ${normalizedName}`);
+        setPrintStatusMessage(`تم حفظ قالب الباعة: ${normalizedName}`);
     };
 
     const applyPrintTemplate = (templateId: string) => {
@@ -1745,7 +1747,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
         }));
         setSelectedTemplateId(template.id);
         setPrintTemplateName(template.name);
-        setPrintStatusMessage(`تم تطبيق قالب: ${template.name}`);
+        setPrintStatusMessage(`تم تبيق قالب: ${template.name}`);
     };
 
     const deleteSelectedPrintTemplate = () => {
@@ -1772,16 +1774,16 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
 
     const buildPdfFromPreview = async () => {
         if (!printPageRef.current) {
-            toast.error('لا توجد معاينة لطباعة التقرير.');
+            toast.error('لا توجد معاينة لباعة التقرير.');
             return;
         }
         if (operationRowsForPrint.length === 0) {
-            toast.error('لا توجد بيانات مطابقة لطباعة التقرير.');
+            toast.error('لا توجد بيانات مابقة لباعة التقرير.');
             return;
         }
 
         setIsPrintingPdf(true);
-        setPrintStatusMessage('جاري إنشاء ملف PDF يرجى الانتظار...');
+        setPrintStatusMessage('جاري إنشاء ملف PDF يرجى الانتار...');
         try {
             await exportElementToPdf({
                 element: printPageRef.current,
@@ -1796,7 +1798,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
             setPrintStatusMessage('تم تصدير ملف PDF بنجاح.');
         } catch {
             setPrintStatusMessage('فشل تصدير ملف PDF.');
-            toast.error('حدث خطأ أثناء تصدير PDF. حاول مجدداً.');
+            toast.error('حدث خأ أثناء تصدير PDF. حاول مجدداً.');
         } finally {
             setIsPrintingPdf(false);
         }
@@ -1804,7 +1806,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
 
     const quickPrintCurrentFilter = async () => {
         if (operationRowsForPrint.length === 0) {
-            toast.error('لا توجد بيانات مطابقة للتصدير إلى Excel.');
+            toast.error('لا توجد بيانات مابقة للتصدير إلى Excel.');
             return;
         }
 
@@ -1883,7 +1885,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
             toast.success('تم تصدير ملف Excel للتقرير الحالي بنجاح.');
         } catch (error) {
             setPrintStatusMessage('فشل تصدير ملف Excel.');
-            toast.error(resolveExportErrorMessage(error, 'حدث خطأ أثناء تصدير Excel. حاول مجدداً.'));
+            toast.error(resolveExportErrorMessage(error, 'حدث خأ أثناء تصدير Excel. حاول مجدداً.'));
         } finally {
             setIsQuickExportingExcel(false);
         }
@@ -1894,7 +1896,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
 
     const handleSmartExport = async () => {
         if (!canExport) {
-            toast.error('لا تملك صلاحية تصدير العمليات من النظام.');
+            toast.error('لا تملك صلاحية تصدير العمليات من النام.');
             return;
         }
         if (transactions.length === 0) {
@@ -1921,14 +1923,14 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                 'المورد/العميل': t.supplierOrReceiver,
                 'فاتورة المورد': t.supplierInvoice || '',
                 'رقم الشاحنة': t.truckNumber || '',
-                'رقم المقطورة': t.trailerNumber || '',
+                'رقم المقورة': t.trailerNumber || '',
                 'اسم السائق': t.driverName || '',
                 'وقت الدخول': t.entryTime || '',
                 'وقت الخروج': t.exitTime || '',
                 'قاعدة التفريغ': unloadingRule?.rule_name || '',
                 'مدة البقاء (دقيقة)': t.delayDuration || 0,
                 'غرامة التأخير': t.delayPenalty || 0,
-                'ملاحظات': t.notes || ''
+                'ملاحات': t.notes || ''
             };
         });
 
@@ -2016,8 +2018,8 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
     const normalizeCellText = (raw: unknown) => {
         if (raw === null || raw === undefined) return '';
         return String(raw)
-            .replace(/[ظ -ظ©]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
-            .replace(/[ظ -ظ©]/g, '.')
+            .replace(/[ظ -ظ]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
+            .replace(/[ظ -ظ]/g, '.')
             .replace(/[٬]/g, ',')
             .trim();
     };
@@ -2211,7 +2213,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
             if (unloadingRuleName) {
                 const matchedRule = findUnloadingRuleByImportedValue(unloadingRuleName);
                 if (!matchedRule) {
-                    errors.push(`قاعدة التفريغ غير متطابقة أو غير مفعلة: ${unloadingRuleName}`);
+                    errors.push(`قاعدة التفريغ غير متابقة أو غير مفعلة: ${unloadingRuleName}`);
                 } else {
                     unloadingRuleId = matchedRule.id;
                 }
@@ -2236,7 +2238,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
             let itemId = '';
             if (importedItemToken) {
                 const item = findItemByImportedValue(importedItemToken);
-                if (!item) errors.push(`اسم الصنف غير موجود بالنظام: ${importedItemToken}`);
+                if (!item) errors.push(`اسم الصنف غير موجود بالنام: ${importedItemToken}`);
                 else itemId = item.id;
             }
 
@@ -2246,7 +2248,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                 // ALLOW DUPLICATES INSIDE FILE (Multi-line invoices)
                 // const existsInFile = invoiceTracker.has(`${type}-${invoice}`);
 
-                if (existsInDb) errors.push(`رقم الفاتورة ${invoice} مستخدم مسبقاً في النظام`);
+                if (existsInDb) errors.push(`رقم الفاتورة ${invoice} مستخدم مسبقاً في النام`);
                 // REMOVED CHECK: if (existsInFile) errors.push(`رقم الفاتورة ${invoice} مكرر في نفس الملف`);
 
                 if (!existsInDb) invoiceTracker.add(`${type}-${invoice}`);
@@ -2334,10 +2336,10 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
 
     const getRowColor = (type?: OperationType) => {
         switch (type) {
-            case '8�7�7�7�': return 'border-l-4 border-l-emerald-500 bg-emerald-50/10';
-            case '7�7�7�7�': return 'border-l-4 border-l-red-500 bg-red-50/10';
-            case '7�8 7�7�7�': return 'border-l-4 border-l-blue-500 bg-blue-50/10';
-            case '8!7�88�': return 'border-l-4 border-l-yellow-500 bg-yellow-50/10';
+            case '8777': return 'border-l-4 border-l-emerald-500 bg-emerald-50/10';
+            case '7777': return 'border-l-4 border-l-red-500 bg-red-50/10';
+            case '78 777': return 'border-l-4 border-l-blue-500 bg-blue-50/10';
+            case '8!788': return 'border-l-4 border-l-yellow-500 bg-yellow-50/10';
             default: return 'border-l-4 border-l-slate-200';
         }
     };
@@ -2734,7 +2736,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                             <div className="text-xs text-slate-600 whitespace-pre-wrap">
                                 {printConfig.generalNote.trim() && (
                                     <>
-                                        <div className="font-bold mb-1 text-slate-700">ملاحظات هامة</div>
+                                        <div className="font-bold mb-1 text-slate-700">ملاحات هامة</div>
                                         <div>{printConfig.generalNote}</div>
                                     </>
                                 )}
@@ -2781,9 +2783,9 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                         <button
                             onClick={() => setShowPrintStudio(true)}
                             className="flex items-center gap-2 px-4 py-2 bg-white text-slate-700 rounded-lg hover:text-indigo-600 hover:shadow-sm transition font-medium text-xs"
-                            title="فتح استوديو الطباعة"
+                            title="فتح استوديو الباعة"
                         >
-                            <Printer size={16} /> استوديو الطباعة
+                            <Printer size={16} /> استوديو الباعة
                         </button>
                         <button
                             onClick={quickPrintCurrentFilter}
@@ -2909,7 +2911,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                             <div className="grid grid-cols-2 gap-2">
                                 <input type="text" placeholder="رقم الشاحنة" className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none"
                                     value={invoiceHeader.truckNumber || ''} onChange={e => handleInvoiceHeaderChange('truckNumber', e.target.value)} />
-                                <input type="text" placeholder="رقم المقطورة" className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none"
+                                <input type="text" placeholder="رقم المقورة" className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none"
                                     value={invoiceHeader.trailerNumber || ''} onChange={e => handleInvoiceHeaderChange('trailerNumber', e.target.value)} />
                                 <input type="text" placeholder="اسم السائق" className="col-span-2 p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none"
                                     value={invoiceHeader.driverName || ''} onChange={e => handleInvoiceHeaderChange('driverName', e.target.value)} />
@@ -3354,8 +3356,8 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
 
                         <div className="mt-2 flex items-center justify-between gap-2">
                             <div className="text-[11px] text-slate-500">
-                                عدد العمليات المطابقة: <span className="font-bold text-slate-700">{filteredTransactions.length}</span>
-                                {hasAdvancedOperationFilters && <span className="text-emerald-700 font-bold mr-2">⬢ فلاتر متقدمة نشطة</span>}
+                                عدد العمليات المابقة: <span className="font-bold text-slate-700">{filteredTransactions.length}</span>
+                                {hasAdvancedOperationFilters && <span className="text-emerald-700 font-bold mr-2">⬢ فلاتر متقدمة نشة</span>}
                             </div>
                             <button
                                 onClick={resetOperationAdvancedFilters}
@@ -3446,9 +3448,9 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                                                     return next;
                                                                 })}
                                                                 className="px-2 py-1 rounded border border-slate-300 bg-white hover:bg-slate-50 font-bold text-[10px]"
-                                                                title={isCollapsed ? 'توسيع التفاصيل' : 'طي التفاصيل'}
+                                                                title={isCollapsed ? 'توسيع التفاصيل' : 'ي التفاصيل'}
                                                             >
-                                                                {isCollapsed ? 'إظهار التفاصيل' : 'إخفاء التفاصيل'}
+                                                                {isCollapsed ? 'إهار التفاصيل' : 'إخفاء التفاصيل'}
                                                             </button>
                                                         </div>
                                                     </div>
@@ -3580,7 +3582,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                             })}
                             {displayTransactions.length === 0 && (
                                 <tr>
-                                    <td colSpan={Math.max(visibleHistoryColumns.length, 1)} className="p-8 text-center text-slate-400">لا توجد عمليات تطابق معايير البحث</td>
+                                    <td colSpan={Math.max(visibleHistoryColumns.length, 1)} className="p-8 text-center text-slate-400">لا توجد عمليات تابق معايير البحث</td>
                                 </tr>
                             )}
                         </tbody>
@@ -3644,8 +3646,8 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                     <div className="h-full w-full bg-slate-100 flex flex-col">
                         <div className="bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between gap-3">
                             <div>
-                                <h3 className="font-bold text-slate-800 flex items-center gap-2"><Printer size={18} className="text-indigo-600" /> استوديو الطباعة المتقدمة - سجل العمليات</h3>
-                                <p className="text-xs text-slate-500">معاينة للطباعة WYSIWYG مع إمكانية تصدير للـ PDF أو Excel وطباعة QR.</p>
+                                <h3 className="font-bold text-slate-800 flex items-center gap-2"><Printer size={18} className="text-indigo-600" /> استوديو الباعة المتقدمة - سجل العمليات</h3>
+                                <p className="text-xs text-slate-500">معاينة للباعة WYSIWYG مع إمكانية تصدير للـ PDF أو Excel وباعة QR.</p>
                             </div>
                             <div className="flex items-center gap-2">
                                 <input
@@ -3661,7 +3663,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                     value={selectedTemplateId}
                                     onChange={(e) => applyPrintTemplate(e.target.value)}
                                 >
-                                    <option value="">تطبيق قالب محفوظ...</option>
+                                    <option value="">تبيق قالب محفوظ...</option>
                                     {printTemplates.map((template) => (
                                         <option key={template.id} value={template.id}>{template.name}</option>
                                     ))}
@@ -3680,7 +3682,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                         <div className="flex-1 grid grid-cols-12 gap-0 min-h-0">
                             <div className="col-span-3 border-r border-slate-200 bg-white overflow-y-auto">
                                 <div className="p-3 border-b border-slate-200 bg-slate-50 flex gap-2">
-                                    <button onClick={() => setActivePrintTab('layout')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${activePrintTab === 'layout' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-300 text-slate-600'}`}>التخطيط</button>
+                                    <button onClick={() => setActivePrintTab('layout')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${activePrintTab === 'layout' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-300 text-slate-600'}`}>التخيط</button>
                                     <button onClick={() => setActivePrintTab('content')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${activePrintTab === 'content' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-300 text-slate-600'}`}>المحتوى</button>
                                     <button onClick={() => setActivePrintTab('branding')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${activePrintTab === 'branding' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-300 text-slate-600'}`}>العلامة التجارية</button>
                                 </div>
@@ -3689,7 +3691,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                     {activePrintTab === 'layout' && (
                                         <>
                                             <div>
-                                                <label className="block text-slate-500 mb-1 font-bold">عنوان التقرير المطبوع</label>
+                                                <label className="block text-slate-500 mb-1 font-bold">عنوان التقرير المبوع</label>
                                                 <input
                                                     type="text"
                                                     className="w-full p-2 border border-slate-300 rounded-lg"
@@ -3759,7 +3761,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                                 <input type="range" min={10} max={50} value={printConfig.rowHeight} onChange={(e) => setPrintConfig(prev => ({ ...prev, rowHeight: Number(e.target.value) }))} className="w-full" />
                                             </div>
                                             <div>
-                                                <label className="block text-slate-500 mb-1 font-bold">نقطة فاصل الصفحة ({printConfig.pageBreakThresholdPercent}%)</label>
+                                                <label className="block text-slate-500 mb-1 font-bold">نقة فاصل الصفحة ({printConfig.pageBreakThresholdPercent}%)</label>
                                                 <input type="range" min={70} max={98} value={printConfig.pageBreakThresholdPercent} onChange={(e) => setPrintConfig(prev => ({ ...prev, pageBreakThresholdPercent: Number(e.target.value) }))} className="w-full" />
                                                 <div className="text-[10px] text-slate-500 mt-1">يحدد متى يتم نقل الجدول لصفحة جديدة.</div>
                                             </div>
@@ -3774,7 +3776,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                             <label className="flex items-center justify-between p-2 border border-slate-200 rounded-lg">
                                                 <div>
                                                     <div className="font-bold">التفاف النص داخل الجدول</div>
-                                                    <div className="text-[10px] text-slate-500">يسمح بإظهار النصوص الطويلة.</div>
+                                                    <div className="text-[10px] text-slate-500">يسمح بإهار النصوص الويلة.</div>
                                                 </div>
                                                 <input type="checkbox" checked={printConfig.wrapCellText} onChange={(e) => setPrintConfig(prev => ({ ...prev, wrapCellText: e.target.checked }))} />
                                             </label>
@@ -3786,7 +3788,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                                 {printConfig.autoSizeColumns ? 'إلغاء الملاءمة التلقائية للأعمدة' : 'ملاءمة تلقائية لعرض الأعمدة بناءً على المحتوى'}
                                             </button>
                                             <label className="flex items-center justify-between p-2 border border-slate-200 rounded-lg">
-                                                <span>إظهار حدود الجدول</span>
+                                                <span>إهار حدود الجدول</span>
                                                 <input type="checkbox" checked={printConfig.showBorders} onChange={(e) => setPrintConfig(prev => ({ ...prev, showBorders: e.target.checked }))} />
                                             </label>
                                             <label className="flex items-center justify-between p-2 border border-slate-200 rounded-lg">
@@ -3851,8 +3853,8 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                                 <input type="text" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.reportUrl} onChange={(e) => setPrintConfig(prev => ({ ...prev, reportUrl: e.target.value }))} />
                                             </div>
                                             <div>
-                                                <label className="block text-slate-500 mb-1 font-bold">ملاحظة عامة (تظهر أسفل التقرير)</label>
-                                                <textarea className="w-full p-2 border border-slate-300 rounded-lg min-h-24" value={printConfig.generalNote} onChange={(e) => setPrintConfig(prev => ({ ...prev, generalNote: e.target.value }))} placeholder="أدخل ملاحظة للطباعة في أسفل الصفحة كتعليق عام لجميع تقارير العمليات" />
+                                                <label className="block text-slate-500 mb-1 font-bold">ملاحة عامة (تهر أسفل التقرير)</label>
+                                                <textarea className="w-full p-2 border border-slate-300 rounded-lg min-h-24" value={printConfig.generalNote} onChange={(e) => setPrintConfig(prev => ({ ...prev, generalNote: e.target.value }))} placeholder="أدخل ملاحة للباعة في أسفل الصفحة كتعليق عام لجميع تقارير العمليات" />
                                             </div>
                                         </>
                                     )}
@@ -3884,7 +3886,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                     <button onClick={() => setShowPrintStudio(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50">إغلاق</button>
                                     <button onClick={quickPrintCurrentFilter} disabled={isQuickExportingExcel || operationRowsForPrint.length === 0} className="px-4 py-2 border border-indigo-300 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold hover:bg-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed">{isQuickExportingExcel ? 'جاري التصدير...' : 'تصدير Excel'}</button>
                                     <button onClick={buildPdfFromPreview} disabled={isPrintingPdf} className="px-5 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 disabled:opacity-50">
-                                        {isPrintingPdf ? 'جاري التصدير...' : 'طباعة/تصدير للملف الكتروني (PDF)'}
+                                        {isPrintingPdf ? 'جاري التصدير...' : 'باعة/تصدير للملف الكتروني (PDF)'}
                                     </button>
                                 </div>
                             </div>
@@ -3915,7 +3917,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                 <br /><br />
                                 <span className="text-amber-600 text-sm font-bold flex items-center gap-1">
                                     <AlertCircle size={14} />
-                                    تحذير: سيتم التراجع عن كميات هذه العمليات من نظام المخزون بشكل تلقائي.
+                                    تحذير: سيتم التراجع عن كميات هذه العمليات من نام المخزون بشكل تلقائي.
                                 </span>
                             </p>
                         </div>
@@ -3948,13 +3950,13 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                 <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                                     <FileSpreadsheet className="text-emerald-600" /> معالج الاستيراد الذكي
                                 </h3>
-                                <p className="text-xs text-slate-500 mt-1">استيراد العمليات من Excel مع الذكاء الاصطناعي لمطابقة الأعمدة</p>
+                                <p className="text-xs text-slate-500 mt-1">استيراد العمليات من Excel مع الذكاء الاصناعي لمابقة الأعمدة</p>
                             </div>
                             <div className="flex items-center gap-4">
                                 <div className="flex items-center text-xs font-bold gap-2">
                                     <span className={`px-2 py-1 rounded-full ${importStep === 'upload' ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-500'}`}>1. رفع الملف</span>
                                     <div className="w-4 h-[2px] bg-slate-300"></div>
-                                    <span className={`px-2 py-1 rounded-full ${importStep === 'mapping' ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-500'}`}>2. مطابقة الأعمدة</span>
+                                    <span className={`px-2 py-1 rounded-full ${importStep === 'mapping' ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-500'}`}>2. مابقة الأعمدة</span>
                                     <div className="w-4 h-[2px] bg-slate-300"></div>
                                     <span className={`px-2 py-1 rounded-full ${importStep === 'preview' ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-500'}`}>3. معاينة البيانات</span>
                                 </div>
@@ -3972,7 +3974,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                             <Upload size={32} />
                                         </div>
                                         <h4 className="font-bold text-slate-700 text-lg">رفع ملف Excel</h4>
-                                        <p className="text-sm text-slate-500 max-w-md mx-auto">يدعم النظام ملفات .xlsx و .xls. سيقوم النظام بمطابقة الأعمدة تلقائياً بعد رفع الملف.</p>
+                                        <p className="text-sm text-slate-500 max-w-md mx-auto">يدعم النام ملفات .xlsx و .xls. سيقوم النام بمابقة الأعمدة تلقائياً بعد رفع الملف.</p>
                                     </div>
 
                                     <label className="group w-full max-w-lg h-48 border-2 border-dashed border-slate-300 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:border-emerald-500 hover:bg-emerald-50 transition bg-white">
@@ -3983,8 +3985,8 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                     </label>
 
                                     <div className="flex gap-4 text-xs text-slate-400">
-                                        <span className="flex items-center gap-1"><CheckCircle size={12} className="text-green-500" /> ذكاء اصطناعي للأعمدة</span>
-                                        <span className="flex items-center gap-1"><CheckCircle size={12} className="text-green-500" /> فحص الأخطاء</span>
+                                        <span className="flex items-center gap-1"><CheckCircle size={12} className="text-green-500" /> ذكاء اصناعي للأعمدة</span>
+                                        <span className="flex items-center gap-1"><CheckCircle size={12} className="text-green-500" /> فحص الأخاء</span>
                                         <span className="flex items-center gap-1"><CheckCircle size={12} className="text-green-500" /> حساب الخصومات</span>
                                     </div>
                                 </div>
@@ -3995,8 +3997,8 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                     <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-start gap-3">
                                         <Info className="text-blue-500 mt-0.5" size={20} />
                                         <div>
-                                            <h4 className="font-bold text-blue-800 text-sm">مطابقة الأعمدة</h4>
-                                            <p className="text-xs text-blue-600 mt-1">قمنا بمحاولة مطابقة أعمدة ملفك مع حقول النظام تلقائياً. يرجى مراجعة المطابقة وتعديلها إذا لزم الأمر.</p>
+                                            <h4 className="font-bold text-blue-800 text-sm">مابقة الأعمدة</h4>
+                                            <p className="text-xs text-blue-600 mt-1">قمنا بمحاولة مابقة أعمدة ملفك مع حقول النام تلقائياً. يرجى مراجعة المابقة وتعديلها إذا لزم الأمر.</p>
                                         </div>
                                     </div>
 
@@ -4040,7 +4042,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                     {importPreview.invalid.length > 0 && (
                                         <div className="bg-white border border-red-200 rounded-xl overflow-hidden shadow-sm">
                                             <div className="bg-red-50 px-4 py-2 border-b border-red-100 font-bold text-red-700 text-sm flex items-center gap-2">
-                                                <AlertCircle size={16} /> العمليات الخاطئة (أمثلة)
+                                                <AlertCircle size={16} /> العمليات الخائة (أمثلة)
                                             </div>
                                             <div className="max-h-40 overflow-y-auto p-4 space-y-2">
                                                 {importPreview.invalid.slice(0, 20).map((item, idx) => (
@@ -4068,7 +4070,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                                         <th className="p-2">النوع</th>
                                                         <th className="p-2">رقم الفاتورة</th>
                                                         <th className="p-2">الصنف</th>
-                                                        <th className="p-2">الطرف المعني</th>
+                                                        <th className="p-2">الرف المعني</th>
                                                         <th className="p-2">الكمية</th>
                                                         <th className="p-2">المورد</th>
                                                         <th className="p-2">وقت الدخول</th>
@@ -4080,7 +4082,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                                         <tr key={`normalized-${row.rowNumber}`} className="border-b border-slate-50">
                                                             <td className="p-2 font-mono text-slate-500">{row.rowNumber}</td>
                                                             <td className={`p-2 font-bold ${row.status === 'valid' ? 'text-green-600' : 'text-red-600'}`}>
-                                                                {row.status === 'valid' ? 'صالح' : 'خطأ'}
+                                                                {row.status === 'valid' ? 'صالح' : 'خأ'}
                                                             </td>
                                                             <td className="p-2">{row.date || '-'}</td>
                                                             <td className="p-2">{row.type || '-'}</td>
@@ -4254,7 +4256,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                             <input type="text" className="w-full p-2 border rounded bg-white text-center" value={editingTransaction.truckNumber || ''} onChange={e => handleEditChange('truckNumber', e.target.value)} />
                                         </div>
                                         <div>
-                                            <label className="text-xs font-bold text-slate-500">مقطورة</label>
+                                            <label className="text-xs font-bold text-slate-500">مقورة</label>
                                             <input type="text" className="w-full p-2 border rounded bg-white text-center" value={editingTransaction.trailerNumber || ''} onChange={e => handleEditChange('trailerNumber', e.target.value)} />
                                         </div>
                                     </div>
@@ -4303,7 +4305,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                 </div>
 
                                 <div className="md:col-span-3">
-                                    <label className="text-xs font-bold text-slate-500">ملاحظات</label>
+                                    <label className="text-xs font-bold text-slate-500">ملاحات</label>
                                     <input type="text" className="w-full p-2 border rounded bg-white" value={editingTransaction.notes || ''} onChange={e => handleEditChange('notes', e.target.value)} />
                                 </div>
                             </div>

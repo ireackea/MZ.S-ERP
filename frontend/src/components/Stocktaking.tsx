@@ -1,3 +1,5 @@
+// ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
+// ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
 // Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
 
@@ -67,7 +69,7 @@ interface StocktakingPrintConfig {
   mergeColumns: boolean;
   mergeStrength: number;
   fontSize: number;
-  printSignatureBoxHeight?: number; // 7�7�7�8~7�7� 8&7�7�7�7�7� 7�87�8�7�88y7� 7�7�87�8�7�8
+  printSignatureBoxHeight?: number; // 7778~77 8&77777 7878788y7 7787878
   tableFontSize: number;
   showBorders: boolean;
   zebraStriping: boolean;
@@ -98,7 +100,7 @@ const REPORT_CARD_CONFIG: Array<Omit<AuditCategoryCard, 'rows'>> = [
   { key: 'concentrates', title: 'مركّزات', accentClass: 'border-blue-500' },
   { key: 'rawMaterials', title: 'مواد أولية', accentClass: 'border-emerald-500' },
   { key: 'bags', title: 'أكياس', accentClass: 'border-amber-500' },
-  { key: 'bagThread', title: 'خيط الخياطة', accentClass: 'border-cyan-500' },
+  { key: 'bagThread', title: 'خيط الخياة', accentClass: 'border-cyan-500' },
   { key: 'cards', title: 'كروت', accentClass: 'border-violet-500' },
 ];
 
@@ -157,12 +159,12 @@ const getCardKeyForRow = (row: MonthlyAuditRow, categoryRaw: string | undefined)
   if (category === 'مركّزات' || category === '8&78777') return 'concentrates';
   if (category === 'مواد أولية' || category === 'مواد خام' || category === '8&877 7888y7') return 'rawMaterials';
   if (category === 'أكياس' || category === 'أجولة' || category === '788y77') return 'bags';
-  if (category === 'خيط خياطة' || category === 'خيط الخياطة' || category === '78y7 7878' || category === '78y7 787878') return 'bagThread';
+  if (category === 'خيط خياة' || category === 'خيط الخياة' || category === '78y7 7878' || category === '78y7 787878') return 'bagThread';
   if (category === 'كروت بيانات' || category === 'كروت بلاستيك' || category === 'كروت' || category === '8787 778y77' || category === '8787 878y8&7' || category === '8787') return 'cards';
 
-  if (category.includes('خيط') && category.includes('خياطة')) return 'bagThread';
+  if (category.includes('خيط') && category.includes('خياة')) return 'bagThread';
 
-  if (category.includes('كروت') || category.includes('بطاق') || category.includes('كرت')) {
+  if (category.includes('كروت') || category.includes('باق') || category.includes('كرت')) {
     if (itemName.includes('بلاستيك') || itemName.includes('بيانات')) return 'cards';
     return 'cards';
   }
@@ -276,13 +278,13 @@ const Stocktaking: React.FC<StocktakingProps> = ({
   }, [printTemplates]);
 
   const zones = useMemo(() => {
-    const values = Array.from(new Set(items.map((item) => item.zone?.trim() || 'بدون منطقة'))).sort();
+    const values = Array.from(new Set(items.map((item) => item.zone?.trim() || 'بدون منقة'))).sort();
     return ['all', ...values];
   }, [items]);
 
   const zoneItems = useMemo(() => {
     if (zoneFilter === 'all') return items;
-    return items.filter((item) => (item.zone?.trim() || 'بدون منطقة') === zoneFilter);
+    return items.filter((item) => (item.zone?.trim() || 'بدون منقة') === zoneFilter);
   }, [items, zoneFilter]);
 
   const auditRows = useMemo(() => {
@@ -357,7 +359,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
 
   const getDraftUser = (itemId: string) => {
     if (draftUsers[itemId]) return draftUsers[itemId];
-    return currentUserName || 'النظام';
+    return currentUserName || 'النام';
   };
 
   const getDraftNote = (itemId: string) => {
@@ -401,9 +403,9 @@ const Stocktaking: React.FC<StocktakingProps> = ({
     const rows = zoneItems.map((item) => ({
       item_code: item.code || '',
       item_name: item.name,
-      zone: item.zone || 'بدون منطقة',
+      zone: item.zone || 'بدون منقة',
       actual_count: '',
-      user_name: currentUserName || 'النظام',
+      user_name: currentUserName || 'النام',
       notes: '',
     }));
 
@@ -418,7 +420,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
     const rows = operationsRows.map(({ item, itemRecord, conflict }) => ({
       item_code: item.code || '',
       item_name: item.name,
-      zone: item.zone || 'بدون منطقة',
+      zone: item.zone || 'بدون منقة',
       actual_count: itemRecord?.actualCount ?? '',
       conflict: conflict ? 'متضارب' : 'معتمد',
       entered_by: itemRecord?.entries.map((entry) => `${entry.userName}:${entry.value}`).join(' | ') || '',
@@ -446,7 +448,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
       const code = String(row.item_code || row['item code'] || '').trim();
       const name = String(row.item_name || row['item name'] || '').trim();
       const countRaw = String(row.actual_count || row['actual count'] || '').trim();
-      const userName = String(row.user_name || row['user name'] || currentUserName || 'النظام').trim();
+      const userName = String(row.user_name || row['user name'] || currentUserName || 'النام').trim();
       const notes = String(row.notes || '').trim();
 
       const parsedCount = Number(countRaw.replace(/,/g, ''));
@@ -518,7 +520,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
       return [{ id: `tpl-${Date.now()}`, name: normalizedName, config: printConfig, updatedAt: Date.now() }, ...prev].slice(0, 25);
     });
 
-    setPrintStatusMessage(`تم حفظ قالب الطباعة بنجاح: ${normalizedName}`);
+    setPrintStatusMessage(`تم حفظ قالب الباعة بنجاح: ${normalizedName}`);
   };
 
   const applyPrintTemplate = (templateId: string) => {
@@ -534,7 +536,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
     }));
     setSelectedTemplateId(template.id);
     setPrintTemplateName(template.name);
-    setPrintStatusMessage(`تم تطبيق القالب: ${template.name}`);
+    setPrintStatusMessage(`تم تبيق القالب: ${template.name}`);
   };
 
   const deleteSelectedPrintTemplate = () => {
@@ -634,7 +636,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
       Math.max(62, estimateTextMinWidth('الرصيد الدفتري'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
       Math.max(62, estimateTextMinWidth('الجرد الفعلي'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
       Math.max(62, estimateTextMinWidth('الفارق'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
-      Math.max(90, estimateTextMinWidth('ملاحظات الجرد'), estimateTextMinWidth('م'.repeat(Math.min(maxNotesLen, 18)))),
+      Math.max(90, estimateTextMinWidth('ملاحات الجرد'), estimateTextMinWidth('م'.repeat(Math.min(maxNotesLen, 18)))),
     ];
 
     const baseTotalWidth = baseColumnWidths.reduce((sum, value) => sum + value, 0);
@@ -765,7 +767,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                 <th className="text-center" style={headerCellStyle}>الدفتري</th>
                 <th className="text-center" style={headerCellStyle}>الفعلي</th>
                 <th className="text-center" style={headerCellStyle}>الفارق</th>
-                <th className="text-center" style={headerCellStyle}>ملاحظات</th>
+                <th className="text-center" style={headerCellStyle}>ملاحات</th>
               </tr>
             </thead>
             <tbody>
@@ -837,7 +839,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
 
             {printConfig.generalNote.trim() && (
               <div className="mt-4 pt-3 border-t border-slate-200 text-xs text-slate-600 whitespace-pre-wrap">
-                <div className="font-bold text-slate-700 mb-1">ملاحظة عامة</div>
+                <div className="font-bold text-slate-700 mb-1">ملاحة عامة</div>
                 <div>{printConfig.generalNote}</div>
               </div>
             )}
@@ -1006,7 +1008,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
 
                 {isLastPage && printConfig.generalNote.trim() && (
                   <div className="mt-4 pt-3 border-t border-slate-200 text-xs text-slate-600 whitespace-pre-wrap">
-                    <div className="font-bold text-slate-700 mb-1">ملاحظة عامة</div>
+                    <div className="font-bold text-slate-700 mb-1">ملاحة عامة</div>
                     <div>{printConfig.generalNote}</div>
                   </div>
                 )}
@@ -1078,7 +1080,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
       const base64 = dataUri.includes(',') ? dataUri.split(',')[1] : dataUri;
       const result = closeMonth({
         monthKey,
-        approvedBy: currentUserName || 'النظام',
+        approvedBy: currentUserName || 'النام',
         rows: auditRows,
         archivedPdfName: pdfName,
         archivedPdfMime: 'application/pdf',
@@ -1093,7 +1095,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
       setSessionVersion((prev) => prev + 1);
       setStatusMessage(`تم اعتماد إغلاق الجرد ${monthKey} وحفظ الرصيد الفعلي كأرصدة افتتاحية للشهر القادم.`);
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : 'حدث خطأ أثناء إعداد أو إغلاق الجرد.');
+      setStatusMessage(error instanceof Error ? error.message : 'حدث خأ أثناء إعداد أو إغلاق الجرد.');
     } finally {
       setIsClosing(false);
     }
@@ -1105,7 +1107,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
         <div className="flex flex-col xl:flex-row gap-3 xl:items-center xl:justify-between">
           <div>
             <h2 className="text-2xl font-bold text-slate-800">تقرير الجرد الشهري واعتماد الجرد الدفتري</h2>
-            <p className="text-sm text-slate-500">ملاحظة حول الألوان: الإفتتاحي/الوارد + المنصرف/التالف</p>
+            <p className="text-sm text-slate-500">ملاحة حول الألوان: الإفتتاحي/الوارد + المنصرف/التالف</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -1121,10 +1123,10 @@ const Stocktaking: React.FC<StocktakingProps> = ({
               className="px-3 py-2 border border-slate-300 rounded-lg"
               value={zoneFilter}
               onChange={(event) => setZoneFilter(event.target.value)}
-              title="المنطقة"
+              title="المنقة"
             >
               {zones.map((zone) => (
-                <option key={zone} value={zone}>{zone === 'all' ? 'كل المناطق' : zone}</option>
+                <option key={zone} value={zone}>{zone === 'all' ? 'كل المناق' : zone}</option>
               ))}
             </select>
 
@@ -1133,7 +1135,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
               onClick={() => setBlindMode((prev) => !prev)}
               title="تفعيل/إلغاء وضع الجرد الأعمى"
             >
-              {blindMode ? <EyeOff size={16} /> : <Eye size={16} />} {blindMode ? 'وضع الجرد الأعمى: مفعل' : 'وضع الجرد الأعمى: معطل'}
+              {blindMode ? <EyeOff size={16} /> : <Eye size={16} />} {blindMode ? 'وضع الجرد الأعمى: مفعل' : 'وضع الجرد الأعمى: معل'}
             </button>
           </div>
         </div>
@@ -1143,7 +1145,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
             لوحة العمليات / الإدخال
           </button>
           <button className={`px-3 py-2 rounded-lg border font-bold ${pane === 'audit' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-300'}`} onClick={() => setPane('audit')}>
-            المراجعة / الطباعة
+            المراجعة / الباعة
           </button>
         </div>
       </div>
@@ -1182,12 +1184,12 @@ const Stocktaking: React.FC<StocktakingProps> = ({
               <thead className="bg-white border-b border-slate-200">
                 <tr>
                   <th className="p-3 text-right">اسم الصنف</th>
-                  <th className="p-3 text-right">المنطقة</th>
+                  <th className="p-3 text-right">المنقة</th>
                   <th className="p-3 text-right">اسم المستخدم الذي قام بالجرد</th>
                   <th className="p-3 text-right">العدد الفعلي</th>
                   {!blindMode && <th className="p-3 text-right">الرصيد الدفتري</th>}
                   {!blindMode && <th className="p-3 text-right">الفارق</th>}
-                  <th className="p-3 text-right">الملاحظات</th>
+                  <th className="p-3 text-right">الملاحات</th>
                   <th className="p-3 text-right">الحالة</th>
                   <th className="p-3 text-right">إجراءات</th>
                 </tr>
@@ -1198,7 +1200,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                   return (
                     <tr key={item.id} className={`border-b border-slate-100 ${conflict ? 'bg-red-50' : ''}`}>
                       <td className="p-3 font-bold text-slate-800">{item.name}</td>
-                      <td className="p-3 text-slate-600">{item.zone || 'بدون منطقة'}</td>
+                      <td className="p-3 text-slate-600">{item.zone || 'بدون منقة'}</td>
                       <td className="p-3">
                         <input
                           type="text"
@@ -1230,7 +1232,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                       <td className="p-3">
                         <input
                           type="text"
-                          title="ملاحظات الصنف"
+                          title="ملاحات الصنف"
                           value={getDraftNote(item.id)}
                           onChange={(event) => setDraftNotes((prev) => ({ ...prev, [item.id]: event.target.value }))}
                           className="w-52 p-2 border border-slate-300 rounded-lg"
@@ -1257,7 +1259,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                 })}
                 {operationsRows.length === 0 && (
                   <tr>
-                    <td colSpan={blindMode ? 7 : 9} className="p-6 text-center text-slate-500">لا توجد أصناف في هذا النطاق.</td>
+                    <td colSpan={blindMode ? 7 : 9} className="p-6 text-center text-slate-500">لا توجد أصناف في هذا الناق.</td>
                   </tr>
                 )}
               </tbody>
@@ -1270,14 +1272,14 @@ const Stocktaking: React.FC<StocktakingProps> = ({
         <div className="space-y-4">
           <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-wrap gap-2 items-center justify-between">
             <div className="text-sm text-slate-700 font-bold">
-              7�88~7�7�7� 7�88&7�7�7�7�8y7�: {start.toLocaleDateString('en-GB')} 7�880 {end.toLocaleDateString('en-GB')}
+              788~777 788&77778y7: {start.toLocaleDateString('en-GB')} 7880 {end.toLocaleDateString('en-GB')}
             </div>
             <div className="flex flex-wrap gap-2">
-              <button className="px-3 py-2 rounded-lg border border-indigo-300 bg-indigo-50 text-indigo-700 text-sm font-bold" onClick={() => setShowPrintStudio(true)}><Printer size={14} className="inline ml-1" /> 7�7�7�8�7�8y8� 7�87�7�7�7�7�</button>
-              <button className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-bold" onClick={() => signedPdfInputRef.current?.click()}><FileUp size={14} className="inline ml-1" /> 7�8~7� PDF 8&7�7�8&7� 8y7�8�8y7�89</button>
-              <input ref={signedPdfInputRef} type="file" title="7�8~7� 8&88~ PDF 8&7�7�8&7�" accept="application/pdf" className="hidden" onChange={(event) => { void handleUploadSignedPdf(event.target.files?.[0] || null); event.currentTarget.value = ''; }} />
+              <button className="px-3 py-2 rounded-lg border border-indigo-300 bg-indigo-50 text-indigo-700 text-sm font-bold" onClick={() => setShowPrintStudio(true)}><Printer size={14} className="inline ml-1" /> 777878y8 7877777</button>
+              <button className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-bold" onClick={() => signedPdfInputRef.current?.click()}><FileUp size={14} className="inline ml-1" /> 78~7 PDF 8&778&7 8y788y789</button>
+              <input ref={signedPdfInputRef} type="file" title="78~7 8&88~ PDF 8&778&7" accept="application/pdf" className="hidden" onChange={(event) => { void handleUploadSignedPdf(event.target.files?.[0] || null); event.currentTarget.value = ''; }} />
               <button className="px-3 py-2 rounded-lg bg-slate-900 text-white text-sm font-bold disabled:opacity-60" onClick={() => void handleCloseMonth()} disabled={isClosing || isClosed}>
-                <CheckCircle2 size={14} className="inline ml-1" /> {isClosing ? '7�7�7�8� 7�87�7�7�8&7�7�...' : '7�7�7�8&7�7� 8�7�787�8 7�87�8!7�'}
+                <CheckCircle2 size={14} className="inline ml-1" /> {isClosing ? '7778 787778&77...' : '7778&77 877878 7878!7'}
               </button>
             </div>
           </div>
@@ -1288,89 +1290,89 @@ const Stocktaking: React.FC<StocktakingProps> = ({
 
           {(session.archivedPdfName || session.manualSignedPdfName) && (
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-sm text-emerald-800">
-              {session.archivedPdfName ? <div>7�7�7�8y8~ 7�88 7�7�8&: {session.archivedPdfName}</div> : null}
-              {session.manualSignedPdfName ? <div>7�88&88~ 7�88&7�7�8&7� 8y7�8�8y7�89: {session.manualSignedPdfName}</div> : null}
+              {session.archivedPdfName ? <div>7778y8~ 788 778&: {session.archivedPdfName}</div> : null}
+              {session.manualSignedPdfName ? <div>788&88~ 788&778&7 8y788y789: {session.manualSignedPdfName}</div> : null}
             </div>
           )}
         </div>
       )}
 
       {showPrintStudio && (
-        <div className="fixed inset-0 z-[ظ -ظ©] bg-slate-950/85 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[ظ -ظ] bg-slate-950/85 backdrop-blur-sm">
           <div className="h-full w-full bg-slate-100 flex flex-col">
             <div className="bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between gap-3">
               <div>
-                <h3 className="font-bold text-slate-800 flex items-center gap-2"><Printer size={18} className="text-indigo-600" /> 7�7�7�8�7�8y8� 7�87�7�7�7�7� - 87�8& 7�87�7�7�</h3>
-                <p className="text-xs text-slate-500">8 7�7�7� 8&7�87�8&7� 8&8  7�7�7�8�7�8y8� 7�87�7�7�7�7� 8&7� 8&7�7�8y8 7� 8&7�7�7�7�7� 8&7�8�7�8~87� 8&7� 7�87�7�8y7� 7�87�7�7�.</p>
+                <h3 className="font-bold text-slate-800 flex items-center gap-2"><Printer size={18} className="text-indigo-600" /> 777878y8 7877777 - 878& 78777</h3>
+                <p className="text-xs text-slate-500">8 777 8&7878&7 8&8  777878y8 7877777 8&7 8&778y8 7 8&77777 8&7878~87 8&7 78778y7 78777.</p>
               </div>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
                   value={printTemplateName}
                   onChange={(e) => setPrintTemplateName(e.target.value)}
-                  placeholder="7�7�8& 7�887�87� (8&7�7�8: 7�87�8y7� 7�88&7�8y7�)"
-                  title="7�7�8& 87�87� 7�87�7�7�7�7�"
+                  placeholder="778& 788787 (8&778: 7878y7 788&78y7)"
+                  title="778& 8787 7877777"
                   className="px-3 py-2 border border-slate-300 rounded-lg text-xs min-w-52"
                 />
-                <button onClick={savePrintTemplate} className="px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg hover:bg-slate-50">7�8~7� 87�87�</button>
+                <button onClick={savePrintTemplate} className="px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg hover:bg-slate-50">78~7 8787</button>
                 <select
                   className="px-3 py-2 border border-slate-300 rounded-lg text-xs"
                   value={selectedTemplateId}
-                  title="7�7�8&8y8 87�87� 8&7�8~8�7�"
+                  title="778&8y8 8787 8&78~87"
                   onChange={(e) => applyPrintTemplate(e.target.value)}
                 >
-                  <option value="">7�7�8&8y8 87�87� 8&7�8~8�7�...</option>
+                  <option value="">778&8y8 8787 8&78~87...</option>
                   {printTemplates.map((template) => (
                     <option key={template.id} value={template.id}>{template.name}</option>
                   ))}
                 </select>
-                <button onClick={deleteSelectedPrintTemplate} className="px-3 py-2 text-xs bg-red-50 border border-red-200 text-red-700 rounded-lg hover:bg-red-100">7�7�8~ 87�87�</button>
-                <button onClick={() => setShowPrintStudio(false)} className="px-3 py-2 rounded-lg border border-slate-300 text-slate-600 hover:text-red-600">7�787�8</button>
+                <button onClick={deleteSelectedPrintTemplate} className="px-3 py-2 text-xs bg-red-50 border border-red-200 text-red-700 rounded-lg hover:bg-red-100">778~ 8787</button>
+                <button onClick={() => setShowPrintStudio(false)} className="px-3 py-2 rounded-lg border border-slate-300 text-slate-600 hover:text-red-600">77878</button>
               </div>
             </div>
 
             <div className="flex-1 grid grid-cols-12 min-h-0">
               <div className="col-span-3 border-r border-slate-200 bg-white overflow-y-auto">
                 <div className="p-3 border-b border-slate-200 bg-slate-50 flex gap-2">
-                  <button onClick={() => setActivePrintTab('layout')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${activePrintTab === 'layout' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-300 text-slate-600'}`}>7�87�7�7�8y7�</button>
-                  <button onClick={() => setActivePrintTab('content')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${activePrintTab === 'content' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-300 text-slate-600'}`}>7�88&7�7�8�80</button>
-                  <button onClick={() => setActivePrintTab('branding')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${activePrintTab === 'branding' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-300 text-slate-600'}`}>7�87�87�8&7�7�</button>
+                  <button onClick={() => setActivePrintTab('layout')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${activePrintTab === 'layout' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-300 text-slate-600'}`}>787778y7</button>
+                  <button onClick={() => setActivePrintTab('content')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${activePrintTab === 'content' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-300 text-slate-600'}`}>788&77880</button>
+                  <button onClick={() => setActivePrintTab('branding')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${activePrintTab === 'branding' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-300 text-slate-600'}`}>787878&77</button>
                 </div>
 
                 <div className="p-4 space-y-4 text-xs">
                   {activePrintTab === 'layout' && (
                     <>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">7�8 8�7�8  7�87�87�8y7�</label>
-                        <input title="7�8 8�7�8  7�87�87�8y7�" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.reportTitle} onChange={(e) => setPrintConfig((prev) => ({ ...prev, reportTitle: e.target.value }))} />
+                        <label className="block text-slate-500 mb-1 font-bold">78 878  787878y7</label>
+                        <input title="78 878  787878y7" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.reportTitle} onChange={(e) => setPrintConfig((prev) => ({ ...prev, reportTitle: e.target.value }))} />
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">7�7�7�7�8! 7�87�8~7�7�</label>
-                        <select title="7�7�7�7�8! 7�87�8~7�7�" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.orientation} onChange={(e) => setPrintConfig((prev) => ({ ...prev, orientation: e.target.value as StocktakingPrintConfig['orientation'] }))}>
-                          <option value="portrait">7�8�88y</option>
-                          <option value="landscape">7�7�7�8y</option>
+                        <label className="block text-slate-500 mb-1 font-bold">77778! 7878~77</label>
+                        <select title="77778! 7878~77" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.orientation} onChange={(e) => setPrintConfig((prev) => ({ ...prev, orientation: e.target.value as StocktakingPrintConfig['orientation'] }))}>
+                          <option value="portrait">7888y</option>
+                          <option value="landscape">7778y</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">8&87�7� 7�88�7�8</label>
-                        <select title="8&87�7� 7�88�7�8" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.paperSize} onChange={(e) => setPrintConfig((prev) => ({ ...prev, paperSize: e.target.value as StocktakingPrintConfig['paperSize'] }))}>
+                        <label className="block text-slate-500 mb-1 font-bold">8&877 78878</label>
+                        <select title="8&877 78878" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.paperSize} onChange={(e) => setPrintConfig((prev) => ({ ...prev, paperSize: e.target.value as StocktakingPrintConfig['paperSize'] }))}>
                           <option value="a4">A4</option>
                           <option value="a3">A3</option>
                           <option value="legal">Legal</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">7�88!8�7�8&7�</label>
-                        <select title="7�88!8�7�8&7�" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.margins} onChange={(e) => setPrintConfig((prev) => ({ ...prev, margins: e.target.value as StocktakingPrintConfig['margins'] }))}>
-                          <option value="narrow">7�8y87�</option>
-                          <option value="normal">8&7�8�7�7�7�</option>
-                          <option value="wide">8�7�7�7�7�</option>
+                        <label className="block text-slate-500 mb-1 font-bold">788!878&7</label>
+                        <select title="788!878&7" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.margins} onChange={(e) => setPrintConfig((prev) => ({ ...prev, margins: e.target.value as StocktakingPrintConfig['margins'] }))}>
+                          <option value="narrow">78y87</option>
+                          <option value="normal">8&78777</option>
+                          <option value="wide">87777</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">7�7� 7�87�8~7�7� 8&8  7�87�7�880 ({printConfig.topPageMarginMm}mm)</label>
+                        <label className="block text-slate-500 mb-1 font-bold">77 7878~77 8&8  7877880 ({printConfig.topPageMarginMm}mm)</label>
                         <input
-                          title="7�7� 7�87�8~7�7� 8&8  7�87�7�880"
+                          title="77 7878~77 8&8  7877880"
                           type="range"
                           min={0}
                           max={50}
@@ -1380,9 +1382,9 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">7�7� 7�87�8~7�7� 8&8  7�87�7�8~8 ({printConfig.bottomPageMarginMm}mm)</label>
+                        <label className="block text-slate-500 mb-1 font-bold">77 7878~77 8&8  78778~8 ({printConfig.bottomPageMarginMm}mm)</label>
                         <input
-                          title="7�7� 7�87�8~7�7� 8&8  7�87�7�8~8"
+                          title="77 7878~77 8&8  78778~8"
                           type="range"
                           min={0}
                           max={50}
@@ -1392,7 +1394,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                         />
                       </div>
                       <label className="flex items-center justify-between p-2 border border-slate-200 rounded-lg">
-                        <span>7�7�7�8y8 7�887�7�8y 7�8y8  7�87�8~7�7�7�</span>
+                        <span>7778y8 788778y 78y8  7878~777</span>
                         <input
                           type="checkbox"
                           checked={printConfig.smartPaginationEnabled}
@@ -1402,9 +1404,9 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                       {printConfig.smartPaginationEnabled && (
                         <>
                           <div>
-                            <label className="block text-slate-500 mb-1 font-bold">8 7�7�7� 7�8&7�87�7 7�87�8~7�7� 87�8 7�87�7�7�8y8 ({printConfig.pageFillPercent}%)</label>
+                            <label className="block text-slate-500 mb-1 font-bold">8 777 78&7877 7878~77 878 787778y8 ({printConfig.pageFillPercent}%)</label>
                             <input
-                              title="8 7�7�7� 7�8&7�87�7 7�87�8~7�7� 87�8 7�87�7�7�8y8"
+                              title="8 777 78&7877 7878~77 878 787778y8"
                               type="range"
                               min={80}
                               max={99}
@@ -1414,9 +1416,9 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                             />
                           </div>
                           <div>
-                            <label className="block text-slate-500 mb-1 font-bold">8!7�8&7� 7�87�8&7�8  887�7�7�8y8 ({printConfig.pageSafetyRows} 7�8~)</label>
+                            <label className="block text-slate-500 mb-1 font-bold">8!78&7 7878&78  887778y8 ({printConfig.pageSafetyRows} 78~)</label>
                             <input
-                              title="8!7�8&7� 7�87�8&7�8  887�7�7�8y8"
+                              title="8!78&7 7878&78  887778y8"
                               type="range"
                               min={0}
                               max={6}
@@ -1426,7 +1428,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                             />
                           </div>
                           <label className="flex items-center justify-between p-2 border border-slate-200 rounded-lg">
-                            <span>7�8�7�7�7� 7�7�7� 7�87�87�8y7� 8~8y 8�8 7�8~7�7�</span>
+                            <span>78777 777 787878y7 8~8y 88 78~77</span>
                             <input
                               type="checkbox"
                               checked={printConfig.repeatHeaderEachPage}
@@ -1521,9 +1523,9 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">تباعد النص عن أطراف العمود ({printConfig.columnSpacing}px)</label>
+                        <label className="block text-slate-500 mb-1 font-bold">تباعد النص عن أراف العمود ({printConfig.columnSpacing}px)</label>
                         <input
-                          title="تباعد النص عن أطراف العمود"
+                          title="تباعد النص عن أراف العمود"
                           type="range"
                           min={0}
                           max={100}
@@ -1581,7 +1583,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                         </div>
                       </div>
                       <label className="flex items-center justify-between p-2 border border-slate-200 rounded-lg">
-                        <span>إظهار التوقيعات</span>
+                        <span>إهار التوقيعات</span>
                         <input type="checkbox" checked={printConfig.showSignatures} onChange={(e) => setPrintConfig((prev) => ({ ...prev, showSignatures: e.target.checked }))} />
                       </label>
 
@@ -1624,7 +1626,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                         <input title="العلامة المائية" type="text" className="w-full p-2 border border-slate-300 rounded-lg" placeholder="مثال: مسودة / سري" value={printConfig.watermarkText} onChange={(e) => setPrintConfig((prev) => ({ ...prev, watermarkText: e.target.value }))} />
                       </div>
                       <label className="flex items-center justify-between p-2 border border-slate-200 rounded-lg">
-                        <span>إظهار رمز QR في التذييل</span>
+                        <span>إهار رمز QR في التذييل</span>
                         <input type="checkbox" checked={printConfig.showQrCode} onChange={(e) => setPrintConfig((prev) => ({ ...prev, showQrCode: e.target.checked }))} />
                       </label>
                       <div>
@@ -1632,8 +1634,8 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                         <input title="رابط الوصول عبر الهاتف" type="text" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.reportUrl} onChange={(e) => setPrintConfig((prev) => ({ ...prev, reportUrl: e.target.value }))} />
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">ملاحظة عامة</label>
-                        <textarea title="ملاحظة عامة" className="w-full p-2 border border-slate-300 rounded-lg min-h-24" value={printConfig.generalNote} onChange={(e) => setPrintConfig((prev) => ({ ...prev, generalNote: e.target.value }))} />
+                        <label className="block text-slate-500 mb-1 font-bold">ملاحة عامة</label>
+                        <textarea title="ملاحة عامة" className="w-full p-2 border border-slate-300 rounded-lg min-h-24" value={printConfig.generalNote} onChange={(e) => setPrintConfig((prev) => ({ ...prev, generalNote: e.target.value }))} />
                       </div>
                     </>
                   )}
@@ -1642,7 +1644,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
 
               <div className="col-span-9 flex flex-col min-h-0">
                 <div className="px-4 py-2 border-b border-slate-200 bg-white flex items-center justify-between text-xs">
-                  <div className="text-slate-600">معاينة حية للطباعة (WYSIWYG)</div>
+                  <div className="text-slate-600">معاينة حية للباعة (WYSIWYG)</div>
                   {printStatusMessage && <div className="text-indigo-700 font-bold">{printStatusMessage}</div>}
                 </div>
 

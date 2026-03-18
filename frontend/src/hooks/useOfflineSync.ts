@@ -1,3 +1,5 @@
+// ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
+// ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Phase 1.6 - Final Perfection Pass - 2026-03-02
 import { useState, useEffect } from 'react';
 import { mutationQueueService } from '../services/mutationQueueService';
@@ -34,10 +36,10 @@ export const useOfflineSync = () => {
       if (daysUsing > 3 && !localStorage.getItem('ff_pw_prompt_shown')) {
         window.addEventListener('beforeinstallprompt', (e: any) => {
           e.preventDefault();
-          toast('8!8 7�7�8y7� 7�7�7�8y7� FeedFactory 8�7�7�7�8y8 8&7�7�887�', {
+          toast('8!8 778y7 7778y7 FeedFactory 87778y8 8&77887', {
             duration: 10000,
             action: {
-              label: '7�7�7�8y7� 7�87�7�7�8y8',
+              label: '7778y7 787778y8',
               onClick: () => {
                 e.prompt();
                 localStorage.setItem('ff_pw_prompt_shown', 'true');
@@ -62,17 +64,17 @@ export const useOfflineSync = () => {
         (socket as any).io.reconnectionDelayMax(30000);
       }
 
-      toast.success('7�8&7� 7�7�7�7�7�7�7� 7�87�7�7�7�8 7�7�87�7�8�7�. 8y7�8& 7�87�8  8&7�7�8&8 7� 7�87�8y7�8 7�7�...');
+      toast.success('78&7 7777777 7877778 7787787. 8y78& 7878  8&778&8 7 7878y78 77...');
       setIsSyncing(true);
       await mutationQueueService.sync();
       setIsSyncing(false);
-      toast.success('7�8&7� 8&7�7�8&8 7� 7�87�8y7�8 7�7� 7�8 7�7�7�!');
+      toast.success('78&7 8&778&8 7 7878y78 77 78 777!');
     };
 
     const handleOffline = () => {
       setIsOffline(true);
       stopRealtimeSync(); // Halt Socket.io reconnections while offline
-      toast.warning('7�8 7� 7�87�8  7�7�8&8 8~8y 8�7�7� 7�87�8�8~87�8y8  (7�7�8�8  7�7�7�7�8). 7�8y7�8& 7�8~7� 7�7�7�8y87�7�8� 8�8&7�7�8&8 7�8!7� 87�7�87�89.');
+      toast.warning('78 7 7878  778&8 8~8y 877 78788~878y8  (7788  77778). 78y78& 78~7 7778y8778 88&778&8 78!7 8778789.');
     };
 
     window.addEventListener('online', handleOnline);
@@ -113,7 +115,7 @@ export const useOfflineSync = () => {
 
     if (isOffline) {
       await mutationQueueService.enqueue(url, method, body);
-      toast.info('7�8& 7�8~7� 7�87�8&88y7� 8&7�88y7�89 (7�8�8~87�8y8 ).');
+      toast.info('78& 78~7 7878&88y7 8&788y789 (788~878y8 ).');
       return { offline: true };
     } else {
       try {
@@ -125,7 +127,7 @@ export const useOfflineSync = () => {
         if (!error.response) {
           await mutationQueueService.enqueue(url, method, body);
           setIsOffline(true); // Trigger offline mode
-          toast.warning('8~7�8 7�87�7�7�7�8 7�7�87�7�7�8&. 7�8& 7�7�8�8y8 7�87�8&88y7� 7�880 7�87�8�8~87�8y8 .');
+          toast.warning('8~78 7877778 7787778&. 78& 7788y8 7878&88y7 7880 78788~878y8 .');
           return { offline: true };
         }
         throw error;

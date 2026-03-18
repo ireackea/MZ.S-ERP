@@ -1,3 +1,5 @@
+// ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
+// ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Arabic Encoding Restoration - Full Components Folder - 2026-03-04
 // Arabic text encoding verified and corrected
 
@@ -50,9 +52,9 @@ const formatBytes = (bytes: number) => {
 };
 
 const formatDateTime = (value?: string | null) => {
-  if (!value) return '78y7� 8&7�7�7�';
+  if (!value) return '78y7 8&777';
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return '78y7� 8&7�7�7�';
+  if (Number.isNaN(parsed.getTime())) return '78y7 8&777';
   return parsed.toLocaleString('ar-EG', {
     year: '2-digit',
     month: '2-digit',
@@ -62,12 +64,12 @@ const formatDateTime = (value?: string | null) => {
   });
 };
 
-const triggerLabel = (trigger: 'manual' | 'scheduled') => (trigger === 'scheduled' ? '7�887�7�8y' : '8y7�8�8y');
+const triggerLabel = (trigger: 'manual' | 'scheduled') => (trigger === 'scheduled' ? '788778y' : '8y788y');
 
 const typeLabel = (type: BackupKind) => {
-  if (type === 'full') return '8�7�8&8 7�88 7�7�8&';
-  if (type === 'inventory') return '7�7�8�7� 7�88&7�7�8�8 ';
-  if (type === 'config') return '7�87�7�7�7�7�7�7�';
+  if (type === 'full') return '878&8 788 778&';
+  if (type === 'inventory') return '7787 788&7788 ';
+  if (type === 'config') return '787777777';
   return 'Safety Snapshot';
 };
 
@@ -131,7 +133,7 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
       setHistory(logs);
       hydrateSchedule(stats);
     } catch (error: any) {
-      toast.error(error?.message || '7�7�7�7� 7�7�8&8y8 7�8y7�8 7�7� 7�88 7�7� 7�87�7�7�8y7�7�8y');
+      toast.error(error?.message || '7777 778&8y8 78y78 77 788 77 787778y778y');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -158,10 +160,10 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
     setBusyType(type);
     try {
       await createBackupByType(type, encryptionPassword || undefined);
-      toast.success('7�8& 7�8 7�7�7 7�88 7�7�7� 7�87�7�7�8y7�7�8y7� 7�8 7�7�7�');
+      toast.success('78& 78 777 788 777 787778y778y7 78 777');
       await loadData(false);
     } catch (error: any) {
-      toast.error(error?.message || '8~7�8 7�8 7�7�7 7�88 7�7�7� 7�87�7�7�8y7�7�8y7�');
+      toast.error(error?.message || '8~78 78 777 788 777 787778y778y7');
     } finally {
       setBusyType(null);
       if (type === activeType) {
@@ -184,12 +186,12 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
         encryptionPassword: encryptionPassword || undefined,
         restorePin: restorePin || undefined,
       });
-      toast.success('7�8& 7�8~7� 7�7�7�7�7�7�7� 7�87�7�8�87�');
+      toast.success('78& 78~7 7777777 7877887');
       setEncryptionPassword('');
       setRestorePin('');
       await loadData(false);
     } catch (error: any) {
-      toast.error(error?.message || '7�7�7�7� 7�8~7� 7�7�7�7�7�7�7� 7�87�7�8�87�');
+      toast.error(error?.message || '7777 78~7 7777777 7877887');
     } finally {
       setSavingSchedule(false);
     }
@@ -206,27 +208,27 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
-      toast.success(`7�8& 7�87�7�8&8y8 7�8 7�7�7� (SHA-256: ${file.checksum.slice(0, 10)}...)`);
+      toast.success(`78& 78778&8y8 78 777 (SHA-256: ${file.checksum.slice(0, 10)}...)`);
     } catch (error: any) {
-      toast.error(error?.message || '8~7�8 7�7�8&8y8 7�88 7�7�7� 7�87�7�7�8y7�7�8y7�');
+      toast.error(error?.message || '8~78 778&8y8 788 777 787778y778y7');
     }
   };
 
   const handleDelete = async (entry: BackupHistoryEntry) => {
-    if (!window.confirm('8!8 7�7�8y7� 7�7�8~ 7�88 7�7�7� 7�87�7�7�8y7�7�8y7� 8 8!7�7�8y897�7�')) return;
+    if (!window.confirm('8!8 778y7 778~ 788 777 787778y778y7 8 8!778y8977')) return;
     try {
       await removeBackup(entry.id);
-      toast.success('7�8& 7�7�8~ 7�88 7�7�7� 7�87�7�7�8y7�7�8y7�');
+      toast.success('78& 778~ 788 777 787778y778y7');
       await loadData(false);
     } catch (error: any) {
-      toast.error(error?.message || '7�7�7�7� 7�7�8~ 7�88 7�7�7� 7�87�7�7�8y7�7�8y7�');
+      toast.error(error?.message || '7777 778~ 788 777 787778y778y7');
     }
   };
 
   const openRestorePreview = async (entry: BackupHistoryEntry) => {
     try {
       if (!restorePin.trim()) {
-        toast.error('7�7�7�8 7�8&7� PIN 7�8�87�89');
+        toast.error('7778 78&7 PIN 788789');
         return;
       }
 
@@ -240,15 +242,15 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
       setRestoreToken(String(preview?.restoreToken || ''));
       setSafetySnapshotId(String(preview?.safetySnapshotId || ''));
       setRestoreModalOpen(true);
-      toast.success('7�8& 7�8 7�7�7 Safety Snapshot 7�8 7�7�7�. 7�7�7�7� 7�8y7�8 7�7� 7�87�7�7�7�7�7�7� 7�8& 7�8�7� 7�87�8 8~8y7�.');
+      toast.success('78& 78 777 Safety Snapshot 78 777. 7777 78y78 77 787777777 78& 787 7878 8~8y7.');
       await loadData(false);
     } catch (error: any) {
-      toast.error(error?.message || '8~7�8 7�8 7�7�7 8&7�7�8y8 7� 7�87�7�7�7�7�7�7�');
+      toast.error(error?.message || '8~78 78 777 8&778y8 7 787777777');
     }
   };
   const handleRestoreConfirm = async () => {
     if (!restoreTarget || !restoreToken) {
-      toast.error('7�8y7�8 7�7� 7�87�7�7�7�7�7�7� 78y7� 8&8�7�8&87�');
+      toast.error('78y78 77 787777777 78y7 8&878&87');
       return;
     }
 
@@ -260,12 +262,12 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
         restorePin,
         decryptionPassword: restorePassword || undefined,
       });
-      toast.success('7�8&7� 7�87�7�7�7�7�7�7� 7�8 7�7�7�. 7�8y7�8& 7�7�7�8y7� 7�87�7�7�7� 7�87�8 .');
+      toast.success('78&7 787777777 78 777. 78y78& 7778y7 787777 7878 .');
       setRestoreModalOpen(false);
       await loadData(false);
       setTimeout(() => window.location.reload(), 500);
     } catch (error: any) {
-      toast.error(error?.message || '8~7�87� 7�8&88y7� 7�87�7�7�7�7�7�7�');
+      toast.error(error?.message || '8~787 78&88y7 787777777');
     } finally {
       setRestoring(false);
     }
@@ -284,7 +286,7 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
             <h2 className="text-2xl font-extrabold text-slate-900 flex items-center gap-2">
               <Shield className="text-blue-600" size={24} /> Backup Dashboard
             </h2>
-            <p className="text-sm text-slate-600 mt-1">8&7�8�7� 7�88 7�7� 7�87�7�7�8y7�7�8y 7�88&7�7�7�8y 8&7� Safety Snapshot 8�Integrity Check.</p>
+            <p className="text-sm text-slate-600 mt-1">8&787 788 77 787778y778y 788&7778y 8&7 Safety Snapshot 8Integrity Check.</p>
           </div>
           <button
             type="button"
@@ -292,7 +294,7 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
             disabled={refreshing}
             className="px-3 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 flex items-center gap-2"
           >
-            <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} /> 7�7�7�8y7�
+            <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} /> 7778y7
           </button>
         </div>
 
@@ -319,21 +321,21 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
 
           <div className="xl:col-span-2 space-y-2">
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm">
-              <div className="font-bold text-slate-800">7�7�7� 8 7�7�7�: {formatDateTime(latestBackup?.createdAt || storage?.latestBackup?.createdAt || null)}</div>
-              <div className="text-slate-600 mt-1">7�87�7�8&: {formatBytes(latestBackup?.sizeBytes || storage?.latestBackup?.sizeBytes || 0)}</div>
+              <div className="font-bold text-slate-800">777 8 777: {formatDateTime(latestBackup?.createdAt || storage?.latestBackup?.createdAt || null)}</div>
+              <div className="text-slate-600 mt-1">78778&: {formatBytes(latestBackup?.sizeBytes || storage?.latestBackup?.sizeBytes || 0)}</div>
               <div className="mt-1 flex items-center gap-2">
                 {(latestBackup?.integrity || storage?.latestBackup?.integrity) === 'verified' ? (
-                  <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold"><ShieldCheck size={14} />7�8& 7�87�7�88</span>
+                  <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold"><ShieldCheck size={14} />78& 787788</span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 text-red-700 font-semibold"><ShieldAlert size={14} />7�7�88 8~7�7�8</span>
+                  <span className="inline-flex items-center gap-1 text-red-700 font-semibold"><ShieldAlert size={14} />7788 8~778</span>
                 )}
               </div>
             </div>
 
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm">
-              <div className="font-bold text-slate-800 inline-flex items-center gap-1"><Clock3 size={14} /> 7�87�7�8�87� 7�887�7�8&7�</div>
+              <div className="font-bold text-slate-800 inline-flex items-center gap-1"><Clock3 size={14} /> 7877887 788778&7</div>
               <div className="text-slate-600 mt-1">{formatDateTime(storage?.schedule?.nextRunAt || null)}</div>
-              <div className="text-slate-600 mt-1">7�7�7�7�7�7�8& 7�87�7�7�8y8 : {Number(storage?.usagePercent || 0).toFixed(1)}%</div>
+              <div className="text-slate-600 mt-1">7777778& 787778y8 : {Number(storage?.usagePercent || 0).toFixed(1)}%</div>
             </div>
 
             <div className="grid grid-cols-3 gap-2 text-xs">
@@ -349,7 +351,7 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.05 }} className={`${cardClasses} p-5`}>
-        <h3 className="text-lg font-bold text-slate-900 mb-3">8 8�7� 7�88 7�7�7�</h3>
+        <h3 className="text-lg font-bold text-slate-900 mb-3">8 87 788 777</h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           {(['full', 'inventory', 'config'] as Array<Exclude<BackupKind, 'safety_snapshot'>>).map((type) => (
             <button
@@ -369,48 +371,48 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.1 }} className={`${cardClasses} p-5`}>
-        <h3 className="text-lg font-bold text-slate-900 mb-3">7�87�7�7�7�7�7�7� 7�88&7�87�8&7�</h3>
+        <h3 className="text-lg font-bold text-slate-900 mb-3">787777777 788&7878&7</h3>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
           <label className="text-sm text-slate-700">
-            7�87�8�7�7�7�
+            7878777
             <select value={scheduleFrequency} onChange={(event) => setScheduleFrequency(event.target.value as any)} className="mt-1 w-full rounded-lg border border-slate-300 p-2">
-              <option value="daily">8y8�8&8y</option>
-              <option value="weekly">7�7�7�8�7�8y</option>
-              <option value="monthly">7�8!7�8y</option>
+              <option value="daily">8y88&8y</option>
+              <option value="weekly">777878y</option>
+              <option value="monthly">78!78y</option>
             </select>
           </label>
 
           <label className="text-sm text-slate-700">
-            7�87�7�7�7�
+            787777
             <input type="number" min={0} max={23} value={scheduleHour} onChange={(event) => setScheduleHour(Number(event.target.value || 0))} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
           </label>
 
           <label className="text-sm text-slate-700">
-            7�87�88y87�
+            78788y87
             <input type="number" min={0} max={59} value={scheduleMinute} onChange={(event) => setScheduleMinute(Number(event.target.value || 0))} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
           </label>
 
           <label className="text-sm text-slate-700">
-            7�87�7�7�8~7�7� (8y8�8&)
+            787778~77 (8y88&)
             <input type="number" min={1} max={3650} value={retentionDays} onChange={(event) => setRetentionDays(Number(event.target.value || 30))} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
           </label>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
           <label className="text-sm text-slate-700">
-            8�88&7� 8&7�8�7� AES-256 (7�7�7�8y7�7�8y)
+            888&7 8&787 AES-256 (7778y778y)
             <input type="password" value={encryptionPassword} onChange={(event) => setEncryptionPassword(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" placeholder="******" />
           </label>
 
           <label className="text-sm text-slate-700">
             Restore PIN (2FA)
-            <input type="password" value={restorePin} onChange={(event) => setRestorePin(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" placeholder="4+ 7�7�87�8&" />
+            <input type="password" value={restorePin} onChange={(event) => setRestorePin(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" placeholder="4+ 77878&" />
           </label>
 
           <label className="text-sm text-slate-700">
-            8�88&7� 8&7�8�7� 8~8� 7�87�7�8~8y7� 7�8 7� 7�87�7�7�7�7�7�7�
-            <input type="password" value={restorePassword} onChange={(event) => setRestorePassword(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" placeholder="7�7�7�8y7�7�8y" />
+            888&7 8&787 8~8 78778~8y7 78 7 787777777
+            <input type="password" value={restorePassword} onChange={(event) => setRestorePassword(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" placeholder="7778y778y" />
           </label>
         </div>
 
@@ -438,7 +440,7 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
             onClick={() => setScheduleEnabled((value) => !value)}
             className={`px-3 py-1.5 rounded-lg border ${scheduleEnabled ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700'}`}
           >
-            7�87�7�8�87�: {scheduleEnabled ? '8&8~7�887�' : '8&7�8�88~7�'}
+            7877887: {scheduleEnabled ? '8&8~7887' : '8&7888~7'}
           </button>
 
           <button
@@ -446,7 +448,7 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
             onClick={() => setEncryptionEnabled((value) => !value)}
             className={`px-3 py-1.5 rounded-lg border ${encryptionEnabled ? 'border-emerald-600 bg-emerald-50 text-emerald-700' : 'border-slate-300 bg-white text-slate-700'}`}
           >
-            7�87�7�8~8y7�: {encryptionEnabled ? '8&8~7�88' : '8&7�8�88~'}
+            78778~8y7: {encryptionEnabled ? '8&8~788' : '8&7888~'}
           </button>
 
           <button
@@ -455,13 +457,13 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
             disabled={savingSchedule}
             className="px-3 py-1.5 rounded-lg border border-blue-600 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 inline-flex items-center gap-1"
           >
-            <Save size={14} /> {savingSchedule ? '7�7�7�8� 7�87�8~7�...' : '7�8~7� 7�87�7�7�7�7�7�7�'}
+            <Save size={14} /> {savingSchedule ? '7778 7878~7...' : '78~7 787777777'}
           </button>
         </div>
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.15 }} className={`${cardClasses} p-5`}>
-        <h3 className="text-lg font-bold text-slate-900 mb-3">7�87�7�7�7�77�7� 7�87�7�8y7�7�</h3>
+        <h3 className="text-lg font-bold text-slate-900 mb-3">787777777 78778y77</h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           <div className="relative">
             <AnimatePresence>
@@ -481,17 +483,17 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
               disabled={busyType !== null || !canCreate}
               className="relative z-10 w-full rounded-xl px-4 py-3 bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-60"
             >
-              {busyType === activeType ? '7�7�7�8� 7�87�8 8~8y7�...' : '8 7�7�7� 7�87�8 '}
+              {busyType === activeType ? '7778 7878 8~8y7...' : '8 777 7878 '}
             </button>
           </div>
-          <button type="button" onClick={() => void runBackup('inventory')} disabled={busyType !== null || !canCreate} className="rounded-xl px-4 py-3 bg-emerald-600 text-white font-semibold hover:bg-emerald-700 disabled:opacity-60">{busyType === 'inventory' ? '7�7�7�8� 7�87�8 8~8y7�...' : '8 7�7�7� 7�7�8y7�7�'}</button>
+          <button type="button" onClick={() => void runBackup('inventory')} disabled={busyType !== null || !canCreate} className="rounded-xl px-4 py-3 bg-emerald-600 text-white font-semibold hover:bg-emerald-700 disabled:opacity-60">{busyType === 'inventory' ? '7778 7878 8~8y7...' : '8 777 778y77'}</button>
           <div className="rounded-xl px-4 py-3 bg-slate-100 border border-slate-200 text-slate-700 text-sm font-semibold inline-flex items-center justify-center gap-2">
-            <ShieldCheck size={16} /> 7�87�7�7�7�7�7�7� 7�7�8& 8&8  7�7�8 7�88 7�7�
+            <ShieldCheck size={16} /> 787777777 778& 8&8  778 788 77
           </div>
         </div>
       </motion.div>
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.2 }} className={`${cardClasses} p-5`}>
-        <h3 className="text-lg font-bold text-slate-900 mb-3">7�7�8 7�88 7�7�</h3>
+        <h3 className="text-lg font-bold text-slate-900 mb-3">778 788 77</h3>
 
         {loading ? (
           <div className="h-36 rounded-xl border border-slate-200 bg-slate-50 animate-pulse" />
@@ -517,24 +519,24 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
                     <td className="py-2">
                       {entry.integrityVerified ? (
                         <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">
-                          <ShieldCheck size={12} /> 7�8& 7�87�7�88
+                          <ShieldCheck size={12} /> 78& 787788
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-red-100 text-red-700 text-xs font-semibold">
-                          <ShieldAlert size={12} /> 7�7�88 8~7�7�8
+                          <ShieldAlert size={12} /> 7788 8~778
                         </span>
                       )}
                     </td>
                     <td className="py-2">{actorLabel(entry)}</td>
                     <td className="py-2">
                       <div className="flex items-center gap-1">
-                        <button type="button" onClick={() => void handleDownload(entry)} className="p-1.5 rounded hover:bg-slate-100 text-slate-700" title="7�7�8&8y8">
+                        <button type="button" onClick={() => void handleDownload(entry)} className="p-1.5 rounded hover:bg-slate-100 text-slate-700" title="778&8y8">
                           <Download size={14} />
                         </button>
-                        <button type="button" onClick={() => void openRestorePreview(entry)} className="p-1.5 rounded hover:bg-emerald-50 text-emerald-700" title="7�7�7�7�7�7�7� 7�8&8 7�">
+                        <button type="button" onClick={() => void openRestorePreview(entry)} className="p-1.5 rounded hover:bg-emerald-50 text-emerald-700" title="7777777 78&8 7">
                           <HardDrive size={14} />
                         </button>
-                        <button type="button" onClick={() => void handleDelete(entry)} className="p-1.5 rounded hover:bg-red-50 text-red-700" title="7�7�8~">
+                        <button type="button" onClick={() => void handleDelete(entry)} className="p-1.5 rounded hover:bg-red-50 text-red-700" title="778~">
                           <Trash2 size={14} />
                         </button>
                       </div>
@@ -544,7 +546,7 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
 
                 {filteredHistory.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="text-center py-6 text-slate-500">87� 7�8�7�7� 8 7�7� 7�7�7�8y7�7�8y7� 8&7�7�7�87� 888 8�7� 7�88&7�7�7�7�.</td>
+                    <td colSpan={6} className="text-center py-6 text-slate-500">87 7877 8 77 7778y778y7 8&77787 888 87 788&7777.</td>
                   </tr>
                 )}
               </tbody>
@@ -557,18 +559,18 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-2xl p-5 space-y-4">
             <h4 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-              <Shield size={20} className="text-blue-600" /> 7�7�8�8y7� 7�87�7�7�7�7�7�7� 7�87�8&8 7�
+              <Shield size={20} className="text-blue-600" /> 7788y7 787777777 7878&8 7
             </h4>
 
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-              <p>7�88 7�7�7� 7�88&7�7�8!7�8~7�: <strong>{typeLabel(restoreTarget.type)}</strong></p>
-              <p>7�7�7�8y7� 7�88 7�7�7�: <strong>{formatDateTime(restoreTarget.createdAt)}</strong></p>
-              <p>Safety Snapshot: <strong>{safetySnapshotId || '7�8& 7�8 7�7�7�8!7�'}</strong></p>
+              <p>788 777 788&778!78~7: <strong>{typeLabel(restoreTarget.type)}</strong></p>
+              <p>7778y7 788 777: <strong>{formatDateTime(restoreTarget.createdAt)}</strong></p>
+              <p>Safety Snapshot: <strong>{safetySnapshotId || '78& 78 7778!7'}</strong></p>
             </div>
 
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900 text-sm">
-              <p className="font-semibold inline-flex items-center gap-1"><AlertTriangle size={14} /> 7�8y7�8& 7�7�7�8y8 7�87�7�7�7�7�7�7� 7�7�7� 8!7�7� 7�87�7�8�8y7� 8~87�.</p>
-              <p className="mt-1">7�8& 7�8 8~8y7� Auto-backup 887�7�87� 7�87�7�88y7� 7�7�8&7� 87�8 7�7�7� 8!7�8! 7�88 7�8~7�7�.</p>
+              <p className="font-semibold inline-flex items-center gap-1"><AlertTriangle size={14} /> 78y78& 7778y8 787777777 777 8!77 787788y7 8~87.</p>
+              <p className="mt-1">78& 78 8~8y7 Auto-backup 887787 787788y7 778&7 878 777 8!78! 788 78~77.</p>
             </div>
 
             <div className="flex justify-end gap-2">
@@ -577,7 +579,7 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
                 onClick={() => setRestoreModalOpen(false)}
                 className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50"
               >
-                7�877�7
+                78777
               </button>
               <button
                 type="button"
@@ -585,7 +587,7 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
                 disabled={restoring}
                 className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 inline-flex items-center gap-2"
               >
-                {restoring ? <RefreshCw size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} 7�7�8�8y7� 7�87�7�7�7�7�7�7�
+                {restoring ? <RefreshCw size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} 7788y7 787777777
               </button>
             </div>
           </div>

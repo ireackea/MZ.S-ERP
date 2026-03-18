@@ -1,3 +1,5 @@
+// ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
+// ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Phase 6.6 - Global 100% Cleanup & Absolute Verification - 2026-03-13
 
 import React, { FormEvent, useEffect, useMemo, useState } from 'react';
@@ -389,10 +391,10 @@ const ItemsPage: React.FC = () => {
                   {sortMode === 'manual_locked' && !showArchived && (
                     <>
                       <button onClick={() => move(String(i.id), 'up')} className="ml-1 rounded border border-slate-300 px-1">
-                        â†‘
+                        â‘
                       </button>
                       <button onClick={() => move(String(i.id), 'down')} className="ml-1 rounded border border-slate-300 px-1">
-                        â†“
+                        â“
                       </button>
                     </>
                   )}

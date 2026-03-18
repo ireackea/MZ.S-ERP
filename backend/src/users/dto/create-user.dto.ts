@@ -1,3 +1,5 @@
+// ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
+// ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 import { IsBoolean, IsEmail, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
 
 export class CreateUserDto {
@@ -14,7 +16,7 @@ export class CreateUserDto {
   password!: string;
 
   @IsOptional()
-  @IsUUID('4')  // 7�"�7�"�7�"�#���%7�"�#�⬑"�7�"� UUID v4 validation (Prisma standard)
+  @IsUUID('4')  // 7"7"7"#%7"#⬑"7" UUID v4 validation (Prisma standard)
   roleId?: string;
 
   @IsOptional()

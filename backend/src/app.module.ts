@@ -1,3 +1,5 @@
+// ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
+// ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Legacy Migration Phase 5 - Final Stabilization & Production - 2026-02-27
 import { Module } from '@nestjs/common';
 import { AuthModule } from './auth/auth.module';
@@ -26,7 +28,7 @@ import { RealtimeModule } from './realtime/realtime.module';
     ReportsModule,
     TransactionModule,
     UsersModule,
-    DashboardModule, // 7�"�7�"�7�"�#���%7�"�#�⬑"�7�"� ENTERPRISE FIX: Dashboard Module
+    DashboardModule, // 7"7"7"#%7"#⬑"7" ENTERPRISE FIX: Dashboard Module
   ],
 })
 export class AppModule {}

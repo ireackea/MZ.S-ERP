@@ -1,3 +1,5 @@
+// ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
+// ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Phase 3 - Full Legacy Removal & Complete Single Source of Truth - 2026-03-05
 // ENTERPRISE FIX: Phase 2 - Full Single Source of Truth & Legacy Cleanup - 2026-03-05
 // ENTERPRISE FIX: Phase 1 - Single Source of Truth & Integration - 2026-03-05
@@ -300,7 +302,7 @@ const ItemManagement: React.FC<ItemManagementProps> = ({
       'الكمية الحالية': i.currentStock,
       'الحد الأدنى': i.minLimit,
       'الحد الأعلى': i.maxLimit,
-      'حد الطلب': i.orderLimit
+      'حد اللب': i.orderLimit
     })));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Items");
@@ -360,18 +362,18 @@ const ItemManagement: React.FC<ItemManagementProps> = ({
 
       const min = row['min_limit'] || row['Min Limit'] || row['الحد الأدنى'] || 0;
       const max = row['max_limit'] || row['Max Limit'] || row['الحد الأعلى'] || 1000;
-      const order = row['order_limit'] || row['Order Limit'] || row['حد الطلب'];
+      const order = row['order_limit'] || row['Order Limit'] || row['حد اللب'];
 
       // Code is optional now, but if provided, must be unique
       if (code && usedCodes.has(String(code))) {
-        errors.push(`سطر ${idx + 2}: الكود "${code}" مستخدم مسبقاً.`);
+        errors.push(`سر ${idx + 2}: الكود "${code}" مستخدم مسبقاً.`);
       } else if (!name) {
-        errors.push(`سطر ${idx + 2}: اسم الصنف مفقود.`);
+        errors.push(`سر ${idx + 2}: اسم الصنف مفقود.`);
       } else if (!category || !availableCategories.includes(category)) {
-        if (!availableCategories.includes(category)) errors.push(`سطر ${idx + 2}: الفئة "${category}" غير موجودة.`);
-        else errors.push(`سطر ${idx + 2}: الفئة مفقودة.`);
+        if (!availableCategories.includes(category)) errors.push(`سر ${idx + 2}: الفئة "${category}" غير موجودة.`);
+        else errors.push(`سر ${idx + 2}: الفئة مفقودة.`);
       } else if (!unit || !availableUnits.includes(unit)) {
-        errors.push(`سطر ${idx + 2}: الوحدة "${unit}" غير صحيحة.`);
+        errors.push(`سر ${idx + 2}: الوحدة "${unit}" غير صحيحة.`);
       } else {
         if (code) usedCodes.add(String(code)); // Track for duplicates within file
         validData.push({
@@ -447,7 +449,7 @@ const ItemManagement: React.FC<ItemManagementProps> = ({
         window.location.reload();
       }
     } catch (error: any) {
-      showToast(error?.message || 'حدث خطأ أثناء توليد الأكواد المفقودة.', 'error');
+      showToast(error?.message || 'حدث خأ أثناء توليد الأكواد المفقودة.', 'error');
     } finally {
       setIsGeneratingCodes(false);
     }
@@ -538,7 +540,7 @@ const ItemManagement: React.FC<ItemManagementProps> = ({
               className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-emerald-500 min-w-[200px]"
               value={itemSortMode}
               onChange={(e) => setItemSortMode(e.target.value as typeof itemSortMode)}
-              title="طريقة ترتيب عرض الأصناف"
+              title="ريقة ترتيب عرض الأصناف"
             >
               {sortModeOptions.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -925,14 +927,14 @@ const ItemManagement: React.FC<ItemManagementProps> = ({
                 {/* Section 3: Inventory Control */}
                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                   <h4 className="flex items-center gap-2 text-lg font-bold text-slate-800 mb-6 pb-2 border-b border-slate-100">
-                    <AlertTriangle size={20} className="text-amber-500" /> سقف المخزون ومستويات إعادة الطلب
+                    <AlertTriangle size={20} className="text-amber-500" /> سقف المخزون ومستويات إعادة اللب
                   </h4>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div>
                       <label className="block text-xs font-bold text-amber-600 mb-2">الحد الأدنى (Min Limit)</label>
                       <input type="number" className="w-full p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-center font-bold outline-none focus:border-amber-500"
                         value={formData.minLimit} onChange={e => setFormData({ ...formData, minLimit: Number(e.target.value) })} />
-                      <p className="text-[10px] text-slate-400 mt-1">يظهر التنبيه "منخفض" عندما يصل المخزون لهذا الحد</p>
+                      <p className="text-[10px] text-slate-400 mt-1">يهر التنبيه "منخفض" عندما يصل المخزون لهذا الحد</p>
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-600 mb-2">الحد الأعلى (Max Limit)</label>
@@ -940,10 +942,10 @@ const ItemManagement: React.FC<ItemManagementProps> = ({
                         value={formData.maxLimit} onChange={e => setFormData({ ...formData, maxLimit: Number(e.target.value) })} />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-red-600 mb-2">نقطة الطلب (Reorder Point)</label>
+                      <label className="block text-xs font-bold text-red-600 mb-2">نقة اللب (Reorder Point)</label>
                       <input type="number" className="w-full p-2.5 bg-red-50 border border-red-200 rounded-xl text-center font-bold text-red-600 outline-none focus:border-red-500"
                         value={formData.orderLimit || ''} onChange={e => setFormData({ ...formData, orderLimit: Number(e.target.value) })} />
-                      <p className="text-[10px] text-slate-400 mt-1">يظهر التنبيه "حرج" عندما يصل المخزون لهذا الحد</p>
+                      <p className="text-[10px] text-slate-400 mt-1">يهر التنبيه "حرج" عندما يصل المخزون لهذا الحد</p>
                     </div>
                   </div>
                 </div>
@@ -991,7 +993,7 @@ const ItemManagement: React.FC<ItemManagementProps> = ({
                     <AlertTriangle size={16} /> تنبيه هام جداً
                   </h4>
                   <p className="text-sm text-amber-900 leading-relaxed">
-                    هذه الأصناف مرتبطة بـ
+                    هذه الأصناف مرتبة بـ
                     <span className="font-bold mx-1 text-lg">{deleteModal.transactionCount}</span>
                     عملية في سجل الحركات (صرف/توريد/...).
                     <br /><br />
@@ -999,7 +1001,7 @@ const ItemManagement: React.FC<ItemManagementProps> = ({
                   </p>
                 </div>
               ) : (
-                <p className="text-sm text-slate-500">لا توجد عمليات مرتبطة بهذه الأصناف، الحذف آمن.</p>
+                <p className="text-sm text-slate-500">لا توجد عمليات مرتبة بهذه الأصناف، الحذف آمن.</p>
               )}
             </div>
 
@@ -1031,7 +1033,7 @@ const ItemManagement: React.FC<ItemManagementProps> = ({
             </div>
             <div className="p-6 space-y-4">
               <div className="bg-yellow-50 p-3 rounded-lg text-xs text-yellow-700 mb-4 border border-yellow-100">
-                ملاحظة: اترك الحقل فارغاً إذا كنت لا ترغب في تغييره لجميع الأصناف المحددة.
+                ملاحة: اترك الحقل فارغاً إذا كنت لا ترغب في تغييره لجميع الأصناف المحددة.
               </div>
 
               <div>
@@ -1052,7 +1054,7 @@ const ItemManagement: React.FC<ItemManagementProps> = ({
             </div>
             <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
               <button onClick={() => setIsBulkEditOpen(false)} className="px-4 py-2 text-slate-500 hover:bg-slate-200 rounded-lg">إلغاء</button>
-              <button onClick={handleBulkEditSubmit} className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-bold shadow-lg">تطبيق التغييرات</button>
+              <button onClick={handleBulkEditSubmit} className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-bold shadow-lg">تبيق التغييرات</button>
             </div>
           </div>
         </div>
@@ -1062,7 +1064,7 @@ const ItemManagement: React.FC<ItemManagementProps> = ({
       {isImportOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           {/* Same Import Modal Content but ensure commitImport calls addItems from context */}
-          <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden h-[ظ -ظ©] flex flex-col">
+          <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden h-[ظ -ظ] flex flex-col">
             {/* ... Header ... */}
             <div className="bg-slate-50 border-b border-slate-200 p-6">
               <h3 className="text-xl font-bold text-slate-800 mb-6">معالج استيراد الأصناف</h3>

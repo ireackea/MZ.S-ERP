@@ -1,3 +1,5 @@
+// ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
+// ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Legacy Migration Phase 3 - Professional PDF Reporting - 2026-02-27
 import { BadRequestException, Injectable } from '@nestjs/common';
 import * as puppeteer from 'puppeteer';
@@ -223,9 +225,9 @@ export class ReportService {
           v.includes('inbound') ||
           v.includes('incoming') ||
           v.includes('production') ||
-          v.includes('7�"�7�"�7�"�#���"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�') ||
-          v.includes('7�"�7�"�7�"�7�"�7�"�7�"�7�"�#�⬑"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�') ||
-          v.includes('7�"�7�"�7�"�7�"�7�"�7�"�7�"�#�⬑"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�')
+          v.includes('7"7"7"#"7"7"7"7"7"7"7"7"7"7"7"7"') ||
+          v.includes('7"7"7"7"7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"7"') ||
+          v.includes('7"7"7"7"7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"7"')
         );
       }).length;
       return [

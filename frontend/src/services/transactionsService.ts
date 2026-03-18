@@ -1,3 +1,5 @@
+// ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
+// ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Exact Legacy UI Restoration - 2026-02-27
 import apiClient from '@api/client';
 import { Transaction } from '../types';
@@ -35,7 +37,7 @@ const normalizeApiTransaction = (row: any): Transaction => {
     id: String(row?.id ?? row?.publicId ?? crypto.randomUUID()),
     date: String(row?.date || new Date().toISOString().split('T')[0]),
     itemId: String(row?.itemId ?? row?.item?.publicId ?? row?.item?.id ?? ''),
-    type: String(row?.type || '7�"�7�"�7�"�7�"�7�"�7�"�7�"�#�⬑"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�7�"�') as Transaction['type'],
+    type: String(row?.type || '7"7"7"7"7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"') as Transaction['type'],
     quantity: Number(row?.quantity ?? 0),
     warehouseInvoice: String(row?.warehouseInvoice ?? ''),
     supplierOrReceiver: String(row?.supplierOrReceiver ?? ''),
