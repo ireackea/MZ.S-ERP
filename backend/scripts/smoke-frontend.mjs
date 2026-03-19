@@ -1,9 +1,16 @@
+// ENTERPRISE FIX: Phase 0.2 – Full Runtime Docker Proof - 2026-03-13
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import puppeteer from 'puppeteer';
 
-const baseUrl = process.env.FRONTEND_URL || 'http://127.0.0.1:5173';
+const baseUrl = process.env.FRONTEND_URL || 'http://localhost:4173';
+const outputDir = process.env.SCREENSHOT_DIR || path.resolve(process.cwd(), '..', 'artifacts', 'phase0.2');
 const executableCandidates = [
   process.env.PUPPETEER_EXECUTABLE_PATH,
   process.env.CHROMIUM_PATH,
+  'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
+  'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
   '/usr/bin/chromium',
   '/usr/bin/chromium-browser',
 ].filter(Boolean);
@@ -36,13 +43,36 @@ const capturePageState = async (page, route) => {
   };
 };
 
+const slugify = (value) => value.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
+
+const saveScreenshot = async (page, name) => {
+  await mkdir(outputDir, { recursive: true });
+  const filePath = path.join(outputDir, `${slugify(name)}.png`);
+  await page.screenshot({ path: filePath, fullPage: true });
+  return filePath;
+};
+
+const saveDebugArtifacts = async (page, name) => {
+  await mkdir(outputDir, { recursive: true });
+  const screenshotPath = await saveScreenshot(page, name);
+  const htmlPath = path.join(outputDir, `${slugify(name)}.html`);
+  const textPath = path.join(outputDir, `${slugify(name)}.txt`);
+  await writeFile(htmlPath, await page.content(), 'utf8');
+  await writeFile(textPath, await page.evaluate(() => document.body?.innerText || ''), 'utf8');
+  return { screenshotPath, htmlPath, textPath };
+};
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const main = async () => {
   const browser = await launch();
   const page = await browser.newPage();
+  await page.setViewport({ width: 1440, height: 1024, deviceScaleFactor: 1 });
   const pageErrors = [];
   const failedRequests = [];
   const badResponses = [];
   const consoleErrors = [];
+  const screenshots = {};
 
   page.on('pageerror', (error) => {
     pageErrors.push(error.message);
@@ -72,8 +102,9 @@ const main = async () => {
   });
 
   try {
+    await mkdir(outputDir, { recursive: true });
     await page.goto(baseUrl, { waitUntil: 'networkidle2', timeout: 120000 });
-    await page.waitForSelector('#login-username', { timeout: 30000 });
+    await page.waitForSelector('#login-username', { timeout: 120000 });
     await page.type('#login-username', 'superadmin');
     await page.type('#login-password', 'SecurePassword2026!');
     await Promise.all([
@@ -82,20 +113,34 @@ const main = async () => {
     ]);
 
     const afterLogin = await capturePageState(page, 'post-login');
+    screenshots.dashboard = await saveScreenshot(page, 'dashboard');
 
-    const routes = ['/formulation', '/stocktaking', '/users'];
+    const routes = [
+      { route: '/dashboard', key: 'dashboard' },
+      { route: '/reports', key: 'reports' },
+      { route: '/operations', key: 'daily-operations' },
+    ];
     const routeStates = [];
 
-    for (const route of routes) {
-      await page.goto(`${baseUrl}${route}`, { waitUntil: 'networkidle2', timeout: 120000 });
-      await page.waitForTimeout(1500);
-      routeStates.push(await capturePageState(page, route));
+    for (const routeConfig of routes) {
+      await page.goto(`${baseUrl}${routeConfig.route}`, { waitUntil: 'networkidle2', timeout: 120000 });
+      await delay(1500);
+      routeStates.push(await capturePageState(page, routeConfig.route));
+      screenshots[routeConfig.key] = await saveScreenshot(page, routeConfig.key);
     }
+
+    await page.setOfflineMode(true);
+    await delay(1500);
+    screenshots.dailyOperationsOffline = await saveScreenshot(page, 'daily-operations-offline');
+    const offlineBannerVisible = await page.evaluate(() => document.body?.innerText?.includes('أوفلاين') || document.body?.innerText?.includes('بدون اتصال') || false);
+    await page.setOfflineMode(false);
 
     const result = {
       ok: true,
       afterLogin,
       routeStates,
+      screenshots,
+      offlineBannerVisible,
       pageErrors,
       failedRequests,
       badResponses,
@@ -105,9 +150,12 @@ const main = async () => {
 
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {
+    const debugArtifacts = await saveDebugArtifacts(page, 'login-debug');
     const result = {
       ok: false,
       error: error instanceof Error ? error.message : String(error),
+      currentUrl: page.url(),
+      debugArtifacts,
       findings,
       pageErrors,
       failedRequests,

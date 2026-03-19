@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 0.2 – Full Runtime Docker Proof - 2026-03-13
 // ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
 // Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
 import { Body, Controller, Post, Req, Res } from '@nestjs/common';
@@ -12,8 +13,11 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   private shouldUseSecureCookie(request: Request) {
+    const explicitSetting = String(process.env.AUTH_COOKIE_SECURE || '').trim().toLowerCase();
+    if (explicitSetting === 'true') return true;
+    if (explicitSetting === 'false') return false;
     const forwardedProto = String(request.headers['x-forwarded-proto'] || '').toLowerCase();
-    return process.env.NODE_ENV === 'production' || Boolean((request as any).secure) || forwardedProto === 'https';
+    return Boolean((request as any).secure) || forwardedProto === 'https';
   }
 
   @Public()

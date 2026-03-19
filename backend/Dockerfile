@@ -1,3 +1,4 @@
+# ENTERPRISE FIX: Phase 0.2 – Full Runtime Docker Proof - 2026-03-13
 # ENTERPRISE FIX: Phase 0 - التنظيف الأساسي والتحضير - 2026-03-13
 FROM node:20-bookworm-slim
 
@@ -23,4 +24,4 @@ ENV PORT=3001
 
 EXPOSE 3001
 
-CMD ["sh", "-lc", "npx prisma generate && npx prisma migrate deploy && node dist/main.js"]
+CMD ["sh", "-lc", "npx prisma generate && npx prisma db push && npm run prisma:seed && node dist/main.js"]

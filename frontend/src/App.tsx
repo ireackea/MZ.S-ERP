@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 0.2 – Full Runtime Docker Proof - 2026-03-13
 // ENTERPRISE FIX: Phase 0 - التنظيف الأساسي والتحضير - 2026-03-13
 
 import React, { Suspense, lazy, useState, useEffect, useRef } from 'react';
@@ -530,8 +531,10 @@ const AppContent = () => {
     return <EnterpriseLoading message="جاري تحميل النظام... يرجى الانتظار" subMessage="يتم تهيئة البيانات والاتصال بالخادم" />;
   }
 
-  // Initial setup for first-time users
-  if (!currentUser && users.length === 0) {
+  const isExplicitInitialSetupPath = typeof window !== 'undefined' && window.location.pathname === '/initial-setup';
+
+  // ENTERPRISE FIX: Keep server-backed login available even when local browser storage has no cached users.
+  if (!currentUser && users.length === 0 && isExplicitInitialSetupPath) {
     const handleInitialSetup = async (event: React.FormEvent) => {
       event.preventDefault();
       setSetupMessage('');
