@@ -1,6 +1,6 @@
+// ENTERPRISE FIX: Phase 0 – التنظيف الأساسي والأمان الحرج - 2026-03-13
 // ENTERPRISE FIX: Phase 0.2 – Full Runtime Docker Proof - 2026-03-13
 // ENTERPRISE FIX: Phase 0 - التنظيف الأساسي والتحضير - 2026-03-13
-
 import React, { Suspense, lazy, useState, useEffect, useRef } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { Toaster } from 'sonner';
@@ -13,8 +13,8 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { clearLegacyInventoryBootstrapState, useInventoryStore } from './store/useInventoryStore';
 import { Transaction, Partner, Order, User, Tag, SystemSettings, OperationAppearance, ReportColumnConfig, UnloadingRule, Formula, AuditLog } from './types';
 import { v4 as uuidv4 } from 'uuid';
-import { ensureAuthCredentialsSeeded, loginAsUser, logout, provisionInitialAdmin } from './services/authController';
-import { clearAllAuthData, getAuthToken, getAuthUser } from '@services/authService';
+import { ensureAuthCredentialsSeeded, logout, provisionInitialAdmin } from './services/authController';
+import { clearAllAuthData } from '@services/authService';
 import { filterByDataScope, getIamConfig, hasPermission, logUserActivity, normalizeUsers, upsertCurrentSession } from './services/iamService';
 import {
   bulkCreateTransactions,
@@ -171,47 +171,49 @@ const AppContent = () => {
         setFormulas(getFormulas());
         setAuditLogs([]);
 
-        // Safe JWT auth check with Optional Chaining
-        const jwtUser = getAuthUser();
+        try {
+          const response = await apiClient.get('/auth/me');
+          const sessionUser = response.data as Partial<User> | undefined;
 
-        console.log('[App.tsx] Auth Check - JWT Token:', getAuthToken() ? 'EXISTS' : 'NONE');
-        console.log('[App.tsx] Auth Check - JWT User:', jwtUser);
+          if (sessionUser?.id) {
+            const normalizeValue = (value?: string | null) => (value ?? '').trim().toLowerCase();
+            const normalizedSessionId = normalizeValue(sessionUser.id);
+            const normalizedSessionUsername = normalizeValue(sessionUser.username);
+            const normalizedSessionEmail = normalizeValue((sessionUser as any)?.email);
+            const normalizedSessionName = normalizeValue(sessionUser.name);
 
-        if (jwtUser) {
-          // ENTERPRISE FIX: Server-First + Robust Matching + Full Permissions Guard - 2026-02-28
-          const normalizeValue = (value?: string | null) => (value ?? '').trim().toLowerCase();
-          const normalizedJwtId = normalizeValue(jwtUser?.id);
-          const normalizedJwtUsername = normalizeValue(jwtUser?.username);
-          const normalizedJwtEmail = normalizeValue((jwtUser as any)?.email);
-          const normalizedJwtName = normalizeValue(jwtUser?.name);
+            const matchedUser = loadedUsers.find((user) => {
+              const userId = normalizeValue(user?.id);
+              const userUsername = normalizeValue(user?.username);
+              const userEmail = normalizeValue((user as any)?.email);
+              const userName = normalizeValue(user?.name);
 
-          const matchedUser = loadedUsers.find((u) => {
-            const userId = normalizeValue(u?.id);
-            const userUsername = normalizeValue(u?.username);
-            const userEmail = normalizeValue((u as any)?.email);
-            const userName = normalizeValue(u?.name);
+              if (normalizedSessionId && userId && userId === normalizedSessionId) return true;
+              if (normalizedSessionUsername && userUsername && userUsername === normalizedSessionUsername) return true;
+              if (normalizedSessionEmail && userEmail && userEmail === normalizedSessionEmail) return true;
+              if (normalizedSessionName && userName && userName === normalizedSessionName) return true;
 
-            if (normalizedJwtId && userId && userId === normalizedJwtId) return true;
-            if (normalizedJwtUsername && userUsername && userUsername === normalizedJwtUsername) return true;
-            if (normalizedJwtEmail && userEmail && userEmail === normalizedJwtEmail) return true;
-            if (normalizedJwtName && userName && userName === normalizedJwtName) return true;
+              return false;
+            });
 
-            return false;
-          });
+            const sourceUser = matchedUser ?? (sessionUser as User);
+            const role = (sourceUser?.role ?? '').toString();
+            const isSuperAdminRole = role.toLowerCase() === 'superadmin' || role.toLowerCase() === 'admin';
+            const targetUser: User = {
+              ...sourceUser,
+              permissions: sourceUser?.permissions?.length > 0
+                ? sourceUser.permissions
+                : (isSuperAdminRole ? ['*'] : []),
+            };
 
-          const sourceUser = matchedUser ?? (jwtUser as User);
-          const role = (sourceUser?.role ?? '').toString();
-          const isSuperAdminRole = role.toLowerCase() === 'superadmin' || role.toLowerCase() === 'admin';
-          const targetUser: User = {
-            ...sourceUser,
-            permissions: sourceUser?.permissions?.length > 0
-              ? sourceUser.permissions
-              : (isSuperAdminRole ? ['*'] : []),
-          };
-
-          console.log('[App.tsx] Setting currentUser from JWT:', targetUser.username);
-          setCurrentUser(targetUser);
-          upsertCurrentSession(targetUser);
+            console.log('[App.tsx] Restored authenticated session from server:', targetUser.username);
+            setCurrentUser(targetUser);
+            upsertCurrentSession(targetUser);
+          }
+        } catch (sessionError: any) {
+          if (sessionError?.response?.status !== 401) {
+            console.error('[App.tsx] Server session bootstrap failed:', sessionError);
+          }
         }
 
         // Mark auth as ready AFTER all checks are complete
@@ -248,6 +250,7 @@ const AppContent = () => {
 
     let active = true;
     setInventoryRouteReady(false);
+    clearAllAuthData();
 
     const syncInventoryAfterLogin = async () => {
       try {
@@ -462,7 +465,6 @@ const AppContent = () => {
     }
 
     setCurrentUser(targetUser);
-    loginAsUser(targetUser, false);
     upsertCurrentSession(targetUser);
     logUserActivity({ userId: targetUser.id, userName: targetUser.name, event: 'login_success', details: 'تسجيل دخول ناجح' });
   };
@@ -576,7 +578,6 @@ const AppContent = () => {
         const updatedUsers = normalizeUsers(getUsers());
         setUsers(updatedUsers);
         setCurrentUser(result.user);
-        loginAsUser(result.user, false);
         upsertCurrentSession(result.user);
         logUserActivity({ userId: result.user.id, userName: result.user.name, event: 'login_success', details: 'تم إنشاء حساب المدير بنجاح' });
       } finally {

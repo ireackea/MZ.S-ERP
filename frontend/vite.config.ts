@@ -1,4 +1,4 @@
-// ENTERPRISE FIX: Phase 0 - التنظيف الأساسي والتحضير - 2026-03-13
+// ENTERPRISE FIX: Phase 0 – التنظيف الأساسي والأمان الحرج - 2026-03-13
 import { defineConfig } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';

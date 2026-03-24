@@ -1,11 +1,13 @@
+// ENTERPRISE FIX: Phase 0 – التنظيف الأساسي والأمان الحرج - 2026-03-13
 // ENTERPRISE FIX: Phase 0.2 – Full Runtime Docker Proof - 2026-03-13
 // ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
 // Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
-import { Body, Controller, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Public } from './decorators/public.decorator';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { JwtAuthGuard } from './jwt-auth.guard';
 
 // ENTERPRISE FIX: Phase 0 - Fatal Errors Fixed - Blueprint Compliant - 2026-03-02
 @Controller('auth')
@@ -59,5 +61,11 @@ export class AuthController {
       sameSite: 'strict',
     });
     return { success: true, message: 'Logged out successfully' };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  async me(@Req() req: Request & { user?: unknown }) {
+    return req.user;
   }
 }

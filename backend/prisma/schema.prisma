@@ -1,4 +1,4 @@
-// ENTERPRISE FIX: Phase 0 - التنظيف الأساسي والتحضير - 2026-03-13
+// ENTERPRISE FIX: Phase 0 – التنظيف الأساسي والأمان الحرج - 2026-03-13
 // Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
 // Prisma Schema - Database Configuration
 
