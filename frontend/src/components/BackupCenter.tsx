@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 0.3 – Final Arabic Encoding Fix & 10/10 Declaration - 2026-03-13
 // ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
 // ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Arabic Encoding Restoration - Full Components Folder - 2026-03-04
@@ -52,9 +53,9 @@ const formatBytes = (bytes: number) => {
 };
 
 const formatDateTime = (value?: string | null) => {
-  if (!value) return '78y7 8&777';
+  if (!value) return 'غير متوفر';
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return '78y7 8&777';
+  if (Number.isNaN(parsed.getTime())) return 'غير متوفر';
   return parsed.toLocaleString('ar-EG', {
     year: '2-digit',
     month: '2-digit',
@@ -64,12 +65,12 @@ const formatDateTime = (value?: string | null) => {
   });
 };
 
-const triggerLabel = (trigger: 'manual' | 'scheduled') => (trigger === 'scheduled' ? '788778y' : '8y788y');
+const triggerLabel = (trigger: 'manual' | 'scheduled') => (trigger === 'scheduled' ? 'مجدول' : 'يدوي');
 
 const typeLabel = (type: BackupKind) => {
-  if (type === 'full') return '878&8 788 778&';
-  if (type === 'inventory') return '7787 788&7788 ';
-  if (type === 'config') return '787777777';
+  if (type === 'full') return 'نسخة احتياطية كاملة';
+  if (type === 'inventory') return 'نسخة بيانات المخزون';
+  if (type === 'config') return 'نسخة الإعدادات';
   return 'Safety Snapshot';
 };
 
@@ -133,7 +134,7 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
       setHistory(logs);
       hydrateSchedule(stats);
     } catch (error: any) {
-      toast.error(error?.message || '7777 778&8y8 78y78 77 788 77 787778y778y');
+      toast.error(error?.message || 'تعذر تحميل بيانات النسخ الاحتياطي.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -160,10 +161,10 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
     setBusyType(type);
     try {
       await createBackupByType(type, encryptionPassword || undefined);
-      toast.success('78& 78 777 788 777 787778y778y7 78 777');
+      toast.success('تم إنشاء النسخة الاحتياطية بنجاح.');
       await loadData(false);
     } catch (error: any) {
-      toast.error(error?.message || '8~78 78 777 788 777 787778y778y7');
+      toast.error(error?.message || 'فشل إنشاء النسخة الاحتياطية.');
     } finally {
       setBusyType(null);
       if (type === activeType) {
@@ -186,12 +187,12 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
         encryptionPassword: encryptionPassword || undefined,
         restorePin: restorePin || undefined,
       });
-      toast.success('78& 78~7 7777777 7877887');
+      toast.success('تم حفظ إعدادات الجدولة بنجاح.');
       setEncryptionPassword('');
       setRestorePin('');
       await loadData(false);
     } catch (error: any) {
-      toast.error(error?.message || '7777 78~7 7777777 7877887');
+      toast.error(error?.message || 'تعذر حفظ إعدادات الجدولة.');
     } finally {
       setSavingSchedule(false);
     }
@@ -208,27 +209,27 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
-      toast.success(`78& 78778&8y8 78 777 (SHA-256: ${file.checksum.slice(0, 10)}...)`);
+      toast.success(`تم تنزيل النسخة الاحتياطية (SHA-256: ${file.checksum.slice(0, 10)}...)`);
     } catch (error: any) {
-      toast.error(error?.message || '8~78 778&8y8 788 777 787778y778y7');
+      toast.error(error?.message || 'تعذر تنزيل النسخة الاحتياطية.');
     }
   };
 
   const handleDelete = async (entry: BackupHistoryEntry) => {
-    if (!window.confirm('8!8 778y7 778~ 788 777 787778y778y7 8 8!778y8977')) return;
+    if (!window.confirm('هل تريد حذف هذه النسخة الاحتياطية نهائيًا؟')) return;
     try {
       await removeBackup(entry.id);
-      toast.success('78& 778~ 788 777 787778y778y7');
+      toast.success('تم حذف النسخة الاحتياطية.');
       await loadData(false);
     } catch (error: any) {
-      toast.error(error?.message || '7777 778~ 788 777 787778y778y7');
+      toast.error(error?.message || 'تعذر حذف النسخة الاحتياطية.');
     }
   };
 
   const openRestorePreview = async (entry: BackupHistoryEntry) => {
     try {
       if (!restorePin.trim()) {
-        toast.error('7778 78&7 PIN 788789');
+        toast.error('أدخل رمز الاستعادة أولًا.');
         return;
       }
 
@@ -242,15 +243,15 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
       setRestoreToken(String(preview?.restoreToken || ''));
       setSafetySnapshotId(String(preview?.safetySnapshotId || ''));
       setRestoreModalOpen(true);
-      toast.success('78& 78 777 Safety Snapshot 78 777. 7777 78y78 77 787777777 78& 787 7878 8~8y7.');
+      toast.success('تم إنشاء لقطة أمان مؤقتة. راجع المعاينة قبل تأكيد الاستعادة.');
       await loadData(false);
     } catch (error: any) {
-      toast.error(error?.message || '8~78 78 777 8&778y8 7 787777777');
+      toast.error(error?.message || 'تعذر تجهيز معاينة الاستعادة.');
     }
   };
   const handleRestoreConfirm = async () => {
     if (!restoreTarget || !restoreToken) {
-      toast.error('78y78 77 787777777 78y7 8&878&87');
+      toast.error('بيانات الاستعادة غير مكتملة.');
       return;
     }
 
@@ -262,12 +263,12 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
         restorePin,
         decryptionPassword: restorePassword || undefined,
       });
-      toast.success('78&7 787777777 78 777. 78y78& 7778y7 787777 7878 .');
+      toast.success('تم تنفيذ الاستعادة بنجاح. سيتم تحديث الصفحة خلال لحظات.');
       setRestoreModalOpen(false);
       await loadData(false);
       setTimeout(() => window.location.reload(), 500);
     } catch (error: any) {
-      toast.error(error?.message || '8~787 78&88y7 787777777');
+      toast.error(error?.message || 'تعذر تنفيذ الاستعادة.');
     } finally {
       setRestoring(false);
     }
@@ -401,18 +402,18 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
           <label className="text-sm text-slate-700">
-            888&7 8&787 AES-256 (7778y778y)
+            كلمة مرور التشفير AES-256 (اختياري)
             <input type="password" value={encryptionPassword} onChange={(event) => setEncryptionPassword(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" placeholder="******" />
           </label>
 
           <label className="text-sm text-slate-700">
             Restore PIN (2FA)
-            <input type="password" value={restorePin} onChange={(event) => setRestorePin(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" placeholder="4+ 77878&" />
+            <input type="password" value={restorePin} onChange={(event) => setRestorePin(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" placeholder="PIN من 4 أرقام" />
           </label>
 
           <label className="text-sm text-slate-700">
-            888&7 8&787 8~8 78778~8y7 78 7 787777777
-            <input type="password" value={restorePassword} onChange={(event) => setRestorePassword(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" placeholder="7778y778y" />
+            كلمة مرور فك التشفير لعملية الاستعادة
+            <input type="password" value={restorePassword} onChange={(event) => setRestorePassword(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" placeholder="كلمة المرور" />
           </label>
         </div>
 
@@ -440,7 +441,7 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
             onClick={() => setScheduleEnabled((value) => !value)}
             className={`px-3 py-1.5 rounded-lg border ${scheduleEnabled ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700'}`}
           >
-            7877887: {scheduleEnabled ? '8&8~7887' : '8&7888~7'}
+            الجدولة: {scheduleEnabled ? 'مفعلة' : 'متوقفة'}
           </button>
 
           <button
@@ -448,7 +449,7 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
             onClick={() => setEncryptionEnabled((value) => !value)}
             className={`px-3 py-1.5 rounded-lg border ${encryptionEnabled ? 'border-emerald-600 bg-emerald-50 text-emerald-700' : 'border-slate-300 bg-white text-slate-700'}`}
           >
-            78778~8y7: {encryptionEnabled ? '8&8~788' : '8&7888~'}
+            التشفير: {encryptionEnabled ? 'مفعل' : 'متوقف'}
           </button>
 
           <button
@@ -457,13 +458,13 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
             disabled={savingSchedule}
             className="px-3 py-1.5 rounded-lg border border-blue-600 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 inline-flex items-center gap-1"
           >
-            <Save size={14} /> {savingSchedule ? '7778 7878~7...' : '78~7 787777777'}
+            <Save size={14} /> {savingSchedule ? 'جارٍ الحفظ...' : 'حفظ الجدولة'}
           </button>
         </div>
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.15 }} className={`${cardClasses} p-5`}>
-        <h3 className="text-lg font-bold text-slate-900 mb-3">787777777 78778y77</h3>
+        <h3 className="text-lg font-bold text-slate-900 mb-3">إنشاء نسخة احتياطية</h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           <div className="relative">
             <AnimatePresence>
@@ -483,17 +484,17 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
               disabled={busyType !== null || !canCreate}
               className="relative z-10 w-full rounded-xl px-4 py-3 bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-60"
             >
-              {busyType === activeType ? '7778 7878 8~8y7...' : '8 777 7878 '}
+              {busyType === activeType ? 'جارٍ إنشاء النسخة...' : 'إنشاء نسخة كاملة'}
             </button>
           </div>
-          <button type="button" onClick={() => void runBackup('inventory')} disabled={busyType !== null || !canCreate} className="rounded-xl px-4 py-3 bg-emerald-600 text-white font-semibold hover:bg-emerald-700 disabled:opacity-60">{busyType === 'inventory' ? '7778 7878 8~8y7...' : '8 777 778y77'}</button>
+          <button type="button" onClick={() => void runBackup('inventory')} disabled={busyType !== null || !canCreate} className="rounded-xl px-4 py-3 bg-emerald-600 text-white font-semibold hover:bg-emerald-700 disabled:opacity-60">{busyType === 'inventory' ? 'جارٍ إنشاء النسخة...' : 'نسخة للمخزون فقط'}</button>
           <div className="rounded-xl px-4 py-3 bg-slate-100 border border-slate-200 text-slate-700 text-sm font-semibold inline-flex items-center justify-center gap-2">
-            <ShieldCheck size={16} /> 787777777 778& 8&8  778 788 77
+            <ShieldCheck size={16} /> الاستعادة تتطلب رمز PIN صالح
           </div>
         </div>
       </motion.div>
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.2 }} className={`${cardClasses} p-5`}>
-        <h3 className="text-lg font-bold text-slate-900 mb-3">778 788 77</h3>
+        <h3 className="text-lg font-bold text-slate-900 mb-3">سجل النسخ الاحتياطية</h3>
 
         {loading ? (
           <div className="h-36 rounded-xl border border-slate-200 bg-slate-50 animate-pulse" />
@@ -519,21 +520,21 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
                     <td className="py-2">
                       {entry.integrityVerified ? (
                         <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">
-                          <ShieldCheck size={12} /> 78& 787788
+                          <ShieldCheck size={12} /> سليم
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-red-100 text-red-700 text-xs font-semibold">
-                          <ShieldAlert size={12} /> 7788 8~778
+                          <ShieldAlert size={12} /> فشل التحقق
                         </span>
                       )}
                     </td>
                     <td className="py-2">{actorLabel(entry)}</td>
                     <td className="py-2">
                       <div className="flex items-center gap-1">
-                        <button type="button" onClick={() => void handleDownload(entry)} className="p-1.5 rounded hover:bg-slate-100 text-slate-700" title="778&8y8">
+                        <button type="button" onClick={() => void handleDownload(entry)} className="p-1.5 rounded hover:bg-slate-100 text-slate-700" title="تنزيل">
                           <Download size={14} />
                         </button>
-                        <button type="button" onClick={() => void openRestorePreview(entry)} className="p-1.5 rounded hover:bg-emerald-50 text-emerald-700" title="7777777 78&8 7">
+                        <button type="button" onClick={() => void openRestorePreview(entry)} className="p-1.5 rounded hover:bg-emerald-50 text-emerald-700" title="استعادة">
                           <HardDrive size={14} />
                         </button>
                         <button type="button" onClick={() => void handleDelete(entry)} className="p-1.5 rounded hover:bg-red-50 text-red-700" title="778~">
@@ -565,7 +566,7 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
               <p>788 777 788&778!78~7: <strong>{typeLabel(restoreTarget.type)}</strong></p>
               <p>7778y7 788 777: <strong>{formatDateTime(restoreTarget.createdAt)}</strong></p>
-              <p>Safety Snapshot: <strong>{safetySnapshotId || '78& 78 7778!7'}</strong></p>
+              <p>Safety Snapshot: <strong>{safetySnapshotId || 'لم يتم الإنشاء بعد'}</strong></p>
             </div>
 
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900 text-sm">

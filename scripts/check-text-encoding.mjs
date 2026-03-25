@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 
+const controlOrMarkerRegex = /[\x00-\x08\x0B\x0C\x0E-\x1F]|ï؟½|⬑|␦|7"7/u;
+
 const projectRoot = process.cwd();
 const extensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.json', '.mjs', '.cjs']);
 const ignoredDirs = new Set([
@@ -93,6 +95,56 @@ function findArabicMojibake(text) {
   return { ratio, examples };
 }
 
+function extractHumanTextCandidates(line) {
+  const candidates = [];
+
+  const commentIndex = line.indexOf('//');
+  if (commentIndex >= 0) {
+    candidates.push(line.slice(commentIndex + 2));
+  }
+
+  const stringRegex = /'([^'\\]*(?:\\.[^'\\]*)*)'|"([^"\\]*(?:\\.[^"\\]*)*)"|`([^`\\]*(?:\\.[^`\\]*)*)`/g;
+  let match;
+  while ((match = stringRegex.exec(line)) !== null) {
+    candidates.push(match[1] ?? match[2] ?? match[3] ?? '');
+  }
+
+  return candidates;
+}
+
+function looksLikeTokenizedMojibake(segment) {
+  if (!segment) return false;
+  if (controlOrMarkerRegex.test(segment)) return true;
+
+  const compact = segment.trim();
+  if (!compact) return false;
+
+  const tokenChars = (compact.match(/[0-9&~!y]/g) || []).length;
+  const markerChars = (compact.match(/[&~!y]/g) || []).length;
+  if (tokenChars < 6) return false;
+  if (markerChars === 0) return false;
+
+  const ratio = tokenChars / compact.length;
+  return ratio >= 0.45;
+}
+
+function findTokenizedMojibake(text) {
+  const lines = text.split('\n');
+  const examples = [];
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const candidates = extractHumanTextCandidates(line);
+    const hit = candidates.find(looksLikeTokenizedMojibake);
+    if (!hit) continue;
+
+    examples.push({ line: i + 1, sample: hit.trim().slice(0, 160) });
+    if (examples.length >= 5) break;
+  }
+
+  return examples.length > 0 ? examples : null;
+}
+
 const files = collectFiles(projectRoot);
 const issues = [];
 
@@ -112,12 +164,14 @@ for (const filePath of files) {
   const text = raw.toString('utf8');
   const charFindings = findSuspiciousChars(text);
   const mojibake = findArabicMojibake(text);
-  if (charFindings.length > 0 || mojibake) {
+  const tokenizedMojibake = findTokenizedMojibake(text);
+  if (charFindings.length > 0 || mojibake || tokenizedMojibake) {
     issues.push({
       file: path.relative(projectRoot, filePath),
       bom: false,
       charFindings,
       mojibake,
+      tokenizedMojibake,
     });
   }
 }
@@ -135,6 +189,12 @@ if (issues.length > 0) {
     if (issue.mojibake) {
       console.error(`  Arabic mojibake signal: ${(issue.mojibake.ratio * 100).toFixed(1)}% suspicious pairs`);
       for (const ex of issue.mojibake.examples) {
+        console.error(`  line ${ex.line}: ${ex.sample}`);
+      }
+    }
+    if (issue.tokenizedMojibake) {
+      console.error('  Tokenized/control-character mojibake detected:');
+      for (const ex of issue.tokenizedMojibake) {
         console.error(`  line ${ex.line}: ${ex.sample}`);
       }
     }

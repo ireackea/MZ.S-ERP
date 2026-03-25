@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 0.3 – Final Arabic Encoding Fix & 10/10 Declaration - 2026-03-13
 // ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
 // ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 import {
@@ -1063,21 +1064,21 @@ export class BackupService implements OnModuleDestroy {
       segments: [
         {
           key: 'database',
-          label: '7"7"7"#⬑"7⬩7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"7"7"7"7"#⬑"#9 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#⬑"7"7"7"7"7"7"7"7"7"',
+          label: 'قاعدة البيانات',
           color: '#2563eb',
           valueBytes: dbBytes,
           percentage: Number(((dbBytes / safe) * 100).toFixed(2)),
         },
         {
           key: 'config',
-          label: '7"7"7"7"7"7"7"#⬑"#9 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"',
+          label: 'ملفات الإعدادات',
           color: '#f59e0b',
           valueBytes: configBytes,
           percentage: Number(((configBytes / safe) * 100).toFixed(2)),
         },
         {
           key: 'free',
-          label: '7"7"7"7"7"7"7"#⬑"#9 7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"7"7"7"7"#⬑"#9 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#7:7"7"7"7"',
+          label: 'المساحة الحرة التقديرية',
           color: '#10b981',
           valueBytes: freeBytes,
           percentage: Number(((freeBytes / safe) * 100).toFixed(2)),

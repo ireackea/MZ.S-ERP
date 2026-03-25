@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 0.3 – Final Arabic Encoding Fix & 10/10 Declaration - 2026-03-13
 // ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
 // ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Arabic Encoding Restoration - Full Components Folder - 2026-03-04
@@ -41,7 +42,7 @@ const Partners: React.FC<PartnersProps> = ({ partners, onAddPartner, onUpdatePar
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.phone) {
-      toast.error('8y7780 8&87 78&8y7 787888 788&78877');
+      toast.error('يرجى إدخال اسم الشريك ورقم الهاتف.');
       return;
     }
 
@@ -90,7 +91,7 @@ const Partners: React.FC<PartnersProps> = ({ partners, onAddPartner, onUpdatePar
   const confirmDelete = () => {
     if (deleteModal.partnerId) {
       onDeletePartner(deleteModal.partnerId);
-      toast.success('78& 778~ 78778y8 78 777');
+      toast.success('تم حذف الشريك بنجاح.');
     }
     setDeleteModal({ isOpen: false, partnerId: '', partnerName: '', usageCount: 0 });
   };
@@ -98,13 +99,13 @@ const Partners: React.FC<PartnersProps> = ({ partners, onAddPartner, onUpdatePar
   return (
     <div className="p-6 bg-white dark:bg-slate-900 rounded-2xl shadow-sm">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-white">7878&877 8788&8778y8 </h2>
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-white">إدارة الموردين والعملاء</h2>
         <button
           onClick={() => handleOpenModal()}
           className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition"
         >
           <UserPlus className="w-5 h-5" />
-          7778~7 778y8
+          إضافة شريك
         </button>
       </div>
 
@@ -118,7 +119,7 @@ const Partners: React.FC<PartnersProps> = ({ partners, onAddPartner, onUpdatePar
               : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
           }`}
         >
-          788&87788 
+          الموردون
         </button>
         <button
           onClick={() => setActiveTab('customer')}
@@ -128,7 +129,7 @@ const Partners: React.FC<PartnersProps> = ({ partners, onAddPartner, onUpdatePar
               : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
           }`}
         >
-          7878&877
+          العملاء
         </button>
       </div>
 
@@ -140,7 +141,7 @@ const Partners: React.FC<PartnersProps> = ({ partners, onAddPartner, onUpdatePar
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="777 778778& 78 788!778~..."
+            placeholder="ابحث بالاسم أو رقم الهاتف..."
             className="w-full md:w-96 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-2 pr-10 pl-4 focus:outline-none focus:ring-2 focus:ring-emerald-500"
           />
         </div>
@@ -152,18 +153,18 @@ const Partners: React.FC<PartnersProps> = ({ partners, onAddPartner, onUpdatePar
           <thead>
             <tr className="border-b border-slate-200 dark:border-slate-700">
               <th className="text-right py-3 px-4 text-sm font-medium text-slate-500 dark:text-slate-400">#</th>
-              <th className="text-right py-3 px-4 text-sm font-medium text-slate-500 dark:text-slate-400">78778&</th>
-              <th className="text-right py-3 px-4 text-sm font-medium text-slate-500 dark:text-slate-400">788!778~</th>
-              <th className="text-right py-3 px-4 text-sm font-medium text-slate-500 dark:text-slate-400">7878 878 </th>
-              <th className="text-right py-3 px-4 text-sm font-medium text-slate-500 dark:text-slate-400">788 87</th>
-              <th className="text-right py-3 px-4 text-sm font-medium text-slate-500 dark:text-slate-400">7777777</th>
+              <th className="text-right py-3 px-4 text-sm font-medium text-slate-500 dark:text-slate-400">الاسم</th>
+              <th className="text-right py-3 px-4 text-sm font-medium text-slate-500 dark:text-slate-400">الهاتف</th>
+              <th className="text-right py-3 px-4 text-sm font-medium text-slate-500 dark:text-slate-400">العنوان</th>
+              <th className="text-right py-3 px-4 text-sm font-medium text-slate-500 dark:text-slate-400">النوع</th>
+              <th className="text-right py-3 px-4 text-sm font-medium text-slate-500 dark:text-slate-400">الإجراءات</th>
             </tr>
           </thead>
           <tbody>
             {filteredPartners.length === 0 ? (
               <tr>
                 <td colSpan={6} className="text-center py-8 text-slate-500 dark:text-slate-400">
-                  87 8y877 77877 87778!8&
+                  لا توجد نتائج مطابقة
                 </td>
               </tr>
             ) : (
@@ -179,7 +180,7 @@ const Partners: React.FC<PartnersProps> = ({ partners, onAddPartner, onUpdatePar
                         ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
                         : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
                     }`}>
-                      {partner.type === 'supplier' ? '8&877' : '78&8y8'}
+                      {partner.type === 'supplier' ? 'مورد' : 'عميل'}
                     </span>
                   </td>
                   <td className="py-3 px-4">
@@ -211,7 +212,7 @@ const Partners: React.FC<PartnersProps> = ({ partners, onAddPartner, onUpdatePar
           <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-bold text-slate-900 dark:text-white">
-                {formData.id ? '7778y8 778y8' : '7778~7 778y8 778y7'}
+                {formData.id ? 'تعديل الشريك' : 'إضافة شريك جديد'}
               </h3>
               <button onClick={handleCloseModal} className="text-slate-400 hover:text-slate-600">
                 <X className="w-6 h-6" />

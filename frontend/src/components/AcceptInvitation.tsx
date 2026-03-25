@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 0.3 – Final Arabic Encoding Fix & 10/10 Declaration - 2026-03-13
 // ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
 // ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Arabic Encoding Restoration - Full Components Folder - 2026-03-04
@@ -28,7 +29,7 @@ const AcceptInvitation: React.FC = () => {
   useEffect(() => {
     const run = async () => {
       if (!token) {
-        setError('7777 787787 78y7 7787');
+        setError('رابط الدعوة غير صالح.');
         setLoading(false);
         return;
       }
@@ -37,7 +38,7 @@ const AcceptInvitation: React.FC = () => {
         setEmail(result.email);
         setRoleName(result.role?.name || 'User');
       } catch (err: any) {
-        setError(err?.response?.data?.message || '7777 787788 8&8  787787');
+        setError(err?.response?.data?.message || 'تعذر التحقق من الدعوة.');
       } finally {
         setLoading(false);
       }
@@ -50,24 +51,24 @@ const AcceptInvitation: React.FC = () => {
     e.preventDefault();
     if (!token) return;
     if (!password || password.length < 8) {
-      toast.error('888&7 788&787 8y77 787 788 78  8 7778~');
+      toast.error('يجب أن تكون كلمة المرور 8 أحرف على الأقل.');
       return;
     }
 
     setSubmitting(true);
     try {
       await acceptInvitation({ token, password, username: username || undefined, firstName: firstName || undefined, lastName: lastName || undefined });
-      toast.success('78& 78~78y8 787777 78 777. 8y8&88 8 7778y8 787788 7878 .');
+      toast.success('تم تفعيل الدعوة بنجاح. يمكنك الآن تسجيل الدخول.');
       navigate('/', { replace: true });
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || '8~78 8788 787787');
+      toast.error(err?.response?.data?.message || 'تعذر إكمال قبول الدعوة.');
     } finally {
       setSubmitting(false);
     }
   };
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center">7778y 787788 8&8  787787...</div>;
+    return <div className="min-h-screen flex items-center justify-center">جار التحقق من الدعوة...</div>;
   }
 
   return (
@@ -77,38 +78,38 @@ const AcceptInvitation: React.FC = () => {
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-lg bg-white rounded-2xl shadow-xl border border-slate-200 p-6"
       >
-        <h1 className="text-2xl font-bold text-slate-800 mb-2">8788 7787 7878 78&78&</h1>
+        <h1 className="text-2xl font-bold text-slate-800 mb-2">قبول دعوة إنشاء الحساب</h1>
         {error ? (
           <div className="rounded-xl border border-red-200 bg-red-50 text-red-700 p-4">{error}</div>
         ) : (
           <>
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 mb-4 text-sm text-emerald-900">
-              78778y7: <span className="font-bold">{email}</span> | 78787: <span className="font-bold">{roleName}</span>
+              البريد الإلكتروني: <span className="font-bold">{email}</span> | الدور: <span className="font-bold">{roleName}</span>
             </div>
             <form onSubmit={handleSubmit} className="space-y-3">
               <input
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="778& 788&77778& (7778y778y)"
+                placeholder="اسم المستخدم (اختياري)"
                 className="w-full rounded-xl border border-slate-200 px-4 py-3"
               />
               <input
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
-                placeholder="78778& 78788"
+                placeholder="الاسم الأول"
                 className="w-full rounded-xl border border-slate-200 px-4 py-3"
               />
               <input
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
-                placeholder="778& 7877787"
+                placeholder="اسم العائلة"
                 className="w-full rounded-xl border border-slate-200 px-4 py-3"
               />
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="888&7 788&787 78778y77"
+                placeholder="أدخل كلمة المرور"
                 className="w-full rounded-xl border border-slate-200 px-4 py-3"
                 required
               />
@@ -117,7 +118,7 @@ const AcceptInvitation: React.FC = () => {
                 disabled={submitting}
                 className="w-full rounded-xl bg-emerald-600 text-white py-3 font-bold hover:bg-emerald-700 disabled:opacity-60"
               >
-                {submitting ? '7778 7878~78y8...' : '78~78y8 787777'}
+                {submitting ? 'جار تفعيل الدعوة...' : 'تفعيل الدعوة'}
               </button>
             </form>
           </>

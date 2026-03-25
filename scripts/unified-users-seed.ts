@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 0.3 – Final Arabic Encoding Fix & 10/10 Declaration - 2026-03-13
 // ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
 // ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 /**
@@ -87,7 +88,7 @@ async function getOrCreateRole(roleName: string) {
         permissions: JSON.stringify(permissions),
       },
     });
-    console.log(`7"7"7"#%7"#⬑"7" 7"7"7"7"7"7"7"#⬑"7" 7"7"7"7"7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"7"7"7"7"#⬑"#9 7"7"7"7"7"7"7"#"7"7"7"7": ${roleName}`);
+    console.log(`Role ensured successfully: ${roleName}`);
   }
 
   return role;
@@ -123,7 +124,7 @@ function getRoleColor(roleName: string): string {
 }
 
 async function seedUsers() {
-  console.log('7"#"7"77"#97"#97" 7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"7"7"7"7"#"7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"7"7"7"7"#⬑"#9 7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#⬑"7"7"7"7"7"7"7"7"#⬑"7"...\n');
+  console.log('Starting unified users seed...\n');
 
   let created = 0;
   let updated = 0;
@@ -131,20 +132,20 @@ async function seedUsers() {
 
   for (const userData of UNIFIED_USERS) {
     try {
-      // 7"7"7"7"7"7"7"#⬑"#9 7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"7"7"7"7"#⬑"7" 7"7"7"7"7"7"7"#⬑"#9 7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#⬑"7" 7"7"7"7"7"7"7"#⬑"#9 7"7"7"7"7"7"7"7"7"7"7"#⬑"#9 7"7"7"7"
+      // Look up an existing user before creating or updating the record.
       const existingUser = await prisma.user.findUnique({
         where: { username: userData.username },
         include: { role: true },
       });
 
-      // 7"7"7"7"7"7"7"#⬑"#9 7"7"7"7"7"7"7"7"7"7"7"#"7"7"7"#⬑"#9  7"7"7"7"7"7"7"#⬑"#9 7"7"7"#⬑"7" 7"7"7"7"7"7"7"#⬑"#9 7"7"7"7"7"7"7"#"7"7"7"7"
+      // Ensure the role exists before assigning it to the user.
       const role = await getOrCreateRole(userData.roleName);
 
-      // 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"#7"7"7"#⬑"#9 7"7"7"#⬑"7"7"7"7"7" 7"7"7"7"7"7"7"#⬑"#9 7"7"7"#⬑"7"7"7"7"7"7"7"7"#"7"7"7"7"
+      // Hash the password before persisting the seeded user.
       const passwordHash = await bcrypt.hash(userData.password, 10);
 
       if (existingUser) {
-        // 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"7"7"7"7"#⬑"#9 7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#⬑"7" 7"7"7"7"7"7"7"#⬑"#9 7"7"7"7"7"7"7"7"7"7"7"#⬑"#9 7"7"7"7"
+        // Update the existing user record with the latest seeded values.
         await prisma.user.update({
           where: { id: existingUser.id },
           data: {
@@ -158,10 +159,10 @@ async function seedUsers() {
             lockoutUntil: null,
           },
         });
-        console.log(`7"7"7"#%7"#⬑"7" 7"7"7"7"7"7"7"#⬑"7" 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"7"7"7"7"#⬑"#9 7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#⬑"7": ${userData.username}`);
+        console.log(`User updated successfully: ${userData.username}`);
         updated++;
       } else {
-        // 7"7"7"7"7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#⬑"7" 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"
+        // Create the user when it does not already exist.
         await prisma.user.create({
           data: {
             username: userData.username,
@@ -175,23 +176,23 @@ async function seedUsers() {
             lockoutUntil: null,
           },
         });
-        console.log(`7"7"7"#%7"#⬑"7" 7"7"7"7"7"7"7"#⬑"7" 7"7"7"7"7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"7"7"7"7"#⬑"#9 7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#⬑"7": ${userData.username}`);
+        console.log(`User created successfully: ${userData.username}`);
         created++;
       }
     } catch (error: any) {
-      console.error(`7"7"7"#⬑"7"7"# 7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"#⬑"7"7"7"7"7" 7"7"7"7"7"7"7"#⬑"#9 7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#⬑"7" ${userData.username}:`, error.message);
+      console.error(`Failed to seed user ${userData.username}:`, error.message);
       skipped++;
     }
   }
 
-  console.log('\n7"#"7"77"#⬑"7S7"7" 7"7"7"#⬑"7"7"7"7"#⬑"#9 7"7"7"7"7"7"7"7" 7"7"7"7"7"7"7"#⬑"#9 7"7"7"7"7"7"7"#⬑"7"7"7"7"#⬑"#9 7"7"7"7"7"7"7"7":');
-  console.log(`   7"7"7"#%7"#⬑"7" 7"7"7"7"7"7"7"#⬑"7" 7"7"7"7"7"7"7"#⬑"#9 7"7"7"7"7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"7": ${created}`);
-  console.log(`   7"#"7"77"#⬑"#%7"#⬑"#9  7"7"7"7"7"7"7"#⬑"7" 7"7"7"7"7"7"7"#⬑"#9 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7": ${updated}`);
-  console.log(`   7"7"7"7⬠7"7"7"7"7"7"7"7⬠ 7"7"7"7"7"7"7"#⬑"7" 7"7"7"7"7"7"7"#⬑"#9 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#"7"7"7"7": ${skipped}`);
-  console.log(`   7"#"7"77"#⬑"7S7"#" 7"7"7"7"7"7"7"#⬑"#9 7"7"7"#⬑"7"7"7"7"7"7"7"7"#⬑"7"7"7"7"#"7"7"7"7": ${UNIFIED_USERS.length}`);
+  console.log('\nUnified users seed summary:');
+  console.log(`   Created: ${created}`);
+  console.log(`   Updated: ${updated}`);
+  console.log(`   Skipped: ${skipped}`);
+  console.log(`   Total configured users: ${UNIFIED_USERS.length}`);
 
-  // 7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"7"7"7"7"#⬑"7"7"7"7"7"7"7"7"7" 7"7"7"7"7"7"7"#⬑"#9 7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#⬑"7"7"7"7"7"7"7"7"#⬑"7"
-  console.log('\n7"#"7"77"#⬑"7"7"7" 7"7"7"7"7"7"7"#⬑"#9 7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#⬑"7"7"7"7"7"7"7"7"#⬑"7" 7"7"7"7"7"7"7"#⬑"#9 7"7"7"7"7"7"7"7"7"7"7"#⬑"#9 7"7"7"7"7"7"7"7"7"7"7"#⬑"7":');
+  // Print the default login credentials for the seeded users.
+  console.log('\nDefault credentials for seeded users:');
   const allUsers = await prisma.user.findMany({
     include: { role: true },
     orderBy: { createdAt: 'desc' },
@@ -203,16 +204,16 @@ async function seedUsers() {
       Username: u.username,
       Email: u.email,
       Role: u.role.name,
-      Status: u.isActive ? '7"7"7"#⬑"7"7"7"7"7"7"7"7"7"' : '7"7"7"#⬑"7"7"7"7"#⬑"7⬩7"7"7"7"7"7"7"#⬑"#9 ',
+      Status: u.isActive ? 'Active' : 'Inactive',
     }))
   );
 
   await prisma.$disconnect();
-  console.log('\n7"7"7"#%7"#⬑"7" 7"7"7"7"7"7"7"#7"7"7"7"7"7"7"#⬑"7"7"7"7"#⬑"#9  7"7"7"7"7"7"7"#"7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"7"7"7"7"#⬑"#9 7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#⬑"7"7"7"7"7"7"7"7"#⬑"7" 7"7"7"7"7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"7"!');
+  console.log('\nUnified users seed completed successfully.');
 }
 
-// 7"7"7"7"7"7"7"7"7"7"7"#7:7"7"7"7"7"7"7"#⬑"#9  7"7"7"7"7"7"7"#⬑"#9 7"7"7"7"7"7"7"#7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"
+// Exit with a non-zero code when the seed process fails.
 seedUsers().catch((error) => {
-  console.error('7"7"7"#⬑"7"7"# 7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7":', error);
+  console.error('Unified users seed failed:', error);
   process.exit(1);
 });

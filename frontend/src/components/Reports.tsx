@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 0.3 – Final Arabic Encoding Fix & 10/10 Declaration - 2026-03-13
 // ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
 // ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Phase 8 - Absolute Final Visual & Offline Proof - 2026-03-13
@@ -127,7 +128,7 @@ const Reports: React.FC = () => {
         if (!mounted) return;
         setItems(payload);
       } catch (error: any) {
-        toast.error(error?.response?.data?.message || '7777 778&8y8 8778&7 78778 78~');
+        toast.error(error?.response?.data?.message || 'تعذر تحميل قائمة الأصناف.');
       } finally {
         if (mounted) setBootLoading(false);
       }
@@ -153,10 +154,10 @@ const Reports: React.FC = () => {
       const response = await apiClient.post('/reports/generate', payload);
       setResult(response.data || { data: [], summary: {}, chartData: [] });
       if (showSuccessToast) {
-        toast.success('78& 778&8y8 787878y7 78 777');
+        toast.success('تم تحديث التقرير بنجاح.');
       }
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || '7777 78 777 787878y7');
+      toast.error(error?.response?.data?.message || 'تعذر تحميل التقرير.');
     } finally {
       setLoading(false);
     }
@@ -201,25 +202,25 @@ const Reports: React.FC = () => {
     try {
       const rows = Array.isArray(result.data) ? result.data : [];
       if (!rows.length) {
-        toast.error('87 7877 78y78 77 887778y7');
+        toast.error('لا توجد بيانات لتصديرها.');
         return;
       }
 
       const normalizedRows = reportType === 'inventory'
         ? (rows as InventoryRow[]).map((row) => ({
-            '887 7878 8~': row.itemCode || '-',
-            '7878 8~': row.itemName,
-            '778y7 788&778 ': row.currentStock,
+            'كود الصنف': row.itemCode || '-',
+            'اسم الصنف': row.itemName,
+            'الكمية الحالية': row.currentStock,
           }))
         : (rows as MovementRow[]).map((row) => ({
-            '787778y7': row.date,
-            '887 7878 8~': row.itemCode || '-',
-            '7878 8~': row.itemName,
-            '8 87 787787': row.type,
-            '7888&8y7': row.quantity,
-            '788&778 ': row.warehouseId || '-',
-            '788& 788~77877': row.warehouseInvoice || '-',
-            '78778~': row.supplierOrReceiver || '-',
+            'التاريخ': row.date,
+            'كود الصنف': row.itemCode || '-',
+            'اسم الصنف': row.itemName,
+            'نوع الحركة': row.type,
+            'الكمية': row.quantity,
+            'المخزن': row.warehouseId || '-',
+            'فاتورة المخزن': row.warehouseInvoice || '-',
+            'المورد/المستلم': row.supplierOrReceiver || '-',
           }));
 
       await exportRowsToExcel({
@@ -227,7 +228,7 @@ const Reports: React.FC = () => {
         sheetName: 'Reports',
         rows: normalizedRows,
       });
-      toast.success('78& 7778y7 787878y7 78 777');
+      toast.success('تم تصدير التقرير إلى Excel بنجاح.');
     } catch (error) {
       toast.error(resolveExportErrorMessage(error, 'تعذر تصدير ملف Excel. حاول مرة أخرى.'));
     } finally {
@@ -240,7 +241,7 @@ const Reports: React.FC = () => {
     try {
       const rows = Array.isArray(result.data) ? result.data : [];
       if (!rows.length) {
-        toast.error('87 7877 78y78 77 887778y7');
+        toast.error('لا توجد بيانات لتصديرها.');
         return;
       }
 
@@ -282,7 +283,7 @@ const Reports: React.FC = () => {
         payload,
         fileName: `${payload.filename}.pdf`,
       });
-      toast.success('78& 78 777 8&88~ PDF 78 777');
+      toast.success('تم تصدير التقرير إلى PDF بنجاح.');
     } catch (error) {
       toast.error(resolveExportErrorMessage(error, 'تعذر تصدير ملف PDF. حاول مرة أخرى.'));
     } finally {
@@ -298,8 +299,8 @@ const Reports: React.FC = () => {
       <div className="rounded-2xl border border-white/60 bg-white/70 backdrop-blur-md shadow-sm p-6">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
-            <h1 className="text-[32px] font-bold text-slate-900">8877 7878778y7</h1>
-            <p className="text-[16px] text-slate-500">78778y7 78y7 887787 8788&7788  8&7 7778y7 PDF 8Excel.</p>
+            <h1 className="text-[32px] font-bold text-slate-900">التقارير</h1>
+            <p className="text-[16px] text-slate-500">تابع تقارير المخزون والحركات مع التصدير إلى PDF وExcel.</p>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -308,13 +309,13 @@ const Reports: React.FC = () => {
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#2563eb] text-white hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-              7778y7
+              تحديث
             </button>
             <button
               onClick={handleReset}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 transition"
             >
-              <Filter size={16} /> 77777 777
+              <Filter size={16} /> إعادة ضبط
             </button>
           </div>
         </div>
@@ -323,7 +324,7 @@ const Reports: React.FC = () => {
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
         <aside className="xl:col-span-3 rounded-2xl border border-white/60 bg-white/70 backdrop-blur-md shadow-sm p-4 space-y-4">
           <div>
-            <label className="text-sm font-semibold text-slate-700">8 87 787878y7</label>
+            <label className="text-sm font-semibold text-slate-700">نوع التقرير</label>
             <div className="mt-2 grid grid-cols-2 gap-2">
               <button
                 onClick={() => setReportType('movements')}
@@ -333,7 +334,7 @@ const Reports: React.FC = () => {
                     : 'bg-white text-slate-700 border-slate-200'
                 }`}
               >
-                7877877
+                الحركات
               </button>
               <button
                 onClick={() => setReportType('inventory')}
@@ -343,14 +344,14 @@ const Reports: React.FC = () => {
                     : 'bg-white text-slate-700 border-slate-200'
                 }`}
               >
-                788&7788 
+                المخزون
               </button>
             </div>
           </div>
 
           <div>
             <label className="text-sm font-semibold text-slate-700 flex items-center gap-1">
-              <CalendarDays size={14} /> 8&8  7778y7
+              <CalendarDays size={14} /> من تاريخ
             </label>
             <DatePicker
               selected={dateFrom}
@@ -363,7 +364,7 @@ const Reports: React.FC = () => {
 
           <div>
             <label className="text-sm font-semibold text-slate-700 flex items-center gap-1">
-              <CalendarDays size={14} /> 7880 7778y7
+              <CalendarDays size={14} /> إلى تاريخ
             </label>
             <DatePicker
               selected={dateTo}
@@ -377,7 +378,7 @@ const Reports: React.FC = () => {
 
           <div>
             <label className="text-sm font-semibold text-slate-700 flex items-center gap-1">
-              <Database size={14} /> 78778 78~
+              <Database size={14} /> الأصناف
             </label>
             <div className="mt-2 max-h-48 overflow-auto border border-slate-200 rounded-lg bg-white p-2 space-y-1">
               {items.map((item) => {
@@ -400,11 +401,11 @@ const Reports: React.FC = () => {
           {reportType === 'movements' && (
             <div>
               <label className="text-sm font-semibold text-slate-700 flex items-center gap-1">
-                <Warehouse size={14} /> 788&7778 
+                <Warehouse size={14} /> المخازن
               </label>
               <div className="mt-2 max-h-32 overflow-auto border border-slate-200 rounded-lg bg-white p-2 space-y-1">
                 {warehouseOptions.length === 0 && (
-                  <div className="text-xs text-slate-400">87 7877 8&7778  78&8  788 7777 787788y7</div>
+                  <div className="text-xs text-slate-400">لا توجد مخازن متاحة ضمن النتائج الحالية.</div>
                 )}
                 {warehouseOptions.map((warehouseId) => (
                   <label key={warehouseId} className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
@@ -425,19 +426,19 @@ const Reports: React.FC = () => {
         <section className="xl:col-span-9 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <p className="text-xs text-slate-500">778&788y 7877877</p>
+              <p className="text-xs text-slate-500">إجمالي الحركات</p>
               <p className="text-xl font-bold text-slate-900">{summary.totalTransactions || 0}</p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <p className="text-xs text-slate-500">778&788y 788777</p>
+              <p className="text-xs text-slate-500">إجمالي الوارد</p>
               <p className="text-xl font-bold text-[#10b981]">{numberFormatter.format(Number(summary.totalIn || 0))}</p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <p className="text-xs text-slate-500">778&788y 787777</p>
+              <p className="text-xs text-slate-500">إجمالي المنصرف</p>
               <p className="text-xl font-bold text-[#ef4444]">{numberFormatter.format(Number(summary.totalOut || 0))}</p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <p className="text-xs text-slate-500">78778~8y</p>
+              <p className="text-xs text-slate-500">الصافي</p>
               <p className="text-xl font-bold text-[#2563eb]">{numberFormatter.format(Number(summary.net || 0))}</p>
             </div>
           </div>
@@ -445,10 +446,10 @@ const Reports: React.FC = () => {
           <div className="rounded-2xl border border-white/60 bg-white/70 backdrop-blur-md shadow-sm p-4 h-[320px]">
             {loading ? (
               <div className="h-full flex items-center justify-center text-slate-500">
-                <Loader2 className="animate-spin mr-2" size={18} /> 7778y 778&8y8 78778& 7878y78 8y...
+                <Loader2 className="animate-spin mr-2" size={18} /> جار تحميل بيانات الرسم البياني...
               </div>
             ) : result.chartData.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-slate-400">87 7877 78y78 77 88778& 7878y78 8y</div>
+              <div className="h-full flex items-center justify-center text-slate-400">لا توجد بيانات لعرض الرسم البياني.</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 {reportType === 'movements' ? (
@@ -458,8 +459,8 @@ const Reports: React.FC = () => {
                     <YAxis />
                     <Tooltip />
                     <Legend />
-                    <Bar dataKey="in" name="8777" fill="#10b981" />
-                    <Bar dataKey="out" name="7777" fill="#ef4444" />
+                    <Bar dataKey="in" name="وارد" fill="#10b981" />
+                    <Bar dataKey="out" name="منصرف" fill="#ef4444" />
                     <Line type="monotone" dataKey="in" stroke="#2563eb" strokeWidth={2} dot={false} />
                   </ComposedChart>
                 ) : (
@@ -468,7 +469,7 @@ const Reports: React.FC = () => {
                     <XAxis dataKey="label" interval={0} angle={-18} textAnchor="end" height={64} />
                     <YAxis />
                     <Tooltip />
-                    <Bar dataKey="value" name="778y7 788&778 " fill="#2563eb" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="value" name="الكمية الحالية" fill="#2563eb" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 )}
               </ResponsiveContainer>
@@ -477,7 +478,7 @@ const Reports: React.FC = () => {
 
           <div className="rounded-2xl border border-white/60 bg-white/70 backdrop-blur-md shadow-sm p-4">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-              <h2 className="text-lg font-bold text-slate-800">8&778y8 7 787878y7</h2>
+              <h2 className="text-lg font-bold text-slate-800">تفاصيل التقرير</h2>
               <div className="flex items-center gap-2">
                 <button
                   onClick={exportPdf}
@@ -501,19 +502,19 @@ const Reports: React.FC = () => {
                 <thead className="bg-slate-50 text-slate-600 sticky top-0">
                   {reportType === 'inventory' ? (
                     <tr>
-                      <th className="px-3 py-2">887 7878 8~</th>
-                      <th className="px-3 py-2">7878 8~</th>
-                      <th className="px-3 py-2">778y7 788&778 </th>
+                      <th className="px-3 py-2">كود الصنف</th>
+                      <th className="px-3 py-2">اسم الصنف</th>
+                      <th className="px-3 py-2">الكمية الحالية</th>
                     </tr>
                   ) : (
                     <tr>
-                      <th className="px-3 py-2">787778y7</th>
-                      <th className="px-3 py-2">887 7878 8~</th>
-                      <th className="px-3 py-2">7878 8~</th>
-                      <th className="px-3 py-2">8 87 787787</th>
-                      <th className="px-3 py-2">7888&8y7</th>
-                      <th className="px-3 py-2">788&778 </th>
-                      <th className="px-3 py-2">788~77877</th>
+                      <th className="px-3 py-2">التاريخ</th>
+                      <th className="px-3 py-2">كود الصنف</th>
+                      <th className="px-3 py-2">اسم الصنف</th>
+                      <th className="px-3 py-2">نوع الحركة</th>
+                      <th className="px-3 py-2">الكمية</th>
+                      <th className="px-3 py-2">المخزن</th>
+                      <th className="px-3 py-2">فاتورة المخزن</th>
                     </tr>
                   )}
                 </thead>
@@ -553,13 +554,13 @@ const Reports: React.FC = () => {
                       <td colSpan={reportType === 'inventory' ? 3 : 7} className="px-3 py-10">
                         <div className="flex flex-col items-center gap-3 text-center">
                           <Database size={64} className="text-slate-300" />
-                          <h3 className="text-lg font-semibold text-slate-700">87 7877 78y78 77</h3>
-                          <p className="text-sm text-slate-500">7777 8~777 78&8 8y7 78 778 78~ 8777 7878778y7</p>
+                          <h3 className="text-lg font-semibold text-slate-700">لا توجد بيانات</h3>
+                          <p className="text-sm text-slate-500">جرّب تعديل الفلاتر أو تحديث التقرير لعرض النتائج.</p>
                           <button
                             onClick={() => void fetchReport(true)}
                             className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50"
                           >
-                            77777 788&77887
+                            إعادة التحميل
                           </button>
                         </div>
                       </td>

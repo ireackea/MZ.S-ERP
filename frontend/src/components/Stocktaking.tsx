@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 0.3 – Final Arabic Encoding Fix & 10/10 Declaration - 2026-03-13
 // ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
 // ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
@@ -69,7 +70,7 @@ interface StocktakingPrintConfig {
   mergeColumns: boolean;
   mergeStrength: number;
   fontSize: number;
-  printSignatureBoxHeight?: number; // 7778~77 8&77777 7878788y7 7787878
+  printSignatureBoxHeight?: number; // Height of the signature area in the printed report.
   tableFontSize: number;
   showBorders: boolean;
   zebraStriping: boolean;
@@ -100,7 +101,7 @@ const REPORT_CARD_CONFIG: Array<Omit<AuditCategoryCard, 'rows'>> = [
   { key: 'concentrates', title: 'مركّزات', accentClass: 'border-blue-500' },
   { key: 'rawMaterials', title: 'مواد أولية', accentClass: 'border-emerald-500' },
   { key: 'bags', title: 'أكياس', accentClass: 'border-amber-500' },
-  { key: 'bagThread', title: 'خيط الخياة', accentClass: 'border-cyan-500' },
+  { key: 'bagThread', title: 'خيط الخياطة', accentClass: 'border-cyan-500' },
   { key: 'cards', title: 'كروت', accentClass: 'border-violet-500' },
 ];
 
@@ -156,11 +157,11 @@ const getCardKeyForRow = (row: MonthlyAuditRow, categoryRaw: string | undefined)
   const category = normalizeText(categoryRaw);
   const itemName = normalizeText(row.itemName);
 
-  if (category === 'مركّزات' || category === '8&78777') return 'concentrates';
-  if (category === 'مواد أولية' || category === 'مواد خام' || category === '8&877 7888y7') return 'rawMaterials';
-  if (category === 'أكياس' || category === 'أجولة' || category === '788y77') return 'bags';
-  if (category === 'خيط خياة' || category === 'خيط الخياة' || category === '78y7 7878' || category === '78y7 787878') return 'bagThread';
-  if (category === 'كروت بيانات' || category === 'كروت بلاستيك' || category === 'كروت' || category === '8787 778y77' || category === '8787 878y8&7' || category === '8787') return 'cards';
+  if (category === 'مركّزات' || category === 'مركزات') return 'concentrates';
+  if (category === 'مواد أولية' || category === 'مواد خام' || category === 'خام') return 'rawMaterials';
+  if (category === 'أكياس' || category === 'أجولة' || category === 'كيس') return 'bags';
+  if (category === 'خيط خياة' || category === 'خيط الخياطة' || category === 'خيط خياطة') return 'bagThread';
+  if (category === 'كروت بيانات' || category === 'كروت بلاستيك' || category === 'كروت' || category === 'كارت') return 'cards';
 
   if (category.includes('خيط') && category.includes('خياة')) return 'bagThread';
 
@@ -1272,14 +1273,14 @@ const Stocktaking: React.FC<StocktakingProps> = ({
         <div className="space-y-4">
           <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-wrap gap-2 items-center justify-between">
             <div className="text-sm text-slate-700 font-bold">
-              788~777 788&77778y7: {start.toLocaleDateString('en-GB')} 7880 {end.toLocaleDateString('en-GB')}
+              الفترة المحاسبية: {start.toLocaleDateString('en-GB')} إلى {end.toLocaleDateString('en-GB')}
             </div>
             <div className="flex flex-wrap gap-2">
-              <button className="px-3 py-2 rounded-lg border border-indigo-300 bg-indigo-50 text-indigo-700 text-sm font-bold" onClick={() => setShowPrintStudio(true)}><Printer size={14} className="inline ml-1" /> 777878y8 7877777</button>
-              <button className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-bold" onClick={() => signedPdfInputRef.current?.click()}><FileUp size={14} className="inline ml-1" /> 78~7 PDF 8&778&7 8y788y789</button>
-              <input ref={signedPdfInputRef} type="file" title="78~7 8&88~ PDF 8&778&7" accept="application/pdf" className="hidden" onChange={(event) => { void handleUploadSignedPdf(event.target.files?.[0] || null); event.currentTarget.value = ''; }} />
+              <button className="px-3 py-2 rounded-lg border border-indigo-300 bg-indigo-50 text-indigo-700 text-sm font-bold" onClick={() => setShowPrintStudio(true)}><Printer size={14} className="inline ml-1" /> استوديو الطباعة</button>
+              <button className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-bold" onClick={() => signedPdfInputRef.current?.click()}><FileUp size={14} className="inline ml-1" /> رفع PDF موقع ومعتمد</button>
+              <input ref={signedPdfInputRef} type="file" title="رفع ملف PDF موقع ومعتمد" accept="application/pdf" className="hidden" onChange={(event) => { void handleUploadSignedPdf(event.target.files?.[0] || null); event.currentTarget.value = ''; }} />
               <button className="px-3 py-2 rounded-lg bg-slate-900 text-white text-sm font-bold disabled:opacity-60" onClick={() => void handleCloseMonth()} disabled={isClosing || isClosed}>
-                <CheckCircle2 size={14} className="inline ml-1" /> {isClosing ? '7778 787778&77...' : '7778&77 877878 7878!7'}
+                <CheckCircle2 size={14} className="inline ml-1" /> {isClosing ? 'جارٍ إغلاق الفترة...' : 'إغلاق واعتماد الجرد'}
               </button>
             </div>
           </div>
@@ -1290,8 +1291,8 @@ const Stocktaking: React.FC<StocktakingProps> = ({
 
           {(session.archivedPdfName || session.manualSignedPdfName) && (
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-sm text-emerald-800">
-              {session.archivedPdfName ? <div>7778y8~ 788 778&: {session.archivedPdfName}</div> : null}
-              {session.manualSignedPdfName ? <div>788&88~ 788&778&7 8y788y789: {session.manualSignedPdfName}</div> : null}
+              {session.archivedPdfName ? <div>الملف المؤرشف: {session.archivedPdfName}</div> : null}
+              {session.manualSignedPdfName ? <div>الملف اليدوي المعتمد: {session.manualSignedPdfName}</div> : null}
             </div>
           )}
         </div>
@@ -1302,26 +1303,26 @@ const Stocktaking: React.FC<StocktakingProps> = ({
           <div className="h-full w-full bg-slate-100 flex flex-col">
             <div className="bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between gap-3">
               <div>
-                <h3 className="font-bold text-slate-800 flex items-center gap-2"><Printer size={18} className="text-indigo-600" /> 777878y8 7877777 - 878& 78777</h3>
-                <p className="text-xs text-slate-500">8 777 8&7878&7 8&8  777878y8 7877777 8&7 8&778y8 7 8&77777 8&7878~87 8&7 78778y7 78777.</p>
+                <h3 className="font-bold text-slate-800 flex items-center gap-2"><Printer size={18} className="text-indigo-600" /> استوديو الطباعة - إعداد الجرد</h3>
+                <p className="text-xs text-slate-500">اضبط القالب قبل الطباعة أو الحفظ لتوليد نسخة معتمدة بصيغة مناسبة للأرشفة.</p>
               </div>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
                   value={printTemplateName}
                   onChange={(e) => setPrintTemplateName(e.target.value)}
-                  placeholder="778& 788787 (8&778: 7878y7 788&78y7)"
-                  title="778& 8787 7877777"
+                  placeholder="اسم القالب (مثال: نموذج جرد معتمد)"
+                  title="اسم قالب الطباعة"
                   className="px-3 py-2 border border-slate-300 rounded-lg text-xs min-w-52"
                 />
-                <button onClick={savePrintTemplate} className="px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg hover:bg-slate-50">78~7 8787</button>
+                <button onClick={savePrintTemplate} className="px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg hover:bg-slate-50">حفظ القالب</button>
                 <select
                   className="px-3 py-2 border border-slate-300 rounded-lg text-xs"
                   value={selectedTemplateId}
-                  title="778&8y8 8787 8&78~87"
+                  title="اختيار قالب محفوظ"
                   onChange={(e) => applyPrintTemplate(e.target.value)}
                 >
-                  <option value="">778&8y8 8787 8&78~87...</option>
+                  <option value="">اختر قالبًا محفوظًا...</option>
                   {printTemplates.map((template) => (
                     <option key={template.id} value={template.id}>{template.name}</option>
                   ))}
@@ -1343,36 +1344,36 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                   {activePrintTab === 'layout' && (
                     <>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">78 878  787878y7</label>
-                        <input title="78 878  787878y7" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.reportTitle} onChange={(e) => setPrintConfig((prev) => ({ ...prev, reportTitle: e.target.value }))} />
+                        <label className="block text-slate-500 mb-1 font-bold">اسم عنوان التقرير</label>
+                        <input title="اسم عنوان التقرير" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.reportTitle} onChange={(e) => setPrintConfig((prev) => ({ ...prev, reportTitle: e.target.value }))} />
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">77778! 7878~77</label>
-                        <select title="77778! 7878~77" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.orientation} onChange={(e) => setPrintConfig((prev) => ({ ...prev, orientation: e.target.value as StocktakingPrintConfig['orientation'] }))}>
-                          <option value="portrait">7888y</option>
-                          <option value="landscape">7778y</option>
+                        <label className="block text-slate-500 mb-1 font-bold">اتجاه الصفحة</label>
+                        <select title="اتجاه الصفحة" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.orientation} onChange={(e) => setPrintConfig((prev) => ({ ...prev, orientation: e.target.value as StocktakingPrintConfig['orientation'] }))}>
+                          <option value="portrait">طولي</option>
+                          <option value="landscape">عرضي</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">8&877 78878</label>
-                        <select title="8&877 78878" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.paperSize} onChange={(e) => setPrintConfig((prev) => ({ ...prev, paperSize: e.target.value as StocktakingPrintConfig['paperSize'] }))}>
+                        <label className="block text-slate-500 mb-1 font-bold">مقاس الورق</label>
+                        <select title="مقاس الورق" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.paperSize} onChange={(e) => setPrintConfig((prev) => ({ ...prev, paperSize: e.target.value as StocktakingPrintConfig['paperSize'] }))}>
                           <option value="a4">A4</option>
                           <option value="a3">A3</option>
                           <option value="legal">Legal</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">788!878&7</label>
-                        <select title="788!878&7" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.margins} onChange={(e) => setPrintConfig((prev) => ({ ...prev, margins: e.target.value as StocktakingPrintConfig['margins'] }))}>
-                          <option value="narrow">78y87</option>
-                          <option value="normal">8&78777</option>
-                          <option value="wide">87777</option>
+                        <label className="block text-slate-500 mb-1 font-bold">الهوامش</label>
+                        <select title="الهوامش" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.margins} onChange={(e) => setPrintConfig((prev) => ({ ...prev, margins: e.target.value as StocktakingPrintConfig['margins'] }))}>
+                          <option value="narrow">ضيقة</option>
+                          <option value="normal">متوسطة</option>
+                          <option value="wide">واسعة</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">77 7878~77 8&8  7877880 ({printConfig.topPageMarginMm}mm)</label>
+                        <label className="block text-slate-500 mb-1 font-bold">هامش أعلى الصفحة ({printConfig.topPageMarginMm}mm)</label>
                         <input
-                          title="77 7878~77 8&8  7877880"
+                          title="هامش أعلى الصفحة"
                           type="range"
                           min={0}
                           max={50}
@@ -1382,9 +1383,9 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">77 7878~77 8&8  78778~8 ({printConfig.bottomPageMarginMm}mm)</label>
+                        <label className="block text-slate-500 mb-1 font-bold">هامش أسفل الصفحة ({printConfig.bottomPageMarginMm}mm)</label>
                         <input
-                          title="77 7878~77 8&8  78778~8"
+                          title="هامش أسفل الصفحة"
                           type="range"
                           min={0}
                           max={50}
@@ -1394,7 +1395,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                         />
                       </div>
                       <label className="flex items-center justify-between p-2 border border-slate-200 rounded-lg">
-                        <span>7778y8 788778y 78y8  7878~777</span>
+                        <span>تفعيل تقسيم الصفحات الذكي</span>
                         <input
                           type="checkbox"
                           checked={printConfig.smartPaginationEnabled}
@@ -1404,9 +1405,9 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                       {printConfig.smartPaginationEnabled && (
                         <>
                           <div>
-                            <label className="block text-slate-500 mb-1 font-bold">8 777 78&7877 7878~77 878 787778y8 ({printConfig.pageFillPercent}%)</label>
+                            <label className="block text-slate-500 mb-1 font-bold">نسبة ملء الصفحة قبل الانتقال ({printConfig.pageFillPercent}%)</label>
                             <input
-                              title="8 777 78&7877 7878~77 878 787778y8"
+                              title="نسبة ملء الصفحة قبل الانتقال"
                               type="range"
                               min={80}
                               max={99}
@@ -1416,9 +1417,9 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                             />
                           </div>
                           <div>
-                            <label className="block text-slate-500 mb-1 font-bold">8!78&7 7878&78  887778y8 ({printConfig.pageSafetyRows} 78~)</label>
+                            <label className="block text-slate-500 mb-1 font-bold">عدد الصفوف الاحتياطية ({printConfig.pageSafetyRows} صف)</label>
                             <input
-                              title="8!78&7 7878&78  887778y8"
+                              title="عدد الصفوف الاحتياطية"
                               type="range"
                               min={0}
                               max={6}

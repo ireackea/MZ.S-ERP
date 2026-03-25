@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 0.3 – Final Arabic Encoding Fix & 10/10 Declaration - 2026-03-13
 // ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
 // ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Dashboard Backend Data Provider - 2026-02-26
@@ -36,12 +37,12 @@ export class DashboardService {
       recentActivity: recentActivity.map(t => ({
         id: t.publicId || String(t.id),
         date: t.date.toISOString(),
-        action: t.type === 'IN' ? '7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"#"7"7"7"#⬑"7"' : '7"7"7"7"7"7"7"7"7"7"7"7"',
-        user: '7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"#⬑"7"',
+        action: t.type === 'IN' ? 'حركة واردة' : 'حركة صادرة',
+        user: 'مستخدم النظام',
         amount: t.supplierNet ? Number(t.supplierNet) : undefined,
-        item: t.item?.name || '7"7"7"#7:7"7"7"7"7"7"7"7" 7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"7"'
+        item: t.item?.name || 'صنف غير معروف'
       })),
-      alerts: lowStockItems > 0 ? [{ message: `7"7"7"#⬑"7%7"7"7"#⬑"7"7"7"7"7"7"7"7"# ${lowStockItems} 7"7"7"7"7"7"7"#⬑"7"7"7"7"7" 7"7"7"#⬑"7"7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"7"7"7"7"#⬑"#9 7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"#"7"7"7"#⬑"7"`, severity: 'high' }] : []
+      alerts: lowStockItems > 0 ? [{ message: `يوجد ${lowStockItems} صنفًا عند حد المخزون المنخفض ويتطلب متابعة فورية.`, severity: 'high' }] : []
     };
   }
 }

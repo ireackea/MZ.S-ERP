@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 0.3 – Final Arabic Encoding Fix & 10/10 Declaration - 2026-03-13
 // ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
 // ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
@@ -90,7 +91,7 @@ export class OpeningBalanceService {
         };
       }
 
-      // 7"7"7"7"7"7"7"7" 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"#⬑"#9 7"7"7"#⬑"#9 7"7"7"7"7"7"7"#⬑"7"7"7"7"7" 7"7"7"7"7"7"7"7"7"7"7"#"7"7"7"#⬑"7" 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"#⬑"#9  7"7"7"7"7"7"7"7"7"7"7"7"
+      // ENTERPRISE FIX: synthesize a zero-balance fallback row when no opening balance exists for the item.
       return {
         id: -item.id,
         itemId: item.id,

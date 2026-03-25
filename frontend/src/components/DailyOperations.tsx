@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 0.3 – Final Arabic Encoding Fix & 10/10 Declaration - 2026-03-13
 // ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
 // ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Phase 8 - Absolute Final Visual & Offline Proof - 2026-03-13
@@ -2336,10 +2337,10 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
 
     const getRowColor = (type?: OperationType) => {
         switch (type) {
-            case '8777': return 'border-l-4 border-l-emerald-500 bg-emerald-50/10';
-            case '7777': return 'border-l-4 border-l-red-500 bg-red-50/10';
-            case '78 777': return 'border-l-4 border-l-blue-500 bg-blue-50/10';
-            case '8!788': return 'border-l-4 border-l-yellow-500 bg-yellow-50/10';
+            case 'وارد': return 'border-l-4 border-l-emerald-500 bg-emerald-50/10';
+            case 'صادر': return 'border-l-4 border-l-red-500 bg-red-50/10';
+            case 'مرتجع': return 'border-l-4 border-l-blue-500 bg-blue-50/10';
+            case 'تالف': return 'border-l-4 border-l-yellow-500 bg-yellow-50/10';
             default: return 'border-l-4 border-l-slate-200';
         }
     };

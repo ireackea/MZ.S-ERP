@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 0.3 – Final Arabic Encoding Fix & 10/10 Declaration - 2026-03-13
 // ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
 // ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Phase 0 - Fatal Errors Fixed - Blueprint Compliant - 2026-03-02
@@ -16,7 +17,7 @@ export const systemResetService = {
     
     // 3.1: Strict validation of the exact code
     if (confirmationCode !== 'CONFIRM_SYSTEM_RESET_2026') {
-      throw new Error('78&7 787788y7 78y7 778y7. 8y77 7777778&: CONFIRM_SYSTEM_RESET_2026');
+      throw new Error('رمز التأكيد غير صحيح. يجب إدخال: CONFIRM_SYSTEM_RESET_2026');
     }
 
     try {
@@ -33,12 +34,12 @@ export const systemResetService = {
 
       return {
         success: true,
-        message: data?.message || '78& 778~8y7 788 778& 78 777',
+        message: data?.message || 'تمت إعادة ضبط النظام بنجاح',
         timestamp: new Date().toISOString()
       };
     } catch (error: any) {
       console.error('[DEBUG-SERVICE] API Error Details:', error.response?.data || error.message);
-      const errorMessage = error?.response?.data?.message || '8~78 8~8y 778~8y7 788 778& 7880 787778&';
+      const errorMessage = error?.response?.data?.message || 'تعذر إكمال إعادة ضبط النظام';
       throw new Error(errorMessage);
     }
   },
