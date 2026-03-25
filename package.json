@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "dev": "npm run frontend:dev",
-    "postinstall": "npm run prisma:generate",
+    "postinstall": "node scripts/postinstall.mjs || echo 'Postinstall skipped - run manually'",
     "check:encoding": "node scripts/check-text-encoding.mjs",
     "validate:phase1": "node scripts/validation-phase1.mjs",
     "validate:phase3": "node scripts/validation-phase3.mjs",
@@ -43,6 +43,8 @@
     "db:sync": "npm run prisma:generate && npm run prisma:migrate:dev"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "@prisma/client": "^5.22.0",
+    "concurrently": "^9.2.1",
+    "prisma": "^5.22.0"
   }
 }
