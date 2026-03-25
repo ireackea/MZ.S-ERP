@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 0 – Critical Security & Encoding Lockdown - 2026-03-13
 // ENTERPRISE FIX: Legacy Migration Phase 5 - Final Stabilization & Production - 2026-02-27
 import {
   ConnectedSocket,
@@ -13,9 +14,16 @@ import { Logger } from '@nestjs/common';
 import type { Server, Socket } from 'socket.io';
 import { RealtimeService, RealtimeSyncEvent } from './realtime.service';
 
+function getAllowedOrigins() {
+  return String(process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
 @WebSocketGateway({
   namespace: '/realtime',
-  cors: { origin: true, credentials: true },
+  cors: { origin: getAllowedOrigins(), credentials: true },
   transports: ['websocket', 'polling'],
 })
 export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {

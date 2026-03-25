@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 0 – Critical Security & Encoding Lockdown - 2026-03-13
 // ENTERPRISE FIX: Phase 0.3 – Final Arabic Encoding Fix & 10/10 Declaration - 2026-03-13
 // ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
 // ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
@@ -156,12 +157,11 @@ export class BackupService implements OnModuleDestroy {
   }
 
   private getMasterSecret(): string {
-    return (
-      process.env.BACKUP_ENCRYPTION_SECRET ||
-      process.env.JWT_SECRET ||
-      process.env.ADMIN_TOKEN ||
-      'feedfactory-backup-master-secret'
-    ).trim();
+    const masterSecret = String(process.env.BACKUP_ENCRYPTION_SECRET || '').trim();
+    if (!masterSecret) {
+      throw new InternalServerErrorException('BACKUP_ENCRYPTION_SECRET is required.');
+    }
+    return masterSecret;
   }
 
   private normalizeActor(actor?: Partial<BackupActor>, trigger: BackupTrigger = 'manual'): BackupActor {

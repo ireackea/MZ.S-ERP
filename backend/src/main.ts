@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 0 – Critical Security & Encoding Lockdown - 2026-03-13
 // ENTERPRISE FIX: Phase 0.2 – Full Runtime Docker Proof - 2026-03-13
 // ENTERPRISE FIX: Phase 0 - التنظيف الأساسي والتحضير - 2026-03-13
 import { NestFactory } from '@nestjs/core';
@@ -8,6 +9,7 @@ import * as fs from 'fs';
 import { json, urlencoded } from 'express';
 import { NextFunction, Request, Response } from 'express';
 import cookieParser from 'cookie-parser';
+import rateLimit from 'express-rate-limit';
 import { PrismaService } from './prisma.service';
 import { AuditService } from './audit/audit.service';
 
@@ -183,40 +185,21 @@ async function bootstrap() {
 
   // ENTERPRISE FIX: Phase 0 - Fatal Errors Fixed - 2026-03-02
   app.use(cookieParser());
-  const rateLimitWindowMs = 60 * 1000;
-  const rateLimitPerMinute = Number(process.env.RATE_LIMIT_PER_MINUTE || 100);
-  const rateBuckets = new Map<string, { count: number; resetAt: number }>();
-
-  app.use((req: Request, res: Response, next: NextFunction) => {
-    const ip = extractIp(req);
-    const now = Date.now();
-    const existing = rateBuckets.get(ip);
-
-    if (!existing || existing.resetAt <= now) {
-      rateBuckets.set(ip, { count: 1, resetAt: now + rateLimitWindowMs });
-    } else {
-      existing.count += 1;
-      rateBuckets.set(ip, existing);
-    }
-
-    const bucket = rateBuckets.get(ip)!;
-    const retryAfterMs = Math.max(0, bucket.resetAt - now);
-
-    res.setHeader('X-RateLimit-Limit', String(rateLimitPerMinute));
-    res.setHeader('X-RateLimit-Remaining', String(Math.max(0, rateLimitPerMinute - bucket.count)));
-    res.setHeader('X-RateLimit-Reset', String(Math.ceil(bucket.resetAt / 1000)));
-
-    if (bucket.count > rateLimitPerMinute) {
-      res.setHeader('Retry-After', String(Math.ceil(retryAfterMs / 1000)));
-      res.status(429).json({
-        message: 'Too many requests',
-        code: 'RATE_LIMIT_EXCEEDED',
-      });
-      return;
-    }
-
-    next();
-  });
+  app.use(
+    rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: 100,
+      standardHeaders: true,
+      legacyHeaders: false,
+      keyGenerator: (req) => extractIp(req),
+      handler: (_req, res) => {
+        res.status(429).json({
+          message: 'Too many requests',
+          code: 'RATE_LIMIT_EXCEEDED',
+        });
+      },
+    }),
+  );
 
   app.use((req: Request, res: Response, next: NextFunction) => {
     const start = Date.now();
@@ -288,7 +271,13 @@ async function bootstrap() {
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
 
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
   await app.listen(process.env.PORT || 3001);
   if (envPath) {
     console.log('Loaded env from', envPath);

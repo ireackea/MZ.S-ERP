@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 0 – Critical Security & Encoding Lockdown - 2026-03-13
 // ENTERPRISE FIX: Phase 0.3 – Final Arabic Encoding Fix & 10/10 Declaration - 2026-03-13
 // ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
 // ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
@@ -282,7 +283,7 @@ export class AuthService {
     try {
       return await bcrypt.compare(plain, hash);
     } catch {
-      return plain === hash;
+      return false;
     }
   }
 
