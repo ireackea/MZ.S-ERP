@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 1 – PostgreSQL Pivot + Zustand Single Source of Truth - 2026-03-13
 // ENTERPRISE FIX: Phase 0 – التنظيف الأساسي والأمان الحرج - 2026-03-13
 // ENTERPRISE FIX: Phase 0.2 – Full Runtime Docker Proof - 2026-03-13
 // ENTERPRISE FIX: Phase 0 - التنظيف الأساسي والتحضير - 2026-03-13
@@ -19,15 +20,12 @@ import { filterByDataScope, getIamConfig, hasPermission, logUserActivity, normal
 import {
   bulkCreateTransactions,
   deleteTransactionsInApi,
-  getTransactionsFromApi,
   migrateFromLocalTransactions,
   updateTransactionInApi,
 } from '@services/transactionsService';
 import {
-  getTransactions, saveTransactions,
   getPartners, savePartners,
   getOrders, saveOrders,
-  getUsers, saveUsers,
   getUnits,
   getCategories,
   getTags, saveTags,
@@ -100,6 +98,8 @@ const mapBackendAuditEntity = (entry: {
 const AppContent = () => {
   const { isOffline, isSyncing } = useOfflineSync();
   const items = useInventoryStore((state) => state.items);
+  const transactions = useInventoryStore((state) => state.transactions);
+  const users = useInventoryStore((state) => state.users);
   const units = useInventoryStore((state) => state.units);
   const categories = useInventoryStore((state) => state.categories);
   const addUnit = useInventoryStore((state) => state.addUnit);
@@ -114,10 +114,8 @@ const AppContent = () => {
   const inventoryStoreLoading = useInventoryStore((state) => state.loading);
 
   // Core Data
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [formulas, setFormulas] = useState<Formula[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
@@ -150,16 +148,10 @@ const AppContent = () => {
       try {
         console.log('[App.tsx] Starting auth initialization...');
 
-        // Load local data first (for non-items data)
-        const localTransactions = getTransactions();
-        setTransactions(localTransactions);
-        setInventoryTransactions(localTransactions);
+        // Load local data first for domains that are still outside Zustand.
         setPartners(getPartners());
         setOrders(getOrders());
-        const loadedUsers = normalizeUsers(getUsers());
-        void ensureAuthCredentialsSeeded(loadedUsers);
-        setUsers(loadedUsers);
-        setInventoryUsers(loadedUsers);
+        void ensureAuthCredentialsSeeded(users);
         setInventoryRoles(getIamConfig().roles);
         setReferenceData({ units: getUnits(), categories: getCategories() });
         setTags(getTags());
@@ -182,7 +174,7 @@ const AppContent = () => {
             const normalizedSessionEmail = normalizeValue((sessionUser as any)?.email);
             const normalizedSessionName = normalizeValue(sessionUser.name);
 
-            const matchedUser = loadedUsers.find((user) => {
+            const matchedUser = users.find((user) => {
               const userId = normalizeValue(user?.id);
               const userUsername = normalizeValue(user?.username);
               const userEmail = normalizeValue((user as any)?.email);
@@ -230,7 +222,7 @@ const AppContent = () => {
     };
 
     initializeAuth();
-  }, [setInventoryRoles, setInventoryTransactions, setInventoryUsers, setReferenceData]);
+  }, [setInventoryRoles, setReferenceData, users]);
 
   useEffect(() => {
     if (users.length > 0 && currentUser) {
@@ -307,22 +299,12 @@ const AppContent = () => {
   }, [authReady, currentUser]);
 
   useEffect(() => {
-    setInventoryTransactions(transactions);
-  }, [transactions, setInventoryTransactions]);
-
-  useEffect(() => {
-    setInventoryUsers(users);
-  }, [users, setInventoryUsers]);
-
-  useEffect(() => {
     setInventoryRoles(getIamConfig().roles);
   }, [setInventoryRoles]);
 
   // Persist data
-  useEffect(() => { if (!authReady) return; saveTransactions(transactions); }, [transactions, authReady]);
   useEffect(() => { if (!authReady) return; savePartners(partners); }, [partners, authReady]);
   useEffect(() => { if (!authReady) return; saveOrders(orders); }, [orders, authReady]);
-  useEffect(() => { if (!authReady) return; saveUsers(users); }, [users, authReady]);
   useEffect(() => { if (!authReady) return; saveTags(tags); }, [tags, authReady]);
   useEffect(() => { if (!authReady) return; saveSettings(systemSettings); }, [systemSettings, authReady]);
   useEffect(() => { if (!authReady) return; saveAppearanceSettings(appearance); }, [appearance, authReady]);
@@ -365,7 +347,7 @@ const AppContent = () => {
     try {
       const created = await bulkCreateTransactions(mapped);
       if (!created.length) return;
-      setTransactions(prev => [...prev, ...created]);
+      setInventoryTransactions([...transactions, ...created]);
       created.forEach(t => updateStockFromTransaction(t, 'add'));
       logAction('CREATE', 'TRANSACTION', `Added ${created.length} transactions`);
     } catch (error) {
@@ -380,7 +362,7 @@ const AppContent = () => {
       await deleteTransactionsInApi(ids);
       const toDelete = transactions.filter(t => ids.includes(t.id));
       toDelete.forEach(t => updateStockFromTransaction(t, 'remove'));
-      setTransactions(prev => prev.filter(t => !ids.includes(t.id)));
+      setInventoryTransactions(transactions.filter(t => !ids.includes(t.id)));
       logAction('DELETE', 'TRANSACTION', `Deleted ${ids.length} transactions`);
     } catch (error) {
       console.error('Failed to delete transactions via API', error);
@@ -395,7 +377,7 @@ const AppContent = () => {
     try {
       const saved = await updateTransactionInApi(updated.id, updated);
       updateStockFromTransaction(saved, 'update', old);
-      setTransactions(prev => prev.map(t => t.id === saved.id ? saved : t));
+      setInventoryTransactions(transactions.map(t => t.id === saved.id ? saved : t));
       logAction('UPDATE', 'TRANSACTION', `Updated transaction ${saved.warehouseInvoice}`);
     } catch (error) {
       console.error('Failed to update transaction via API', error);
@@ -438,18 +420,18 @@ const AppContent = () => {
 
   const handleAddUser = (u: User) => {
     if (denyPermission('users.create.management', 'إضافة مستخدم')) return;
-    setUsers(prev => normalizeUsers([...prev, u]));
+    setInventoryUsers(normalizeUsers([...users, u]));
   };
   const handleUpdateUser = (u: User) => {
     if (currentUser?.id !== u.id && denyPermission('users.update.management', 'تعديل مستخدم')) return;
-    setUsers(prev => normalizeUsers(prev.map(user => user.id === u.id ? u : user)));
+    setInventoryUsers(normalizeUsers(users.map(user => user.id === u.id ? u : user)));
     if (currentUser?.id === u.id) {
       logUserActivity({ userId: u.id, userName: u.name, event: 'profile_updated', details: 'تم تحديث الملف الشخصي' });
     }
   };
   const handleDeleteUser = (id: string) => {
     if (denyPermission('users.delete.management', 'حذف مستخدم')) return;
-    setUsers(prev => prev.filter(u => u.id !== id));
+    setInventoryUsers(users.filter(u => u.id !== id));
   };
 
   useEffect(() => { if (!currentUser) return; upsertCurrentSession(currentUser); }, [currentUser?.id]);
@@ -489,6 +471,7 @@ const AppContent = () => {
   // ENTERPRISE FIX: Permission Guard Fixed - 2026-02-26
   const handleAuthenticated = (user: any, redirectTo: string) => {
     console.log('[App] LOGIN SUCCESS:', { username: user?.username, role: user?.role, id: user?.id, redirectTo, permissions: user?.permissions });
+    clearAllAuthData();
 
     const targetUser: User = {
       id: user?.id || `user-${user?.username || 'unknown'}`,
@@ -575,8 +558,7 @@ const AppContent = () => {
         }
 
         clearStrictEmptyBootFlag();
-        const updatedUsers = normalizeUsers(getUsers());
-        setUsers(updatedUsers);
+        setInventoryUsers(normalizeUsers([...users, result.user]));
         setCurrentUser(result.user);
         upsertCurrentSession(result.user);
         logUserActivity({ userId: result.user.id, userName: result.user.name, event: 'login_success', details: 'تم إنشاء حساب المدير بنجاح' });
@@ -785,7 +767,7 @@ const AppContent = () => {
           )}
         />
         <Route path="/backup" element={renderProtectedRoute('backup.view', 'backup', withLazyFallback(<BackupCenter currentUser={currentUser} />))} />
-        <Route path="*" element={withLazyFallback(<Dashboard />)} />
+        <Route path="*" element={renderProtectedRoute('inventory.view.stock', 'fallback-dashboard', withLazyFallback(<Dashboard />))} />
       </Routes>
     </Layout>
     </>

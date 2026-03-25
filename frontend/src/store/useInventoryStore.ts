@@ -1,6 +1,6 @@
+// ENTERPRISE FIX: Phase 1 – PostgreSQL Pivot + Zustand Single Source of Truth - 2026-03-13
 // ENTERPRISE FIX: Phase 0 - التنظيف الأساسي والتحضير - 2026-03-13
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import { toast } from '@services/toastService';
 import {
   deleteItemsByPublicIds,
@@ -12,26 +12,12 @@ import {
 import {
   getFinancialYearFromDate,
   getOpeningBalances as getOpeningBalancesFromApi,
-  getOpeningBalancesByYear,
-  upsertOpeningBalances,
 } from '@services/openingBalanceService';
 import { getTransactionsFromApi } from '@services/transactionsService';
 import { fetchRoles, fetchUsers, type RoleDto, type UserDto } from '@services/usersService';
 import apiClient from '@api/client';
 import { getIamConfig, normalizeUsers } from '../services/iamService';
 import type { GridColumnPreference, Item, ItemSortMode, RoleDefinition, Transaction, User } from '../types';
-
-const SOFT_KEY = 'ff_items_soft_v1';
-const SORT_KEY = 'ff_items_sort_v1';
-const LEGACY_ITEM_STORAGE_KEY = 'feed_factory_items';
-const FORBIDDEN_LEGACY_JSON_KEYS = new Set([
-  'feed_factory_audit_logs',
-  'active-user-sessions',
-  'security-audit-log',
-  'users-audit-log',
-  'feed_factory_auth_session',
-  'feed_factory_auth_session_persistent',
-]);
 
 type SoftMap = Record<string, { deletedAt: number; deletedBy: string }>;
 type SortState = { mode: ItemSortMode; manualOrder: string[] };
@@ -86,7 +72,7 @@ type Store = {
   load: () => Promise<void>;
   loadAll: () => Promise<void>;
   loadOpeningBalances: (financialYear?: number) => Promise<void>;
-  syncFromServer: () => Promise<void>;
+  syncFromServer: (target?: 'all' | 'items' | 'transactions' | 'openingBalances' | 'users') => Promise<void>;
   setTransactions: (transactions: Transaction[]) => void;
   setOpeningBalances: (financialYear: number, rows: OpeningBalanceRow[]) => void;
   setOpeningBalanceRows: (financialYear: number, rows: OpeningBalanceStoreRow[]) => void;
@@ -125,50 +111,10 @@ type Store = {
 };
 
 export const clearLegacyInventoryBootstrapState = () => {
-  if (typeof localStorage === 'undefined') return;
-  localStorage.removeItem(LEGACY_ITEM_STORAGE_KEY);
+  return;
 };
 
 const DEFAULT_ACTOR: ActorInfo = { id: 'system', name: 'InventoryStore' };
-
-const isForbiddenLegacyJsonKey = (key: string) => FORBIDDEN_LEGACY_JSON_KEYS.has(String(key || '').trim());
-
-const purgeForbiddenLegacyJsonKeys = () => {
-  if (typeof localStorage === 'undefined') return;
-
-  FORBIDDEN_LEGACY_JSON_KEYS.forEach((key) => {
-    if (localStorage.getItem(key) !== null) {
-      localStorage.removeItem(key);
-    }
-  });
-};
-
-const read = <T,>(k: string, f: T): T => {
-  if (isForbiddenLegacyJsonKey(k)) {
-    console.error(`[useInventoryStore] Forbidden legacy JSON key read blocked: ${k}`);
-    return f;
-  }
-  try {
-    const r = localStorage.getItem(k);
-    return r ? (JSON.parse(r) as T) : f;
-  } catch {
-    return f;
-  }
-};
-
-const write = <T,>(k: string, v: T) => {
-  if (isForbiddenLegacyJsonKey(k)) {
-    console.error(`[useInventoryStore] Forbidden legacy JSON key write blocked: ${k}`);
-    return;
-  }
-  localStorage.setItem(k, JSON.stringify(v));
-};
-
-if (typeof window !== 'undefined') {
-  purgeForbiddenLegacyJsonKeys();
-}
-
-const getPendingDeletedIds = () => new Set(Object.keys(read<SoftMap>(SOFT_KEY, {})));
 
 const n = (v: unknown, f: number) => (Number.isFinite(Number(v)) ? Number(v) : f);
 
@@ -355,22 +301,6 @@ const normalizeOpeningBalanceStoreRows = (rows: any[], financialYear: number): O
     return acc;
   }, []);
 
-const localOpeningBalanceStoreRows = (financialYear: number) =>
-  getOpeningBalancesByYear(financialYear).reduce<OpeningBalanceStoreRow[]>((acc, row, index) => {
-    const itemId = String(row?.item_id ?? '').trim();
-    const quantity = Number(row?.quantity ?? 0);
-    if (!itemId || !Number.isFinite(quantity)) return acc;
-    acc.push({
-      id: index + 1,
-      itemId,
-      itemPublicId: itemId,
-      financialYear,
-      quantity,
-      unitCost: null,
-    });
-    return acc;
-  }, []);
-
 const mapApiOpeningBalances = (rows: any[]) =>
   rows.reduce<OpeningBalanceMap>((acc, row) => {
     const itemId = String(row?.itemPublicId ?? row?.item?.publicId ?? row?.itemId ?? '').trim();
@@ -426,11 +356,10 @@ const loadHtml2Pdf = async () => {
   return (module as { default?: any }).default || module;
 };
 
-const initialSort = read<SortState>(SORT_KEY, { mode: 'manual_locked', manualOrder: [] });
+const initialSort: SortState = { mode: 'manual_locked', manualOrder: [] };
 
 export const useInventoryStore = create<Store>()(
-  persist(
-    (set, get) => ({
+  (set, get) => ({
       items: [],
       balances: {},
       transactions: [],
@@ -451,16 +380,15 @@ export const useInventoryStore = create<Store>()(
       syncing: false,
       error: null,
       lastLoadedAt: null,
-      soft: read<SoftMap>(SOFT_KEY, {}),
+      soft: {},
       sortMode: initialSort.mode,
       manualOrder: initialSort.manualOrder,
 
       load: async () => {
         set({ loading: true, error: null });
         try {
-          const deletedIds = getPendingDeletedIds();
           const apiItems = await getItemsFromApi();
-          const mappedItems = apiItems.map(dto).filter((item) => !deletedIds.has(String(item.id)));
+          const mappedItems = apiItems.map(dto);
           const normalized = normalizeCollections(mappedItems, get().sortMode, get().manualOrder, get().categories, get().units);
 
           set({
@@ -472,43 +400,25 @@ export const useInventoryStore = create<Store>()(
             loading: false,
             lastLoadedAt: Date.now(),
           });
-
-          write(SORT_KEY, { mode: get().sortMode, manualOrder: normalized.manualOrder });
         } catch (e: any) {
           set({ loading: false, error: e?.message || 'Failed to load items' });
         }
       },
 
       loadAll: async () => {
-        const localOpeningBalancesYear = get().openingBalancesYear ?? currentFinancialYear();
-        const localTransactions = get().transactions;
-        const localOpeningBalances = Object.keys(get().openingBalances).length > 0
-          ? get().openingBalances
-          : normalizeOpeningBalanceRows(getOpeningBalancesByYear(localOpeningBalancesYear));
-        const localOpeningRows = get().openingBalanceRows.length > 0
-          ? get().openingBalanceRows
-          : localOpeningBalanceStoreRows(localOpeningBalancesYear);
-        const localUsers = get().users;
+        const openingBalancesYear = get().openingBalancesYear ?? currentFinancialYear();
         const localRoles = get().roles.length > 0 ? get().roles : getIamConfig().roles;
-        const localCategories = uniqueStrings(get().categories || []);
-        const localUnits = uniqueStrings(get().units || []);
 
-        set((state) => ({
+        set({
           loading: true,
           error: null,
-          transactions: localTransactions,
-          openingBalances: localOpeningBalances,
-          openingBalanceRows: localOpeningRows,
-          openingBalancesYear: localOpeningBalancesYear,
+          openingBalancesYear,
           openingBalancesError: null,
-          users: localUsers,
           roles: localRoles,
-          categories: uniqueStrings([...state.categories, ...localCategories]),
-          units: uniqueStrings([...state.units, ...localUnits]),
-        }));
+        });
 
         try {
-          await get().syncFromServer();
+          await get().syncFromServer('all');
         } finally {
           set({ loading: false, lastLoadedAt: Date.now() });
         }
@@ -529,73 +439,64 @@ export const useInventoryStore = create<Store>()(
             openingBalancesLoading: false,
             openingBalancesError: null,
           });
-
-          if (Object.keys(nextOpeningBalances).length > 0) {
-            upsertOpeningBalances(
-              financialYear,
-              Object.entries(nextOpeningBalances).map(([item_id, quantity]) => ({ item_id, quantity }))
-            );
-          }
         } catch {
-          const fallback = normalizeOpeningBalanceRows(getOpeningBalancesByYear(financialYear));
-          const fallbackRows = localOpeningBalanceStoreRows(financialYear);
           set({
-            openingBalances: fallback,
-            openingBalanceRows: fallbackRows,
+            openingBalances: {},
+            openingBalanceRows: [],
             openingBalancesYear: financialYear,
             openingBalancesLoading: false,
-            openingBalancesError: 'تعذر مزامنة أرصدة بداية المدة من الخادم. تم استخدام النسخة المحلية.',
+            openingBalancesError: 'تعذر مزامنة أرصدة بداية المدة من الخادم.',
           });
         }
       },
 
-      syncFromServer: async () => {
+      syncFromServer: async (target = 'all') => {
         set({ syncing: true, error: null });
 
-        const deletedIds = getPendingDeletedIds();
         const openingBalanceYear = get().openingBalancesYear ?? currentFinancialYear();
-        const fallbackTransactions = get().transactions;
-        const fallbackOpeningBalances = Object.keys(get().openingBalances).length > 0
-          ? get().openingBalances
-          : normalizeOpeningBalanceRows(getOpeningBalancesByYear(openingBalanceYear));
-        const fallbackOpeningBalanceRows = get().openingBalanceRows.length > 0
-          ? get().openingBalanceRows
-          : localOpeningBalanceStoreRows(openingBalanceYear);
-        const fallbackUsers = get().users;
-        const fallbackRoles = get().roles.length > 0 ? get().roles : getIamConfig().roles;
-        const fallbackCategories = uniqueStrings(get().categories);
-        const fallbackUnits = uniqueStrings(get().units);
+        const shouldLoadItems = target === 'all' || target === 'items';
+        const shouldLoadTransactions = target === 'all' || target === 'transactions';
+        const shouldLoadOpeningBalances = target === 'all' || target === 'openingBalances';
+        const shouldLoadUsers = target === 'all' || target === 'users';
+        const shouldLoadRoles = target === 'all' || target === 'users';
 
         const [itemsResult, transactionsResult, openingBalancesResult, usersResult, rolesResult] = await Promise.allSettled([
-          getItemsFromApi(),
-          getTransactionsFromApi(),
-          getOpeningBalancesFromApi(openingBalanceYear),
-          fetchUsers({ page: 1, limit: 500 }),
-          fetchRoles(),
+          shouldLoadItems ? getItemsFromApi() : Promise.resolve(null),
+          shouldLoadTransactions ? getTransactionsFromApi() : Promise.resolve(null),
+          shouldLoadOpeningBalances ? getOpeningBalancesFromApi(openingBalanceYear) : Promise.resolve(null),
+          shouldLoadUsers ? fetchUsers({ page: 1, limit: 500 }) : Promise.resolve(null),
+          shouldLoadRoles ? fetchRoles() : Promise.resolve(null),
         ]);
 
-        const nextItems = itemsResult.status === 'fulfilled'
-          ? itemsResult.value.map(dto).filter((item) => !deletedIds.has(String(item.id)))
-          : get().items;
-        const nextTransactions = transactionsResult.status === 'fulfilled' ? transactionsResult.value : fallbackTransactions;
-        const nextOpeningBalances = openingBalancesResult.status === 'fulfilled' && Array.isArray(openingBalancesResult.value)
+        const current = get();
+        const nextItems = shouldLoadItems && itemsResult.status === 'fulfilled' && Array.isArray(itemsResult.value)
+          ? itemsResult.value.map(dto)
+          : current.items;
+        const nextTransactions = shouldLoadTransactions && transactionsResult.status === 'fulfilled' && Array.isArray(transactionsResult.value)
+          ? transactionsResult.value
+          : current.transactions;
+        const nextOpeningBalances = shouldLoadOpeningBalances && openingBalancesResult.status === 'fulfilled' && Array.isArray(openingBalancesResult.value)
           ? mapApiOpeningBalances(openingBalancesResult.value)
-          : fallbackOpeningBalances;
-        const nextOpeningBalanceRows = openingBalancesResult.status === 'fulfilled' && Array.isArray(openingBalancesResult.value)
+          : current.openingBalances;
+        const nextOpeningBalanceRows = shouldLoadOpeningBalances && openingBalancesResult.status === 'fulfilled' && Array.isArray(openingBalancesResult.value)
           ? normalizeOpeningBalanceStoreRows(openingBalancesResult.value, openingBalanceYear)
-          : fallbackOpeningBalanceRows;
-        const nextUsers = usersResult.status === 'fulfilled' ? normalizeUsers(usersResult.value.data.map(mapUserDto)) : fallbackUsers;
-        const nextRoles = rolesResult.status === 'fulfilled' ? rolesResult.value.map(mapRoleDto) : fallbackRoles;
+          : current.openingBalanceRows;
+        const nextUsers = shouldLoadUsers && usersResult.status === 'fulfilled' && usersResult.value
+          ? normalizeUsers(usersResult.value.data.map(mapUserDto))
+          : current.users;
+        const nextRoles = shouldLoadRoles && rolesResult.status === 'fulfilled' && Array.isArray(rolesResult.value)
+          ? rolesResult.value.map(mapRoleDto)
+          : current.roles.length > 0 ? current.roles : getIamConfig().roles;
 
-        const normalized = normalizeCollections(nextItems, get().sortMode, get().manualOrder, fallbackCategories, fallbackUnits);
-        const failures = [itemsResult, transactionsResult, openingBalancesResult, usersResult, rolesResult].filter((result) => result.status === 'rejected');
-
-        if (openingBalancesResult.status === 'fulfilled' && Object.keys(nextOpeningBalances).length > 0) {
-          upsertOpeningBalances(
-            openingBalanceYear,
-            Object.entries(nextOpeningBalances).map(([item_id, quantity]) => ({ item_id, quantity }))
-          );
-        }
+        const normalized = normalizeCollections(nextItems, current.sortMode, current.manualOrder, current.categories, current.units);
+        const failures = [
+          shouldLoadItems ? itemsResult : null,
+          shouldLoadTransactions ? transactionsResult : null,
+          shouldLoadOpeningBalances ? openingBalancesResult : null,
+          shouldLoadUsers ? usersResult : null,
+          shouldLoadRoles ? rolesResult : null,
+        ].filter((result): result is PromiseRejectedResult | PromiseFulfilledResult<unknown> => result !== null)
+          .filter((result) => result.status === 'rejected');
 
         set({
           items: normalized.items,
@@ -604,20 +505,18 @@ export const useInventoryStore = create<Store>()(
           openingBalances: nextOpeningBalances,
           openingBalanceRows: nextOpeningBalanceRows,
           openingBalancesYear: openingBalanceYear,
-          openingBalancesError: openingBalancesResult.status === 'rejected'
-            ? 'تعذر مزامنة أرصدة بداية المدة من الخادم. تم استخدام النسخة المحلية.'
-            : null,
+          openingBalancesError: shouldLoadOpeningBalances && openingBalancesResult.status === 'rejected'
+            ? 'تعذر مزامنة أرصدة بداية المدة من الخادم.'
+            : current.openingBalancesError,
           users: nextUsers,
           roles: nextRoles,
           categories: normalized.categories,
           units: normalized.units,
           manualOrder: normalized.manualOrder,
           syncing: false,
-          error: failures.length > 0 ? 'تم تحميل جزء من البيانات مع استخدام بعض النسخ المحلية الاحتياطية.' : null,
+          error: failures.length > 0 ? 'تعذر تحميل بعض البيانات من الخادم.' : null,
           lastLoadedAt: Date.now(),
         });
-
-        write(SORT_KEY, { mode: get().sortMode, manualOrder: normalized.manualOrder });
       },
 
       setTransactions: (transactions) => {
@@ -643,11 +542,6 @@ export const useInventoryStore = create<Store>()(
           openingBalancesYear: financialYear,
           openingBalancesError: null,
         });
-
-        upsertOpeningBalances(
-          financialYear,
-          rows.map((row) => ({ item_id: row.itemId, quantity: row.quantity }))
-        );
       },
 
       setOpeningBalanceRows: (financialYear, rows) => {
@@ -674,11 +568,6 @@ export const useInventoryStore = create<Store>()(
           openingBalancesYear: financialYear,
           openingBalancesError: null,
         });
-
-        upsertOpeningBalances(
-          financialYear,
-          nextOpeningBalanceRows.map((row) => ({ item_id: String(row.itemPublicId || row.itemId), quantity: Number(row.quantity || 0) }))
-        );
       },
 
       setUsers: (users) => {
@@ -852,13 +741,11 @@ export const useInventoryStore = create<Store>()(
         const nextManualOrder = mode === 'manual_locked' ? currentItems.map((item) => String(item.id)) : normOrder(currentItems, get().manualOrder);
         const sorted = sortItems(currentItems, mode, nextManualOrder);
         set({ sortMode: mode, manualOrder: nextManualOrder, items: sorted });
-        write(SORT_KEY, { mode, manualOrder: nextManualOrder });
       },
 
       lockCurrentItemOrder: () => {
         const nextManualOrder = get().items.map((item) => String(item.id));
         set({ sortMode: 'manual_locked', manualOrder: nextManualOrder });
-        write(SORT_KEY, { mode: 'manual_locked', manualOrder: nextManualOrder });
       },
 
       move: (id, d) => {
@@ -870,7 +757,6 @@ export const useInventoryStore = create<Store>()(
         [order[i], order[t]] = [order[t], order[i]];
         const sorted = sortItems(get().items, get().sortMode, order);
         set({ manualOrder: order, items: sorted });
-        write(SORT_KEY, { mode: get().sortMode, manualOrder: order });
       },
 
       moveItemManually: (id, d) => {
@@ -892,7 +778,6 @@ export const useInventoryStore = create<Store>()(
           units: normalized.units,
           manualOrder: normalized.manualOrder,
         });
-        write(SORT_KEY, { mode: get().sortMode, manualOrder: normalized.manualOrder });
         toast.success('تم إضافة الصنف بنجاح');
       },
 
@@ -962,7 +847,6 @@ export const useInventoryStore = create<Store>()(
           soft[id] = { deletedAt: now, deletedBy: actorName };
         });
         set({ soft });
-        write(SOFT_KEY, soft);
         toast.success('تم تصنيف الأصناف كمحذوفة بنجاح');
       },
 
@@ -970,7 +854,6 @@ export const useInventoryStore = create<Store>()(
         const soft = { ...get().soft };
         ids.forEach((id) => delete soft[id]);
         set({ soft });
-        write(SOFT_KEY, soft);
         toast.success('تم استعادة الأصناف بنجاح');
       },
 
@@ -979,7 +862,6 @@ export const useInventoryStore = create<Store>()(
 
         const soft = { ...get().soft };
         ids.forEach((id) => delete soft[id]);
-        write(SOFT_KEY, soft);
 
         const setIds = new Set(ids);
         const nextItems = get().items.filter((item) => !setIds.has(String(item.id)));
@@ -993,36 +875,11 @@ export const useInventoryStore = create<Store>()(
           manualOrder: normalized.manualOrder,
           soft,
         });
-
-        write(SORT_KEY, { mode: get().sortMode, manualOrder: normalized.manualOrder });
         toast.success('تم حذف الأصناف نهائياً بنجاح');
       },
-    }),
-    {
-      name: 'ff_inventory_store_v1',
-      partialize: (state) => ({
-        items: state.items,
-        balances: state.balances,
-        transactions: state.transactions,
-        openingBalances: state.openingBalances,
-        openingBalanceRows: state.openingBalanceRows,
-        openingBalancesYear: state.openingBalancesYear,
-        users: state.users,
-        roles: state.roles,
-        units: state.units,
-        categories: state.categories,
-        soft: state.soft,
-        sortMode: state.sortMode,
-        manualOrder: state.manualOrder,
-        gridPreferences: state.gridPreferences,
-        gridDisplayPolicies: state.gridDisplayPolicies,
-        operationPrintConfig: state.operationPrintConfig,
-        operationPrintTemplates: state.operationPrintTemplates,
-      }),
-    }
-  )
+    })
 );
 
-export { sortItems, normOrder, read, write, SOFT_KEY, SORT_KEY };
+export { sortItems, normOrder };
 export type { SoftMap, SortState, ItemForm, BulkForm, InventoryAction, ActorInfo, OpeningBalanceStoreRow };
 
