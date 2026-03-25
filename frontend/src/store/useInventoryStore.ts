@@ -1,5 +1,5 @@
-// ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
 // ENTERPRISE FIX: Phase 1 – PostgreSQL Pivot + Zustand Single Source of Truth - 2026-03-13
+// ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
 // ENTERPRISE FIX: Phase 0 - التنظيف الأساسي والتحضير - 2026-03-13
 import { create } from 'zustand';
 import { toast } from '@services/toastService';
@@ -17,7 +17,7 @@ import {
 import { getTransactionsFromApi } from '@services/transactionsService';
 import { fetchRoles, fetchUsers, type RoleDto, type UserDto } from '@services/usersService';
 import apiClient from '@api/client';
-import { getIamConfig, normalizeUsers } from '../services/iamService';
+import { normalizeUsers } from '../services/iamService';
 import type {
   Formula,
   GridColumnPreference,
@@ -42,6 +42,7 @@ type OpeningBalanceRow = { itemId: string; quantity: number };
 type GridDisplayPolicy = { forceUnified: boolean };
 type GridPreferenceMap = Record<string, GridColumnPreference[]>;
 type GridDisplayPolicyMap = Record<string, GridDisplayPolicy>;
+type SyncTarget = 'all' | 'items' | 'transactions' | 'openingBalances' | 'users';
 type ExportSheet = {
   name: string;
   rows: unknown[][];
@@ -91,7 +92,7 @@ type Store = {
   load: () => Promise<void>;
   loadAll: () => Promise<void>;
   loadOpeningBalances: (financialYear?: number) => Promise<void>;
-  syncFromServer: (target?: 'all' | 'items' | 'transactions' | 'openingBalances' | 'users') => Promise<void>;
+  syncFromServer: (target?: SyncTarget) => Promise<void>;
   setTransactions: (transactions: Transaction[]) => void;
   setOpeningBalances: (financialYear: number, rows: OpeningBalanceRow[]) => void;
   setOpeningBalanceRows: (financialYear: number, rows: OpeningBalanceStoreRow[]) => void;
@@ -345,6 +346,33 @@ const mapApiOpeningBalances = (rows: any[]) =>
 
 const currentFinancialYear = () => getFinancialYearFromDate();
 
+const syncItemsFromServer = async () => {
+  const apiItems = await getItemsFromApi();
+  return apiItems.map(dto);
+};
+
+const syncTransactionsFromServer = async () => {
+  return getTransactionsFromApi();
+};
+
+const syncOpeningBalancesFromServer = async (financialYear: number) => {
+  const rows = await getOpeningBalancesFromApi(financialYear);
+  return {
+    openingBalances: Array.isArray(rows) ? mapApiOpeningBalances(rows) : {},
+    openingBalanceRows: Array.isArray(rows) ? normalizeOpeningBalanceStoreRows(rows, financialYear) : [],
+  };
+};
+
+const syncUsersFromServer = async () => {
+  const response = await fetchUsers({ page: 1, limit: 500 });
+  return normalizeUsers(response.data.map(mapUserDto));
+};
+
+const syncRolesFromServer = async () => {
+  const roles = await fetchRoles();
+  return roles.map(mapRoleDto);
+};
+
 const normalizeGridPreferences = (defaults: GridColumnPreference[], stored: GridColumnPreference[] = []) => {
   if (!defaults.length) return [...stored];
 
@@ -447,14 +475,12 @@ export const useInventoryStore = create<Store>()(
 
       loadAll: async () => {
         const openingBalancesYear = get().openingBalancesYear ?? currentFinancialYear();
-        const localRoles = get().roles.length > 0 ? get().roles : getIamConfig().roles;
 
         set({
           loading: true,
           error: null,
           openingBalancesYear,
           openingBalancesError: null,
-          roles: localRoles,
         });
 
         try {
@@ -501,32 +527,32 @@ export const useInventoryStore = create<Store>()(
         const shouldLoadRoles = target === 'all' || target === 'users';
 
         const [itemsResult, transactionsResult, openingBalancesResult, usersResult, rolesResult] = await Promise.allSettled([
-          shouldLoadItems ? getItemsFromApi() : Promise.resolve(null),
-          shouldLoadTransactions ? getTransactionsFromApi() : Promise.resolve(null),
-          shouldLoadOpeningBalances ? getOpeningBalancesFromApi(openingBalanceYear) : Promise.resolve(null),
-          shouldLoadUsers ? fetchUsers({ page: 1, limit: 500 }) : Promise.resolve(null),
-          shouldLoadRoles ? fetchRoles() : Promise.resolve(null),
+          shouldLoadItems ? syncItemsFromServer() : Promise.resolve(null),
+          shouldLoadTransactions ? syncTransactionsFromServer() : Promise.resolve(null),
+          shouldLoadOpeningBalances ? syncOpeningBalancesFromServer(openingBalanceYear) : Promise.resolve(null),
+          shouldLoadUsers ? syncUsersFromServer() : Promise.resolve(null),
+          shouldLoadRoles ? syncRolesFromServer() : Promise.resolve(null),
         ]);
 
         const current = get();
         const nextItems = shouldLoadItems && itemsResult.status === 'fulfilled' && Array.isArray(itemsResult.value)
-          ? itemsResult.value.map(dto)
+          ? itemsResult.value
           : current.items;
         const nextTransactions = shouldLoadTransactions && transactionsResult.status === 'fulfilled' && Array.isArray(transactionsResult.value)
           ? transactionsResult.value
           : current.transactions;
-        const nextOpeningBalances = shouldLoadOpeningBalances && openingBalancesResult.status === 'fulfilled' && Array.isArray(openingBalancesResult.value)
-          ? mapApiOpeningBalances(openingBalancesResult.value)
+        const nextOpeningBalances = shouldLoadOpeningBalances && openingBalancesResult.status === 'fulfilled' && openingBalancesResult.value
+          ? openingBalancesResult.value.openingBalances
           : current.openingBalances;
-        const nextOpeningBalanceRows = shouldLoadOpeningBalances && openingBalancesResult.status === 'fulfilled' && Array.isArray(openingBalancesResult.value)
-          ? normalizeOpeningBalanceStoreRows(openingBalancesResult.value, openingBalanceYear)
+        const nextOpeningBalanceRows = shouldLoadOpeningBalances && openingBalancesResult.status === 'fulfilled' && openingBalancesResult.value
+          ? openingBalancesResult.value.openingBalanceRows
           : current.openingBalanceRows;
-        const nextUsers = shouldLoadUsers && usersResult.status === 'fulfilled' && usersResult.value
-          ? normalizeUsers(usersResult.value.data.map(mapUserDto))
+        const nextUsers = shouldLoadUsers && usersResult.status === 'fulfilled' && Array.isArray(usersResult.value)
+          ? usersResult.value
           : current.users;
         const nextRoles = shouldLoadRoles && rolesResult.status === 'fulfilled' && Array.isArray(rolesResult.value)
-          ? rolesResult.value.map(mapRoleDto)
-          : current.roles.length > 0 ? current.roles : getIamConfig().roles;
+          ? rolesResult.value
+          : current.roles;
 
         const normalized = normalizeCollections(nextItems, current.sortMode, current.manualOrder, current.categories, current.units);
         const failures = [

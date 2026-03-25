@@ -1,5 +1,5 @@
-// ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
 // ENTERPRISE FIX: Phase 1 – PostgreSQL Pivot + Zustand Single Source of Truth - 2026-03-13
+// ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
 // ENTERPRISE FIX: Phase 0 – التنظيف الأساسي والأمان الحرج - 2026-03-13
 // ENTERPRISE FIX: Phase 0.2 – Full Runtime Docker Proof - 2026-03-13
 // ENTERPRISE FIX: Phase 0 - التنظيف الأساسي والتحضير - 2026-03-13
@@ -27,15 +27,8 @@ import {
 import {
   getPartners, savePartners,
   getOrders, saveOrders,
-  getUnits,
-  getCategories,
   getTags, saveTags,
-  getSettings, saveSettings,
   getAppearanceSettings, saveAppearanceSettings,
-  getReportConfig, saveReportConfig,
-  getOpeningBalanceReportConfig, saveOpeningBalanceReportConfig,
-  getUnloadingRules, saveUnloadingRules,
-  getFormulas, saveFormulas,
   clearStrictEmptyBootFlag,
 } from './services/storage';
 
@@ -160,19 +153,12 @@ const AppContent = () => {
       try {
         console.log('[App.tsx] Starting auth initialization...');
 
-        // Load local data first for domains that are still outside Zustand.
+        // Load only non-inventory local UI data here. Inventory data is server-first via Zustand.
         setPartners(getPartners());
         setOrders(getOrders());
         void ensureAuthCredentialsSeeded(users);
-        setInventoryRoles(getIamConfig().roles);
-        setReferenceData({ units: getUnits(), categories: getCategories() });
         setTags(getTags());
-        setSystemSettings(getSettings());
         setAppearance(getAppearanceSettings());
-        setReportConfig(getReportConfig());
-        setOpeningBalanceReportConfig(getOpeningBalanceReportConfig());
-        setUnloadingRules(getUnloadingRules());
-        setFormulas(getFormulas());
         setAuditLogs([]);
 
         try {
@@ -310,20 +296,11 @@ const AppContent = () => {
     };
   }, [authReady, currentUser]);
 
-  useEffect(() => {
-    setInventoryRoles(getIamConfig().roles);
-  }, [setInventoryRoles]);
-
   // Persist data
   useEffect(() => { if (!authReady) return; savePartners(partners); }, [partners, authReady]);
   useEffect(() => { if (!authReady) return; saveOrders(orders); }, [orders, authReady]);
   useEffect(() => { if (!authReady) return; saveTags(tags); }, [tags, authReady]);
-  useEffect(() => { if (!authReady) return; saveSettings(systemSettings); }, [systemSettings, authReady]);
   useEffect(() => { if (!authReady) return; saveAppearanceSettings(appearance); }, [appearance, authReady]);
-  useEffect(() => { if (!authReady) return; saveReportConfig(reportConfig); }, [reportConfig, authReady]);
-  useEffect(() => { if (!authReady) return; saveOpeningBalanceReportConfig(openingBalanceReportConfig); }, [openingBalanceReportConfig, authReady]);
-  useEffect(() => { if (!authReady) return; saveUnloadingRules(unloadingRules); }, [unloadingRules, authReady]);
-  useEffect(() => { if (!authReady) return; saveFormulas(formulas); }, [formulas, authReady]);
 
   const logAction = (action: AuditLog['action'], entity: AuditLog['entity'], details: string) => {
     if (!currentUser) return;
