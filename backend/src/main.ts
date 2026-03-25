@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 0.2 – Full Runtime Docker Proof - 2026-03-13
 // ENTERPRISE FIX: Phase 0 - التنظيف الأساسي والتحضير - 2026-03-13
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
@@ -43,7 +44,7 @@ function loadBackendEnv() {
 function getAllowedOrigins() {
   const rawOrigins =
     process.env.CORS_ORIGINS ||
-    'http://localhost:5173,http://localhost:5174,http://localhost:3000';
+    'http://localhost:4173,http://localhost:5173,http://localhost:5174,http://localhost:3000';
   return rawOrigins
     .split(',')
     .map((origin) => origin.trim())

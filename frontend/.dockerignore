@@ -1,0 +1,6 @@
+# ENTERPRISE FIX: Phase 0.2 – Full Runtime Docker Proof - 2026-03-13
+node_modules
+dist
+.git
+*.log
+coverage

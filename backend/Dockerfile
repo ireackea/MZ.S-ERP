@@ -24,4 +24,4 @@ ENV PORT=3001
 
 EXPOSE 3001
 
-CMD ["sh", "-lc", "npx prisma generate && npx prisma migrate deploy && node dist/main.js"]
+CMD ["sh", "-lc", "npx prisma generate && npx prisma db push && npm run prisma:seed && node dist/main.js"]
