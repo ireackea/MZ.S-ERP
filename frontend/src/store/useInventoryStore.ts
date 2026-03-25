@@ -42,7 +42,7 @@ type OpeningBalanceRow = { itemId: string; quantity: number };
 type GridDisplayPolicy = { forceUnified: boolean };
 type GridPreferenceMap = Record<string, GridColumnPreference[]>;
 type GridDisplayPolicyMap = Record<string, GridDisplayPolicy>;
-type SyncTarget = 'all' | 'items' | 'transactions' | 'openingBalances' | 'users';
+type SyncTarget = 'all' | 'items' | 'transactions' | 'openingBalances' | 'users' | 'formulas';
 type ExportSheet = {
   name: string;
   rows: unknown[][];
@@ -92,6 +92,7 @@ type Store = {
   load: () => Promise<void>;
   loadAll: () => Promise<void>;
   loadOpeningBalances: (financialYear?: number) => Promise<void>;
+  loadFormulas: () => Promise<void>;
   syncFromServer: (target?: SyncTarget) => Promise<void>;
   setTransactions: (transactions: Transaction[]) => void;
   setOpeningBalances: (financialYear: number, rows: OpeningBalanceRow[]) => void;
@@ -103,6 +104,9 @@ type Store = {
   setReportConfig: (config: ReportColumnConfig[]) => void;
   setOpeningBalanceReportConfig: (config: ReportColumnConfig[]) => void;
   setFormulas: (formulas: Formula[]) => void;
+  createFormula: (formula: Formula) => Promise<Formula>;
+  updateFormula: (formula: Formula) => Promise<Formula>;
+  deleteFormula: (id: string) => Promise<void>;
   setReferenceData: (data: { units?: string[]; categories?: string[] }) => void;
   getGridPreferences: (moduleKey: string, defaults: GridColumnPreference[]) => GridColumnPreference[];
   setGridPreferences: (moduleKey: string, columns: GridColumnPreference[]) => void;
@@ -344,6 +348,43 @@ const mapApiOpeningBalances = (rows: any[]) =>
     return acc;
   }, {});
 
+const normalizeFormula = (raw: any): Formula => ({
+  id: String(raw?.id || crypto.randomUUID()),
+  code: String(raw?.code || ''),
+  name: String(raw?.name || ''),
+  targetProductId: String(raw?.targetProductId || raw?.targetItemId || ''),
+  isActive: raw?.isActive !== false,
+  notes: raw?.notes ? String(raw.notes) : undefined,
+  items: Array.isArray(raw?.items)
+    ? raw.items.map((entry: any) => ({
+        itemId: String(entry?.itemId || ''),
+        percentage: Number(entry?.percentage || 0),
+        weightPerTon: Number(entry?.weightPerTon || 0),
+      }))
+    : [],
+});
+
+const toFormulaPayload = (formula: Formula) => ({
+  id: formula.id,
+  code: formula.code,
+  name: formula.name,
+  targetProductId: formula.targetProductId,
+  targetItemId: formula.targetProductId,
+  isActive: formula.isActive,
+  notes: formula.notes || '',
+  items: formula.items.map((entry) => ({
+    itemId: entry.itemId,
+    percentage: Number(entry.percentage || 0),
+    weightPerTon: Number(entry.weightPerTon || 0),
+  })),
+});
+
+const extractArrayPayload = (payload: any) => {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  return [];
+};
+
 const currentFinancialYear = () => getFinancialYearFromDate();
 
 const syncItemsFromServer = async () => {
@@ -371,6 +412,11 @@ const syncUsersFromServer = async () => {
 const syncRolesFromServer = async () => {
   const roles = await fetchRoles();
   return roles.map(mapRoleDto);
+};
+
+const syncFormulasFromServer = async () => {
+  const response = await apiClient.get('/formulations');
+  return extractArrayPayload(response.data).map(normalizeFormula);
 };
 
 const normalizeGridPreferences = (defaults: GridColumnPreference[], stored: GridColumnPreference[] = []) => {
@@ -516,6 +562,16 @@ export const useInventoryStore = create<Store>()(
         }
       },
 
+      loadFormulas: async () => {
+        try {
+          const formulas = await syncFormulasFromServer();
+          set({ formulas: [...formulas] });
+        } catch (error: any) {
+          set({ error: error?.message || 'تعذر تحميل التركيبات من الخادم.' });
+          throw error;
+        }
+      },
+
       syncFromServer: async (target = 'all') => {
         set({ syncing: true, error: null });
 
@@ -525,13 +581,15 @@ export const useInventoryStore = create<Store>()(
         const shouldLoadOpeningBalances = target === 'all' || target === 'openingBalances';
         const shouldLoadUsers = target === 'all' || target === 'users';
         const shouldLoadRoles = target === 'all' || target === 'users';
+        const shouldLoadFormulas = target === 'all' || target === 'formulas';
 
-        const [itemsResult, transactionsResult, openingBalancesResult, usersResult, rolesResult] = await Promise.allSettled([
+        const [itemsResult, transactionsResult, openingBalancesResult, usersResult, rolesResult, formulasResult] = await Promise.allSettled([
           shouldLoadItems ? syncItemsFromServer() : Promise.resolve(null),
           shouldLoadTransactions ? syncTransactionsFromServer() : Promise.resolve(null),
           shouldLoadOpeningBalances ? syncOpeningBalancesFromServer(openingBalanceYear) : Promise.resolve(null),
           shouldLoadUsers ? syncUsersFromServer() : Promise.resolve(null),
           shouldLoadRoles ? syncRolesFromServer() : Promise.resolve(null),
+          shouldLoadFormulas ? syncFormulasFromServer() : Promise.resolve(null),
         ]);
 
         const current = get();
@@ -553,6 +611,9 @@ export const useInventoryStore = create<Store>()(
         const nextRoles = shouldLoadRoles && rolesResult.status === 'fulfilled' && Array.isArray(rolesResult.value)
           ? rolesResult.value
           : current.roles;
+        const nextFormulas = shouldLoadFormulas && formulasResult.status === 'fulfilled' && Array.isArray(formulasResult.value)
+          ? formulasResult.value
+          : current.formulas;
 
         const normalized = normalizeCollections(nextItems, current.sortMode, current.manualOrder, current.categories, current.units);
         const failures = [
@@ -561,6 +622,7 @@ export const useInventoryStore = create<Store>()(
           shouldLoadOpeningBalances ? openingBalancesResult : null,
           shouldLoadUsers ? usersResult : null,
           shouldLoadRoles ? rolesResult : null,
+          shouldLoadFormulas ? formulasResult : null,
         ].filter((result): result is PromiseRejectedResult | PromiseFulfilledResult<unknown> => result !== null)
           .filter((result) => result.status === 'rejected');
 
@@ -576,6 +638,7 @@ export const useInventoryStore = create<Store>()(
             : current.openingBalancesError,
           users: nextUsers,
           roles: nextRoles,
+          formulas: nextFormulas,
           categories: normalized.categories,
           units: normalized.units,
           manualOrder: normalized.manualOrder,
@@ -662,6 +725,29 @@ export const useInventoryStore = create<Store>()(
 
       setFormulas: (formulas) => {
         set({ formulas: [...formulas] });
+      },
+
+      createFormula: async (formula) => {
+        const response = await apiClient.post('/formulations', toFormulaPayload(formula));
+        const saved = normalizeFormula(response.data?.data ?? response.data);
+        set((state) => ({ formulas: [saved, ...state.formulas.filter((entry) => String(entry.id) !== String(saved.id))] }));
+        return saved;
+      },
+
+      updateFormula: async (formula) => {
+        const response = await apiClient.put(`/formulations/${encodeURIComponent(String(formula.id))}`, toFormulaPayload(formula));
+        const saved = normalizeFormula(response.data?.data ?? response.data);
+        set((state) => ({
+          formulas: state.formulas.map((entry) => (String(entry.id) === String(saved.id) ? saved : entry)),
+        }));
+        return saved;
+      },
+
+      deleteFormula: async (id) => {
+        await apiClient.post('/formulations/delete', { ids: [id] });
+        set((state) => ({
+          formulas: state.formulas.filter((entry) => String(entry.id) !== String(id)),
+        }));
       },
 
       getGridPreferences: (moduleKey, defaults) => {

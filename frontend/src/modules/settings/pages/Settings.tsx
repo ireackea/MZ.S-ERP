@@ -1,5 +1,5 @@
 // ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { DatabaseBackup, FileText, Globe2, LayoutGrid, RefreshCcw, Settings2, Shield, Users } from 'lucide-react';
 import { usePermissions } from '@hooks/usePermissions';
 import type { AuditLog, ReportColumnConfig, SystemSettings, User } from '../../../types';
@@ -62,6 +62,12 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
 
   const visibleTabs = isPrivileged ? tabs : tabs.filter((tab) => hasPermission(tab.permission));
   const [activeTab, setActiveTab] = useState<SettingsTabKey>(visibleTabs[0]?.key || 'general');
+
+  useEffect(() => {
+    if (!visibleTabs.some((tab) => tab.key === activeTab)) {
+      setActiveTab(visibleTabs[0]?.key || 'general');
+    }
+  }, [activeTab, visibleTabs]);
 
   const resolvedActiveTab = visibleTabs.find((tab) => tab.key === activeTab)?.key || visibleTabs[0]?.key;
 
