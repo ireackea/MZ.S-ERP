@@ -1,9 +1,11 @@
+// ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
 // ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
 // Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import apiClient from '@api/client';
 import { toast } from '@services/toastService';
 import FormulationView from '../components/Formulation';
+import { useInventoryStore } from '../store/useInventoryStore';
 import type { Formula } from '../types';
 
 const normalizeFormula = (raw: any): Formula => ({
@@ -38,7 +40,8 @@ const toPayload = (formula: Formula) => ({
 });
 
 const FormulationPage: React.FC = () => {
-  const [formulas, setFormulas] = useState<Formula[]>([]);
+  const formulas = useInventoryStore((state) => state.formulas);
+  const setFormulas = useInventoryStore((state) => state.setFormulas);
 
   useEffect(() => {
     let active = true;
@@ -67,18 +70,18 @@ const FormulationPage: React.FC = () => {
   const onAddFormula = async (formula: Formula) => {
     const response = await apiClient.post('/formulations', toPayload(formula));
     const saved = normalizeFormula(response.data);
-    setFormulas((current) => [saved, ...current]);
+    setFormulas([saved, ...formulas]);
   };
 
   const onUpdateFormula = async (formula: Formula) => {
     const response = await apiClient.put(`/formulations/${encodeURIComponent(String(formula.id))}`, toPayload(formula));
     const saved = normalizeFormula(response.data);
-    setFormulas((current) => current.map((entry) => (String(entry.id) === String(saved.id) ? saved : entry)));
+    setFormulas(formulas.map((entry) => (String(entry.id) === String(saved.id) ? saved : entry)));
   };
 
   const onDeleteFormula = async (id: string) => {
     await apiClient.post('/formulations/delete', { ids: [id] });
-    setFormulas((current) => current.filter((entry) => String(entry.id) !== String(id)));
+    setFormulas(formulas.filter((entry) => String(entry.id) !== String(id)));
   };
 
   return (

@@ -197,10 +197,17 @@ const Stocktaking: React.FC<StocktakingProps> = ({
 }) => {
   const storeItems = useInventoryStore((state) => state.items);
   const storeTransactions = useInventoryStore((state) => state.transactions);
+  const storeSystemSettings = useInventoryStore((state) => state.systemSettings);
+  const storedPrintConfig = useInventoryStore((state) => state.stocktakingPrintConfig);
+  const storedPrintTemplates = useInventoryStore((state) => state.stocktakingPrintTemplates);
+  const setStoredPrintConfig = useInventoryStore((state) => state.setStocktakingPrintConfig);
+  const setStoredPrintTemplates = useInventoryStore((state) => state.setStocktakingPrintTemplates);
   const loadAll = useInventoryStore((state) => state.loadAll);
   const lastLoadedAt = useInventoryStore((state) => state.lastLoadedAt);
   const items = itemsProp && itemsProp.length > 0 ? itemsProp : storeItems;
   const transactions = transactionsProp && transactionsProp.length > 0 ? transactionsProp : storeTransactions;
+  const resolvedCompanyName = companyName || storeSystemSettings.companyName || '';
+  const resolvedCompanyLogoUrl = companyLogoUrl || storeSystemSettings.logoUrl || '';
   const [monthKey, setMonthKey] = useState(getCurrentMonthKey());
   const [pane, setPane] = useState<WorkPane>('operations');
   const [blindMode, setBlindMode] = useState(false);
@@ -236,47 +243,40 @@ const Stocktaking: React.FC<StocktakingProps> = ({
   }, [lastLoadedAt, loadAll]);
 
   useEffect(() => {
-    try {
-      const rawConfig = localStorage.getItem(STOCKTAKING_PRINT_CONFIG_STORAGE_KEY);
-      if (rawConfig) {
-        const parsed = JSON.parse(rawConfig) as Partial<StocktakingPrintConfig> & { cellTextVerticalAlign?: 'top' | 'middle' | 'bottom' };
-        const legacyVerticalAlign = parsed.cellTextVerticalAlign;
-        const normalizedVerticalPosition = typeof parsed.cellTextVerticalPosition === 'number'
-          ? Math.min(100, Math.max(0, parsed.cellTextVerticalPosition))
-          : legacyVerticalAlign === 'top'
-            ? 0
-            : legacyVerticalAlign === 'bottom'
-              ? 100
-              : 50;
-        setPrintConfig((prev) => ({
-          ...prev,
-          ...parsed,
-          cellTextVerticalPosition: normalizedVerticalPosition,
-          selectedCards: Array.isArray(parsed.selectedCards)
-            ? parsed.selectedCards.filter((key): key is ReportCardKey => REPORT_CARD_CONFIG.some((card) => card.key === key))
-            : prev.selectedCards,
-        }));
-      }
+    const parsed = (storedPrintConfig || {}) as Partial<StocktakingPrintConfig> & { cellTextVerticalAlign?: 'top' | 'middle' | 'bottom' };
+    const legacyVerticalAlign = parsed.cellTextVerticalAlign;
+    const normalizedVerticalPosition = typeof parsed.cellTextVerticalPosition === 'number'
+      ? Math.min(100, Math.max(0, parsed.cellTextVerticalPosition))
+      : legacyVerticalAlign === 'top'
+        ? 0
+        : legacyVerticalAlign === 'bottom'
+          ? 100
+          : 50;
 
-      const rawTemplates = localStorage.getItem(STOCKTAKING_PRINT_TEMPLATES_STORAGE_KEY);
-      if (rawTemplates) {
-        const parsedTemplates = JSON.parse(rawTemplates) as StocktakingPrintTemplate[];
-        if (Array.isArray(parsedTemplates)) {
-          setPrintTemplates(parsedTemplates);
-        }
-      }
-    } catch {
-      // ignore invalid cache
+    setPrintConfig((prev) => ({
+      ...prev,
+      ...parsed,
+      reportUrl: parsed.reportUrl || prev.reportUrl,
+      cellTextVerticalPosition: normalizedVerticalPosition,
+      selectedCards: Array.isArray(parsed.selectedCards)
+        ? parsed.selectedCards.filter((key): key is ReportCardKey => REPORT_CARD_CONFIG.some((card) => card.key === key))
+        : prev.selectedCards,
+    }));
+  }, [storedPrintConfig]);
+
+  useEffect(() => {
+    if (Array.isArray(storedPrintTemplates) && storedPrintTemplates.length > 0) {
+      setPrintTemplates(storedPrintTemplates as unknown as StocktakingPrintTemplate[]);
     }
-  }, []);
+  }, [storedPrintTemplates]);
 
   useEffect(() => {
-    localStorage.setItem(STOCKTAKING_PRINT_CONFIG_STORAGE_KEY, JSON.stringify(printConfig));
-  }, [printConfig]);
+    setStoredPrintConfig(printConfig as unknown as Record<string, unknown>);
+  }, [printConfig, setStoredPrintConfig]);
 
   useEffect(() => {
-    localStorage.setItem(STOCKTAKING_PRINT_TEMPLATES_STORAGE_KEY, JSON.stringify(printTemplates));
-  }, [printTemplates]);
+    setStoredPrintTemplates(printTemplates as unknown as Array<Record<string, unknown>>);
+  }, [printTemplates, setStoredPrintTemplates]);
 
   const zones = useMemo(() => {
     const values = Array.from(new Set(items.map((item) => item.zone?.trim() || 'بدون منقة'))).sort();

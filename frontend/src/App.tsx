@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
 // ENTERPRISE FIX: Phase 1 – PostgreSQL Pivot + Zustand Single Source of Truth - 2026-03-13
 // ENTERPRISE FIX: Phase 0 – التنظيف الأساسي والأمان الحرج - 2026-03-13
 // ENTERPRISE FIX: Phase 0.2 – Full Runtime Docker Proof - 2026-03-13
@@ -54,6 +55,14 @@ const BackupCenter = lazy(() => import('./components/BackupCenter'));
 const Formulation = lazy(() => import('./components/Formulation'));
 const Reports = lazy(() => import('./components/Reports'));
 const OpeningBalancePage = lazy(() => import('./components/OpeningBalancePage'));
+const DashboardPage = lazy(() => import('./pages/Dashboard'));
+const ItemsPage = lazy(() => import('./pages/Items'));
+const OperationsPage = lazy(() => import('./pages/Operations'));
+const StocktakingPage = lazy(() => import('./pages/Stocktaking'));
+const ReportsPage = lazy(() => import('./pages/Reports'));
+const FormulationPage = lazy(() => import('./pages/Formulation'));
+const OpeningBalanceRoutePage = lazy(() => import('./pages/OpeningBalancePage'));
+const SettingsPage = lazy(() => import('./modules/settings/pages/Settings'));
 // DISABLED: AuthenticationPortal - Using LoginV2 only
 const LoginV2 = lazy(() => import('./components/LoginV2'));
 const AcceptInvitation = lazy(() => import('./components/AcceptInvitation'));
@@ -111,23 +120,26 @@ const AppContent = () => {
   const setInventoryUsers = useInventoryStore((state) => state.setUsers);
   const setInventoryRoles = useInventoryStore((state) => state.setRoles);
   const setReferenceData = useInventoryStore((state) => state.setReferenceData);
+  const systemSettings = useInventoryStore((state) => state.systemSettings);
+  const unloadingRules = useInventoryStore((state) => state.unloadingRules);
+  const reportConfig = useInventoryStore((state) => state.reportConfig);
+  const openingBalanceReportConfig = useInventoryStore((state) => state.openingBalanceReportConfig);
+  const formulas = useInventoryStore((state) => state.formulas);
+  const setSystemSettings = useInventoryStore((state) => state.setSystemSettings);
+  const setUnloadingRules = useInventoryStore((state) => state.setUnloadingRules);
+  const setReportConfig = useInventoryStore((state) => state.setReportConfig);
+  const setOpeningBalanceReportConfig = useInventoryStore((state) => state.setOpeningBalanceReportConfig);
+  const setFormulas = useInventoryStore((state) => state.setFormulas);
   const inventoryStoreLoading = useInventoryStore((state) => state.loading);
 
   // Core Data
   const [partners, setPartners] = useState<Partner[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
-  const [formulas, setFormulas] = useState<Formula[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
   // Settings
-  const [systemSettings, setSystemSettings] = useState<SystemSettings>({
-      companyName: '', currency: '', address: '', phone: ''
-  });
   const [appearance, setAppearance] = useState<OperationAppearance[]>([]);
-  const [reportConfig, setReportConfig] = useState<ReportColumnConfig[]>([]);
-  const [openingBalanceReportConfig, setOpeningBalanceReportConfig] = useState<ReportColumnConfig[]>([]);
-  const [unloadingRules, setUnloadingRules] = useState<UnloadingRule[]>([]);
 
   const [currentUser, setCurrentUser] = useState<User | undefined>(undefined);
   // ENTERPRISE FIX: authReady starts as false
@@ -659,12 +671,12 @@ const AppContent = () => {
   const handleUpdateSettings = (s: SystemSettings) => setSystemSettings(s);
   const handleUpdateAppearance = (a: OperationAppearance[]) => setAppearance(a);
   const handleUpdateReportConfig = (c: ReportColumnConfig[]) => setReportConfig(c);
-  const handleAddUnloadingRule = (r: UnloadingRule) => setUnloadingRules(prev => [...prev, r]);
-  const handleUpdateUnloadingRule = (rule: UnloadingRule) => setUnloadingRules(prev => prev.map(r => r.id === rule.id ? rule : r));
-  const handleDeleteUnloadingRule = (id: string) => setUnloadingRules(prev => prev.filter(r => r.id !== id));
-  const handleAddFormula = (f: Formula) => { setFormulas(prev => [...prev, f]); logAction('CREATE', 'FORMULA', f.name); };
-  const handleUpdateFormula = (f: Formula) => { setFormulas(prev => prev.map(fo => fo.id === f.id ? f : fo)); logAction('UPDATE', 'FORMULA', f.name); };
-  const handleDeleteFormula = (id: string) => { setFormulas(prev => prev.filter(f => f.id !== id)); logAction('DELETE', 'FORMULA', id); };
+  const handleAddUnloadingRule = (r: UnloadingRule) => setUnloadingRules([...unloadingRules, r]);
+  const handleUpdateUnloadingRule = (rule: UnloadingRule) => setUnloadingRules(unloadingRules.map(r => r.id === rule.id ? rule : r));
+  const handleDeleteUnloadingRule = (id: string) => setUnloadingRules(unloadingRules.filter(r => r.id !== id));
+  const handleAddFormula = (f: Formula) => { setFormulas([...formulas, f]); logAction('CREATE', 'FORMULA', f.name); };
+  const handleUpdateFormula = (f: Formula) => { setFormulas(formulas.map(fo => fo.id === f.id ? f : fo)); logAction('UPDATE', 'FORMULA', f.name); };
+  const handleDeleteFormula = (id: string) => { setFormulas(formulas.filter(f => f.id !== id)); logAction('DELETE', 'FORMULA', id); };
 
   const withLazyFallback = (element: React.ReactNode) => (
     <Suspense fallback={<RouteLoadingFallback />}>{element}</Suspense>
@@ -686,13 +698,13 @@ const AppContent = () => {
       <OfflineBanner />
       <Layout currentUser={currentUser} onLogout={handleLogout}>
       <Routes>
-        <Route path="/" element={renderProtectedRoute('inventory.view.stock', 'dashboard', withLazyFallback(<Dashboard />))} />
-        <Route path="/dashboard" element={renderProtectedRoute('inventory.view.stock', 'dashboard', withLazyFallback(<Dashboard />))} />
+        <Route path="/" element={renderProtectedRoute('inventory.view.stock', 'dashboard', withLazyFallback(<DashboardPage />))} />
+        <Route path="/dashboard" element={renderProtectedRoute('inventory.view.stock', 'dashboard', withLazyFallback(<DashboardPage />))} />
         <Route path="/balances" element={renderProtectedRoute('inventory.view.stock', 'balances', withLazyFallback(<StockBalances settings={systemSettings} />))} />
-        <Route path="/operations" element={renderProtectedRoute('inventory.view.operations', 'operations', withLazyFallback(<DailyOperations partners={partners} settings={systemSettings} unloadingRules={unloadingRules} onAddTransaction={handleAddTransactions} onUpdateTransaction={handleUpdateTransaction} onDeleteTransactions={handleDeleteTransactions} currentUserId={currentUser?.id} canExport={canExportInventory} canImport={canImportOperations} onExport={(rowCount) => logDataExport('operations', rowCount)} onImport={(rowCount) => logDataImport('operations', rowCount)} />))} />
-        <Route path="/transactions" element={renderProtectedRoute('inventory.view.operations', 'operations', withLazyFallback(<DailyOperations partners={partners} settings={systemSettings} unloadingRules={unloadingRules} onAddTransaction={handleAddTransactions} onUpdateTransaction={handleUpdateTransaction} onDeleteTransactions={handleDeleteTransactions} currentUserId={currentUser?.id} canExport={canExportInventory} canImport={canImportOperations} onExport={(rowCount) => logDataExport('operations', rowCount)} onImport={(rowCount) => logDataImport('operations', rowCount)} />))} />
-        <Route path="/items" element={renderProtectedRoute('inventory.view.items', 'items', withLazyFallback(<ItemManagement transactions={scopedTransactions} availableTags={tags} />))} />
-        <Route path="/stocktaking" element={renderProtectedRoute('inventory.view.stocktaking', 'stocktaking', withLazyFallback(<Stocktaking currentUserName={currentUser?.name} companyName={systemSettings.companyName} />))} />
+        <Route path="/operations" element={renderProtectedRoute('inventory.view.operations', 'operations', withLazyFallback(<OperationsPage />))} />
+        <Route path="/transactions" element={renderProtectedRoute('inventory.view.operations', 'operations', withLazyFallback(<OperationsPage />))} />
+        <Route path="/items" element={renderProtectedRoute('inventory.view.items', 'items', withLazyFallback(<ItemsPage />))} />
+        <Route path="/stocktaking" element={renderProtectedRoute('inventory.view.stocktaking', 'stocktaking', withLazyFallback(<StocktakingPage />))} />
         <Route path="/stock-card" element={renderProtectedRoute('inventory.reports.stock_card', 'stock-card', withLazyFallback(<StockCardReport items={scopedItems} transactions={scopedTransactions} companyName={systemSettings.companyName} companyAddress={systemSettings.address} companyPhone={systemSettings.phone} canExport={canExportInventory} onExport={(rowCount) => logDataExport('stock-card', rowCount)} />))} />
         <Route
           path="/statement"
@@ -714,46 +726,24 @@ const AppContent = () => {
         />
         <Route path="/partners" element={renderProtectedRoute('partners.view', 'partners', withLazyFallback(<Partners partners={partners} onAddPartner={handleAddPartner} onUpdatePartner={handleUpdatePartner} onDeletePartner={handleDeletePartner} transactions={scopedTransactions} orders={scopedOrders} />))} />
         <Route path="/orders" element={renderProtectedRoute('sales.view.orders', 'orders', withLazyFallback(<Orders orders={scopedOrders} partners={partners} items={scopedItems} onAddOrder={handleAddOrder} onUpdateOrder={handleUpdateOrder} onCompleteOrder={handleCompleteOrder} />))} />
-        <Route path="/reports" element={renderProtectedRoute('reports.view', 'reports', withLazyFallback(<Reports />))} />
-        <Route path="/formulation" element={renderProtectedRoute('formulation.view', 'formulation', withLazyFallback(<Formulation formulas={formulas} onAddFormula={handleAddFormula} onUpdateFormula={handleUpdateFormula} onDeleteFormula={handleDeleteFormula} />))} />
-        <Route path="/opening-balance" element={renderProtectedRoute('inventory.view.opening_balances', 'opening-balance', withLazyFallback(<OpeningBalancePage columnConfig={openingBalanceReportConfig} onUpdateColumnConfig={setOpeningBalanceReportConfig} />))} />
+        <Route path="/reports" element={renderProtectedRoute('reports.view', 'reports', withLazyFallback(<ReportsPage />))} />
+        <Route path="/formulation" element={renderProtectedRoute('formulation.view', 'formulation', withLazyFallback(<FormulationPage />))} />
+        <Route path="/opening-balance" element={renderProtectedRoute('inventory.view.opening_balances', 'opening-balance', withLazyFallback(<OpeningBalanceRoutePage />))} />
         <Route
           path="/settings"
           element={renderProtectedRoute(
             'settings.view',
             'settings',
             withLazyFallback(
-              <Settings
-                users={users}
-                onAddUser={handleAddUser}
-                onUpdateUser={handleUpdateUser}
-                onDeleteUser={handleDeleteUser}
-                tags={tags}
-                onAddTag={handleAddTag}
-                onDeleteTag={handleDeleteTag}
-                units={units}
-                onAddUnit={addUnit}
-                onDeleteUnit={deleteUnit}
-                categories={categories}
-                onAddCategory={addCategory}
-                onDeleteCategory={deleteCategory}
+              <SettingsPage
                 settings={systemSettings}
                 onUpdateSettings={handleUpdateSettings}
-                appearance={appearance}
-                onUpdateAppearance={handleUpdateAppearance}
                 reportConfig={reportConfig}
                 onUpdateReportConfig={handleUpdateReportConfig}
                 openingBalanceReportConfig={openingBalanceReportConfig}
                 onUpdateOpeningBalanceReportConfig={setOpeningBalanceReportConfig}
-                unloadingRules={unloadingRules}
-                onAddUnloadingRule={handleAddUnloadingRule}
-                onDeleteUnloadingRule={handleDeleteUnloadingRule}
-                onUpdateUnloadingRule={handleUpdateUnloadingRule}
-                allItems={scopedItems}
-                allTransactions={scopedTransactions}
                 auditLogs={auditLogs}
                 currentUser={currentUser}
-                onSwitchUser={handleSwitchCurrentUser}
               />
             )
           )}

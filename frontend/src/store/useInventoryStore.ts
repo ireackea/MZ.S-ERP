@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
 // ENTERPRISE FIX: Phase 1 – PostgreSQL Pivot + Zustand Single Source of Truth - 2026-03-13
 // ENTERPRISE FIX: Phase 0 - التنظيف الأساسي والتحضير - 2026-03-13
 import { create } from 'zustand';
@@ -17,7 +18,18 @@ import { getTransactionsFromApi } from '@services/transactionsService';
 import { fetchRoles, fetchUsers, type RoleDto, type UserDto } from '@services/usersService';
 import apiClient from '@api/client';
 import { getIamConfig, normalizeUsers } from '../services/iamService';
-import type { GridColumnPreference, Item, ItemSortMode, RoleDefinition, Transaction, User } from '../types';
+import type {
+  Formula,
+  GridColumnPreference,
+  Item,
+  ItemSortMode,
+  ReportColumnConfig,
+  RoleDefinition,
+  SystemSettings,
+  Transaction,
+  UnloadingRule,
+  User,
+} from '../types';
 
 type SoftMap = Record<string, { deletedAt: number; deletedBy: string }>;
 type SortState = { mode: ItemSortMode; manualOrder: string[] };
@@ -56,12 +68,19 @@ type Store = {
   openingBalancesError: string | null;
   users: User[];
   roles: RoleDefinition[];
+  systemSettings: SystemSettings;
+  unloadingRules: UnloadingRule[];
+  reportConfig: ReportColumnConfig[];
+  openingBalanceReportConfig: ReportColumnConfig[];
+  formulas: Formula[];
   units: string[];
   categories: string[];
   gridPreferences: GridPreferenceMap;
   gridDisplayPolicies: GridDisplayPolicyMap;
   operationPrintConfig: Record<string, unknown>;
   operationPrintTemplates: Array<Record<string, unknown>>;
+  stocktakingPrintConfig: Record<string, unknown>;
+  stocktakingPrintTemplates: Array<Record<string, unknown>>;
   loading: boolean;
   syncing: boolean;
   error: string | null;
@@ -78,6 +97,11 @@ type Store = {
   setOpeningBalanceRows: (financialYear: number, rows: OpeningBalanceStoreRow[]) => void;
   setUsers: (users: User[]) => void;
   setRoles: (roles: RoleDefinition[]) => void;
+  setSystemSettings: (settings: SystemSettings) => void;
+  setUnloadingRules: (rules: UnloadingRule[]) => void;
+  setReportConfig: (config: ReportColumnConfig[]) => void;
+  setOpeningBalanceReportConfig: (config: ReportColumnConfig[]) => void;
+  setFormulas: (formulas: Formula[]) => void;
   setReferenceData: (data: { units?: string[]; categories?: string[] }) => void;
   getGridPreferences: (moduleKey: string, defaults: GridColumnPreference[]) => GridColumnPreference[];
   setGridPreferences: (moduleKey: string, columns: GridColumnPreference[]) => void;
@@ -86,6 +110,8 @@ type Store = {
   setGridDisplayPolicy: (moduleKey: string, policy: GridDisplayPolicy) => void;
   setOperationPrintConfig: (config: Record<string, unknown>) => void;
   setOperationPrintTemplates: (templates: Array<Record<string, unknown>>) => void;
+  setStocktakingPrintConfig: (config: Record<string, unknown>) => void;
+  setStocktakingPrintTemplates: (templates: Array<Record<string, unknown>>) => void;
   exportRowsToExcel: (options: { fileName: string; sheetName?: string; rows: Array<Record<string, unknown>> }) => Promise<void>;
   exportSheetsToExcel: (options: { fileName: string; sheets: ExportSheet[] }) => Promise<void>;
   exportPdfReport: (options: { endpoint: string; payload: unknown; fileName: string }) => Promise<void>;
@@ -115,6 +141,13 @@ export const clearLegacyInventoryBootstrapState = () => {
 };
 
 const DEFAULT_ACTOR: ActorInfo = { id: 'system', name: 'InventoryStore' };
+
+const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
+  companyName: '',
+  currency: '',
+  address: '',
+  phone: '',
+};
 
 const n = (v: unknown, f: number) => (Number.isFinite(Number(v)) ? Number(v) : f);
 
@@ -370,12 +403,19 @@ export const useInventoryStore = create<Store>()(
       openingBalancesError: null,
       users: [],
       roles: [],
+      systemSettings: DEFAULT_SYSTEM_SETTINGS,
+      unloadingRules: [],
+      reportConfig: [],
+      openingBalanceReportConfig: [],
+      formulas: [],
       units: [],
       categories: [],
       gridPreferences: {},
       gridDisplayPolicies: {},
       operationPrintConfig: {},
       operationPrintTemplates: [],
+      stocktakingPrintConfig: {},
+      stocktakingPrintTemplates: [],
       loading: false,
       syncing: false,
       error: null,
@@ -578,6 +618,26 @@ export const useInventoryStore = create<Store>()(
         set({ roles: [...roles] });
       },
 
+      setSystemSettings: (settings) => {
+        set({ systemSettings: { ...DEFAULT_SYSTEM_SETTINGS, ...settings } });
+      },
+
+      setUnloadingRules: (rules) => {
+        set({ unloadingRules: [...rules] });
+      },
+
+      setReportConfig: (config) => {
+        set({ reportConfig: [...config] });
+      },
+
+      setOpeningBalanceReportConfig: (config) => {
+        set({ openingBalanceReportConfig: [...config] });
+      },
+
+      setFormulas: (formulas) => {
+        set({ formulas: [...formulas] });
+      },
+
       getGridPreferences: (moduleKey, defaults) => {
         const stored = get().gridPreferences[moduleKey] || [];
         return normalizeGridPreferences(defaults, stored);
@@ -622,6 +682,14 @@ export const useInventoryStore = create<Store>()(
 
       setOperationPrintTemplates: (templates) => {
         set({ operationPrintTemplates: [...templates] });
+      },
+
+      setStocktakingPrintConfig: (config) => {
+        set({ stocktakingPrintConfig: { ...config } });
+      },
+
+      setStocktakingPrintTemplates: (templates) => {
+        set({ stocktakingPrintTemplates: [...templates] });
       },
 
       exportRowsToExcel: async ({ fileName, sheetName = 'Sheet1', rows }) => {
