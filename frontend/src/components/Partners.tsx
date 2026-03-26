@@ -222,7 +222,7 @@ const Partners: React.FC<PartnersProps> = ({ partners, onAddPartner, onUpdatePar
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  78778& *
+                  الاسم *
                 </label>
                 <input
                   type="text"
@@ -235,7 +235,7 @@ const Partners: React.FC<PartnersProps> = ({ partners, onAddPartner, onUpdatePar
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  788!778~ *
+                  الهاتف *
                 </label>
                 <div className="relative">
                   <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
@@ -251,7 +251,7 @@ const Partners: React.FC<PartnersProps> = ({ partners, onAddPartner, onUpdatePar
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  7878 878 
+                  العنوان
                 </label>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
@@ -270,14 +270,14 @@ const Partners: React.FC<PartnersProps> = ({ partners, onAddPartner, onUpdatePar
                   onClick={handleCloseModal}
                   className="flex-1 py-2 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition"
                 >
-                  78777
+                  إلغاء
                 </button>
                 <button
                   type="submit"
                   className="flex-1 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition"
                 >
                   <Save className="w-4 h-4 inline ml-2" />
-                  78~7
+                  حفظ
                 </button>
               </div>
             </form>
@@ -291,17 +291,17 @@ const Partners: React.FC<PartnersProps> = ({ partners, onAddPartner, onUpdatePar
           <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md p-6">
             <div className="flex items-center gap-3 mb-4">
               <AlertTriangle className="w-6 h-6 text-amber-500" />
-              <h3 className="text-xl font-bold text-slate-900 dark:text-white">7788y7 78778~</h3>
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white">تأكيد الحذف</h3>
             </div>
 
             <p className="text-slate-600 dark:text-slate-300 mb-4">
-              8!8 78 7 8&7787 8&8  778~ "<span className="font-bold">{deleteModal.partnerName}</span>"7
+              هل أنت متأكد من حذف الشريك <span className="font-bold">{deleteModal.partnerName}</span>؟
             </p>
 
             {deleteModal.usageCount > 0 && (
               <div className="bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-xl p-3 mb-4">
                 <p className="text-amber-800 dark:text-amber-200 text-sm">
-                  ①︈ 8!77 78778y8 8&7777 78 {deleteModal.usageCount} 7787/787
+                  ملاحظة: هذا الشريك مرتبط بعدد {deleteModal.usageCount} سجل أو طلب.
                 </p>
               </div>
             )}
@@ -311,14 +311,14 @@ const Partners: React.FC<PartnersProps> = ({ partners, onAddPartner, onUpdatePar
                 onClick={() => setDeleteModal({ ...deleteModal, isOpen: false })}
                 className="flex-1 py-2 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition"
               >
-                78777
+                إلغاء
               </button>
               <button
                 onClick={confirmDelete}
                 className="flex-1 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition"
               >
                 <Trash2 className="w-4 h-4 inline ml-2" />
-                778~
+                حذف
               </button>
             </div>
           </div>

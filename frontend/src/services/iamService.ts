@@ -66,6 +66,9 @@ const permissionCatalog: PermissionDefinition[] = [
   { id: 'settings.update.system', module: 'settings', resource: 'system', action: 'update', label: 'تعديل الإعدادات' },
   { id: 'backup.create', module: 'settings', resource: 'backup', action: 'create', label: 'إنشاء نسخة احتياطية' },
   { id: 'backup.restore', module: 'settings', resource: 'backup', action: 'update', label: 'استعادة النسخة الاحتياطية' },
+  { id: 'backup.schedule', module: 'settings', resource: 'backup', action: 'update', label: 'إدارة جدولة النسخ الاحتياطية' },
+  { id: 'backup.download', module: 'settings', resource: 'backup', action: 'export', label: 'تنزيل النسخ الاحتياطية' },
+  { id: 'backup.delete', module: 'settings', resource: 'backup', action: 'delete', label: 'حذف النسخ الاحتياطية' },
 
   { id: 'users.view.management', module: 'users', resource: 'management', action: 'view', label: 'عرض المستخدمين' },
   { id: 'users.create.management', module: 'users', resource: 'management', action: 'create', label: 'إضافة مستخدم' },

@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Eye, EyeOff, Loader2, Lock, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { login, type AuthLoginResponse } from '@services/authService';
+import { login, resetLoginAttempts, type AuthLoginResponse } from '@services/authService';
 
 type LoginUser = {
   id?: string;
@@ -35,6 +35,7 @@ const ERROR_MESSAGES: Record<number, string> = {
   400: 'اسم المستخدم أو كلمة المرور غير صحيحة. يرجى التحقق من البيانات.',
   401: 'اسم المستخدم أو كلمة المرور غير صحيحة.',
   403: 'ليس لديك صلاحية للوصول إلى هذا النظام.',
+  429: 'Too many requests. يرجى الانتظار قليلًا ثم إعادة المحاولة.',
   422: 'تعذر التحقق من بيانات تسجيل الدخول. يرجى المحاولة مرة أخرى.',
   500: 'حدث خطأ غير متوقع في الخادم. يرجى المحاولة لاحقًا.',
 };
@@ -50,6 +51,11 @@ const resolveErrorMessage = (error: unknown) => {
   return ERROR_MESSAGES[status || 0] || serverMessage || 'تعذر تسجيل الدخول. يرجى المحاولة مرة أخرى.';
 };
 
+const resolveErrorStatus = (error: unknown) => {
+  const status = (error as any)?.response?.status as number | undefined;
+  return typeof status === 'number' ? status : null;
+};
+
 const LoginV2: React.FC<LoginV2Props> = ({ users = [], onAuthenticated }) => {
   const navigate = useNavigate();
 
@@ -58,13 +64,18 @@ const LoginV2: React.FC<LoginV2Props> = ({ users = [], onAuthenticated }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [isResettingAttempts, setIsResettingAttempts] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<{ username?: string; password?: string }>({});
 
   useEffect(() => {
     if (!error && !validationErrors.username && !validationErrors.password) return;
     if (!username.trim() && !password) return;
     setError(null);
+    setErrorStatus(null);
+    setNotice(null);
     setValidationErrors({});
   }, [username, password]);
 
@@ -96,9 +107,10 @@ const LoginV2: React.FC<LoginV2Props> = ({ users = [], onAuthenticated }) => {
     return Object.keys(nextErrors).length === 0;
   };
 
-  const handleLogin = async (event: React.FormEvent) => {
-    event.preventDefault();
+  const submitLogin = async () => {
     setError(null);
+    setErrorStatus(null);
+    setNotice(null);
 
     if (!validateForm()) {
       return;
@@ -119,9 +131,40 @@ const LoginV2: React.FC<LoginV2Props> = ({ users = [], onAuthenticated }) => {
       onAuthenticated?.(result.user, redirectPath);
       navigate(redirectPath, { replace: true });
     } catch (loginError) {
+      setErrorStatus(resolveErrorStatus(loginError));
       setError(resolveErrorMessage(loginError));
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleLogin = async (event: React.FormEvent) => {
+    event.preventDefault();
+    await submitLogin();
+  };
+
+  const handleRetryLogin = async () => {
+    await submitLogin();
+  };
+
+  const handleResetAttempts = async () => {
+    const normalizedUsername = username.trim();
+    if (!normalizedUsername) {
+      setValidationErrors((prev) => ({ ...prev, username: 'اسم المستخدم أو البريد الإلكتروني مطلوب.' }));
+      return;
+    }
+
+    setIsResettingAttempts(true);
+    try {
+      const result = await resetLoginAttempts(normalizedUsername);
+      setError(null);
+      setErrorStatus(null);
+      setNotice(result.message || 'تمت إعادة ضبط المحاولات. يمكنك تسجيل الدخول من جديد.');
+    } catch (resetError) {
+      setErrorStatus(resolveErrorStatus(resetError));
+      setError(resolveErrorMessage(resetError));
+    } finally {
+      setIsResettingAttempts(false);
     }
   };
 
@@ -170,9 +213,39 @@ const LoginV2: React.FC<LoginV2Props> = ({ users = [], onAuthenticated }) => {
               </div>
 
               <form className="space-y-5" onSubmit={handleLogin}>
+                {notice && (
+                  <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm leading-7 text-emerald-100">
+                    {notice}
+                  </div>
+                )}
+
                 {error && (
-                  <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm leading-7 text-red-100">
-                    {error}
+                  <div className="space-y-3 rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm leading-7 text-red-100">
+                    <div>{error}</div>
+                    {errorStatus === 429 && (
+                      <div className="flex flex-wrap gap-2">
+                        {username.trim() && password && (
+                          <button
+                            type="button"
+                            onClick={handleRetryLogin}
+                            disabled={isLoading || isResettingAttempts}
+                            className="inline-flex items-center justify-center rounded-xl border border-red-300/40 bg-white/10 px-4 py-2 text-sm font-bold text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            إعادة المحاولة
+                          </button>
+                        )}
+                        {username.trim() && (
+                          <button
+                            type="button"
+                            onClick={handleResetAttempts}
+                            disabled={isLoading || isResettingAttempts}
+                            className="inline-flex items-center justify-center rounded-xl border border-amber-300/40 bg-amber-500/10 px-4 py-2 text-sm font-bold text-amber-50 transition hover:bg-amber-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {isResettingAttempts ? 'جارٍ إعادة الضبط...' : 'إعادة ضبط المحاولات'}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 

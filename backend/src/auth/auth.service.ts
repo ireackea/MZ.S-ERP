@@ -506,6 +506,60 @@ export class AuthService {
       },
     };
   }
+
+  async resetLoginAttempts(
+    username: string,
+    clientMeta?: { ipAddress?: string; userAgent?: string },
+  ) {
+    const normalized = String(username || '').trim();
+    if (!normalized) {
+      throw new BadRequestException('اسم المستخدم أو البريد الإلكتروني مطلوب.');
+    }
+
+    const user = await this.prisma.user.findFirst({
+      where: {
+        OR: [{ username: normalized }, { email: normalized }],
+      },
+      include: {
+        role: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (user) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          failedAttempts: 0,
+          lockoutUntil: null,
+        },
+      });
+
+      await this.auditService.log({
+        action: 'USER_UNLOCK',
+        actorId: user.id,
+        actorUsername: user.username || user.email || normalized,
+        actorRole: user.role?.name || 'Viewer',
+        targetUserId: user.id,
+        targetResource: 'auth.reset-attempts',
+        status: 'success',
+        message: 'Login attempts and lockout metadata were reset',
+        metadata: {
+          ipAddress: this.resolveClientIp(clientMeta),
+          userAgent: this.resolveUserAgent(clientMeta),
+        },
+      });
+    }
+
+    return {
+      success: true,
+      message: 'تمت إعادة ضبط المحاولات. يمكنك تسجيل الدخول من جديد.',
+    };
+  }
+
   async verifyToken(token: string): Promise<JwtUser> {
     const payload = await this.jwtService.verifyAsync(token, {
       secret: this.getJwtSecret(),

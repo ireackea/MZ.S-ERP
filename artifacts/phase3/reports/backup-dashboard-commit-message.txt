@@ -1,0 +1,11 @@
+fix(backup,settings): harden backup dashboard and verify adjacent settings tabs
+
+- repair Backup Dashboard Arabic UI text and action labels
+- align frontend backup permissions with backend contract
+- add schedule support for weekly and monthly execution parameters
+- guard create, schedule, restore, download, and delete actions by permission
+- replace unstable dashboard chart area with deterministic storage summary cards
+- add PostgreSQL-compatible Prisma snapshot backup and restore fallback
+- resync PostgreSQL sequences after snapshot restore
+- add dedicated backup dashboard E2E coverage
+- add settings tabs regression smoke coverage for neighboring Settings sections

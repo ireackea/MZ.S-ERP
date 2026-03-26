@@ -21,7 +21,7 @@ const PERMISSION_ALIASES: Record<string, string[]> = {
   'settings.view.general': ['settings.view.system'],
   'settings.view.users': ['users.view.management'],
   'settings.view.permissions': ['users.view.management'],
-  'settings.view.backup': ['backup.create', 'backup.restore', 'backup.view'],
+  'settings.view.backup': ['backup.create', 'backup.restore', 'backup.schedule', 'backup.download', 'backup.delete', 'backup.view'],
   'settings.view.reset': ['admin.reset_system', 'system.reset'],
   'settings.view.audit': ['users.audit'],
   'settings.view.offline': ['settings.view.system'],
@@ -119,6 +119,8 @@ export const usePermissions = () => {
       createBackup: hasAny(['backup.create', 'backup.*']),
       restoreBackup: hasAny(['backup.restore', 'backup.*']),
       scheduleBackup: hasAny(['backup.schedule', 'backup.*']),
+      downloadBackup: hasAny(['backup.download', 'backup.*']),
+      deleteBackup: hasAny(['backup.delete', 'backup.*']),
 
       viewTheme: hasAny(['theme.view', 'theme.*']),
       updateTheme: hasAny(['theme.update', 'theme.*']),

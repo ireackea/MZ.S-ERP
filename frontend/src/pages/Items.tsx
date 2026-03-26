@@ -31,6 +31,7 @@ const ItemsPage: React.FC = () => {
   const {
     items,
     categories,
+    units,
     loading,
     error,
     soft,
@@ -265,17 +266,18 @@ const ItemsPage: React.FC = () => {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              aria-label="بحث الأصناف"
               className="w-full rounded-lg border border-slate-300 py-2 pr-8 text-sm"
               placeholder="بحث..."
             />
           </div>
-          <select value={category} onChange={(e) => setCategory(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <select aria-label="تصفية حسب التصنيف" value={category} onChange={(e) => setCategory(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
             <option value="all">كل التصنيفات</option>
             {categories.map((c) => (
               <option key={c} value={c}>{c}</option>
             ))}
           </select>
-          <select value={sortMode} onChange={(e) => setSortMode(e.target.value as ItemSortMode)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <select aria-label="ترتيب الأصناف" value={sortMode} onChange={(e) => setSortMode(e.target.value as ItemSortMode)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
             {SORTS.map((s) => (
               <option key={s.value} value={s.value}>{s.label}</option>
             ))}
@@ -342,7 +344,7 @@ const ItemsPage: React.FC = () => {
           <thead className="bg-slate-100">
             <tr>
               <th className="px-3 py-2 text-right">
-                <button onClick={selectAll}>
+                <button type="button" aria-label={allSelected ? 'إلغاء تحديد كل الأصناف' : 'تحديد كل الأصناف'} title={allSelected ? 'إلغاء تحديد كل الأصناف' : 'تحديد كل الأصناف'} onClick={selectAll}>
                   {allSelected ? <CheckSquare size={16} /> : <Square size={16} />}
                 </button>
               </th>
@@ -379,7 +381,7 @@ const ItemsPage: React.FC = () => {
             {!loading && !error && visible.map((i) => (
               <tr key={String(i.id)} className="border-t border-slate-200 hover:bg-slate-50">
                 <td className="px-3 py-2">
-                  <button onClick={() => toggle(String(i.id))}>
+                  <button type="button" aria-label={selected.has(String(i.id)) ? `إلغاء تحديد الصنف ${i.name}` : `تحديد الصنف ${i.name}`} title={selected.has(String(i.id)) ? `إلغاء تحديد الصنف ${i.name}` : `تحديد الصنف ${i.name}`} onClick={() => toggle(String(i.id))}>
                     {selected.has(String(i.id)) ? <CheckSquare size={16} /> : <Square size={16} />}
                   </button>
                 </td>
@@ -392,20 +394,23 @@ const ItemsPage: React.FC = () => {
                   {sortMode === 'manual_locked' && !showArchived && (
                     <>
                       <button onClick={() => move(String(i.id), 'up')} className="ml-1 rounded border border-slate-300 px-1">
-                        â‘
+                        أعلى
                       </button>
                       <button onClick={() => move(String(i.id), 'down')} className="ml-1 rounded border border-slate-300 px-1">
-                        â“
+                        أسفل
                       </button>
                     </>
                   )}
                   {canEdit && !showArchived && (
-                    <button onClick={() => openEdit(i)} className="ml-1 rounded border border-slate-300 p-1">
+                    <button type="button" aria-label={`تعديل الصنف ${i.name}`} title={`تعديل الصنف ${i.name}`} onClick={() => openEdit(i)} className="ml-1 rounded border border-slate-300 p-1">
                       <Edit3 size={14} />
                     </button>
                   )}
                   {showArchived && canDelete && (
                     <button
+                      type="button"
+                      aria-label={`حذف الصنف ${i.name} نهائياً`}
+                      title={`حذف الصنف ${i.name} نهائياً`}
                       onClick={async () => {
                         await purge([String(i.id)], actorId, actorName);
                         toast.success('تم حذف السجل نهائياً');
@@ -429,13 +434,23 @@ const ItemsPage: React.FC = () => {
             <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
               <input required placeholder="الاسم" value={form.name} onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
               <input placeholder="الكود" value={form.code} onChange={(e) => setForm((s) => ({ ...s, code: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
-              <input required placeholder="التصنيف" value={form.category} onChange={(e) => setForm((s) => ({ ...s, category: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
-              <input required placeholder="الوحدة" value={form.unit} onChange={(e) => setForm((s) => ({ ...s, unit: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
+              <input required list="item-categories" placeholder="التصنيف" value={form.category} onChange={(e) => setForm((s) => ({ ...s, category: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
+              <input required list="item-units" placeholder="الوحدة" value={form.unit} onChange={(e) => setForm((s) => ({ ...s, unit: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
               <input type="number" placeholder="Min" value={form.minLimit} onChange={(e) => setForm((s) => ({ ...s, minLimit: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
               <input type="number" placeholder="Max" value={form.maxLimit} onChange={(e) => setForm((s) => ({ ...s, maxLimit: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
               <input type="number" placeholder="Order Limit" value={form.orderLimit} onChange={(e) => setForm((s) => ({ ...s, orderLimit: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
               <input type="number" placeholder="Current Stock" value={form.currentStock} onChange={(e) => setForm((s) => ({ ...s, currentStock: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
             </div>
+            <datalist id="item-categories">
+              {categories.map((entry) => (
+                <option key={entry} value={entry} />
+              ))}
+            </datalist>
+            <datalist id="item-units">
+              {units.map((entry) => (
+                <option key={entry} value={entry} />
+              ))}
+            </datalist>
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" onClick={() => setFormOpen(false)} className="rounded border border-slate-300 px-3 py-2 text-sm">
                 إلغاء
@@ -453,12 +468,22 @@ const ItemsPage: React.FC = () => {
           <div className="w-full max-w-xl rounded-2xl bg-white p-5 shadow-2xl">
             <h3 className="mb-3 text-lg font-bold">تعديل جماعي ({selected.size})</h3>
             <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-              <input placeholder="التصنيف الجديد (اختياري)" value={bulk.category} onChange={(e) => setBulk((s) => ({ ...s, category: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
-              <input placeholder="الوحدة الجديدة (اختياري)" value={bulk.unit} onChange={(e) => setBulk((s) => ({ ...s, unit: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
+              <input list="bulk-categories" placeholder="التصنيف الجديد (اختياري)" value={bulk.category} onChange={(e) => setBulk((s) => ({ ...s, category: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
+              <input list="bulk-units" placeholder="الوحدة الجديدة (اختياري)" value={bulk.unit} onChange={(e) => setBulk((s) => ({ ...s, unit: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
               <input type="number" placeholder="Min" value={bulk.minLimit} onChange={(e) => setBulk((s) => ({ ...s, minLimit: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
               <input type="number" placeholder="Max" value={bulk.maxLimit} onChange={(e) => setBulk((s) => ({ ...s, maxLimit: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm" />
               <input type="number" placeholder="Order Limit" value={bulk.orderLimit} onChange={(e) => setBulk((s) => ({ ...s, orderLimit: e.target.value }))} className="rounded border border-slate-300 px-3 py-2 text-sm md:col-span-2" />
             </div>
+            <datalist id="bulk-categories">
+              {categories.map((entry) => (
+                <option key={entry} value={entry} />
+              ))}
+            </datalist>
+            <datalist id="bulk-units">
+              {units.map((entry) => (
+                <option key={entry} value={entry} />
+              ))}
+            </datalist>
             <div className="mt-4 flex justify-end gap-2">
               <button onClick={() => setBulkOpen(false)} className="rounded border border-slate-300 px-3 py-2 text-sm">
                 إلغاء

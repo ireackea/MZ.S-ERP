@@ -10,9 +10,9 @@ import * as fs from 'fs';
 import { json, urlencoded } from 'express';
 import { NextFunction, Request, Response } from 'express';
 import cookieParser from 'cookie-parser';
-import rateLimit from 'express-rate-limit';
 import { PrismaService } from './prisma.service';
 import { AuditService } from './audit/audit.service';
+import { extractClientIp, globalRateLimiter } from './security/global-rate-limit';
 
 // ENTERPRISE FIX: Phase 0 - Fatal Errors Fixed - 2026-03-02
 
@@ -77,13 +77,6 @@ function matchesConfiguredOrigin(origin: string, allowedOrigins: string[]): bool
 
 function isTrustedLocalOrigin(origin: string): boolean {
   return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
-}
-
-function extractIp(req: Request): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (Array.isArray(forwarded) && forwarded[0]) return forwarded[0].split(',')[0].trim();
-  if (typeof forwarded === 'string' && forwarded) return forwarded.split(',')[0].trim();
-  return req.ip || 'unknown';
 }
 
 function normalizeRequestPath(req: Request): string {
@@ -190,21 +183,7 @@ async function bootstrap() {
 
   // ENTERPRISE FIX: Phase 0 - Fatal Errors Fixed - 2026-03-02
   app.use(cookieParser());
-  app.use(
-    rateLimit({
-      windowMs: 15 * 60 * 1000,
-      max: 100,
-      standardHeaders: true,
-      legacyHeaders: false,
-      keyGenerator: (req) => extractIp(req),
-      handler: (_req, res) => {
-        res.status(429).json({
-          message: 'Too many requests',
-          code: 'RATE_LIMIT_EXCEEDED',
-        });
-      },
-    }),
-  );
+  app.use(globalRateLimiter);
 
   app.use((req: Request, res: Response, next: NextFunction) => {
     const start = Date.now();
@@ -221,7 +200,7 @@ async function bootstrap() {
         path: normalizeRequestPath(req),
         statusCode: res.statusCode,
         durationMs,
-        ip: extractIp(req),
+        ip: extractClientIp(req),
         userAgent: req.headers['user-agent'] || 'unknown',
         timestamp: new Date().toISOString(),
       };
@@ -235,7 +214,7 @@ async function bootstrap() {
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.url.includes('auth') || req.url.includes('/auth')) {
       console.log(`\n[Auth Monitor] [Backend Entry] Incoming: ${req.method} ${req.url}`);
-      console.log(`   [Auth Monitor] IP: ${extractIp(req)}`);
+      console.log(`   [Auth Monitor] IP: ${extractClientIp(req)}`);
       if (req.body && Object.keys(req.body).length > 0) {
         console.log(`   [Auth Monitor] Body: ${JSON.stringify(req.body).substring(0, 100)}`);
       }

@@ -2,9 +2,10 @@ import fs from 'fs';
 import path from 'path';
 
 const controlOrMarkerRegex = /[\x00-\x08\x0B\x0C\x0E-\x1F]|ï؟½|⬑|␦|7"7/u;
+const ignoreLineMarker = 'encoding-check-ignore-line';
 
 const projectRoot = process.cwd();
-const extensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.json', '.mjs', '.cjs']);
+const extensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.json', '.mjs', '.cjs', '.html']);
 const ignoredDirs = new Set([
   'node_modules',
   'dist',
@@ -112,6 +113,17 @@ function extractHumanTextCandidates(line) {
   return candidates;
 }
 
+function extractJsxVisibleText(line) {
+  if (!line.includes('<') || !line.includes('>')) return '';
+
+  return line
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\{[^}]*\}/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function looksLikeTokenizedMojibake(segment) {
   if (!segment) return false;
   if (controlOrMarkerRegex.test(segment)) return true;
@@ -119,13 +131,14 @@ function looksLikeTokenizedMojibake(segment) {
   const compact = segment.trim();
   if (!compact) return false;
 
-  const tokenChars = (compact.match(/[0-9&~!y]/g) || []).length;
+  const digit78Chars = (compact.match(/[78]/g) || []).length;
   const markerChars = (compact.match(/[&~!y]/g) || []).length;
-  if (tokenChars < 6) return false;
+  if (digit78Chars < 2) return false;
   if (markerChars === 0) return false;
 
+  const tokenChars = digit78Chars + markerChars;
   const ratio = tokenChars / compact.length;
-  return ratio >= 0.45;
+  return ratio >= 0.35;
 }
 
 function findTokenizedMojibake(text) {
@@ -134,7 +147,14 @@ function findTokenizedMojibake(text) {
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
+    if (line.includes(ignoreLineMarker)) continue;
+
     const candidates = extractHumanTextCandidates(line);
+    const jsxVisibleText = extractJsxVisibleText(line);
+    if (jsxVisibleText) {
+      candidates.push(jsxVisibleText);
+    }
+
     const hit = candidates.find(looksLikeTokenizedMojibake);
     if (!hit) continue;
 

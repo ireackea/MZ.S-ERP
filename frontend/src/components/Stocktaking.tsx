@@ -1327,17 +1327,17 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                     <option key={template.id} value={template.id}>{template.name}</option>
                   ))}
                 </select>
-                <button onClick={deleteSelectedPrintTemplate} className="px-3 py-2 text-xs bg-red-50 border border-red-200 text-red-700 rounded-lg hover:bg-red-100">778~ 8787</button>
-                <button onClick={() => setShowPrintStudio(false)} className="px-3 py-2 rounded-lg border border-slate-300 text-slate-600 hover:text-red-600">77878</button>
+                <button onClick={deleteSelectedPrintTemplate} className="px-3 py-2 text-xs bg-red-50 border border-red-200 text-red-700 rounded-lg hover:bg-red-100">حذف القالب</button>
+                <button onClick={() => setShowPrintStudio(false)} className="px-3 py-2 rounded-lg border border-slate-300 text-slate-600 hover:text-red-600">إغلاق</button>
               </div>
             </div>
 
             <div className="flex-1 grid grid-cols-12 min-h-0">
               <div className="col-span-3 border-r border-slate-200 bg-white overflow-y-auto">
                 <div className="p-3 border-b border-slate-200 bg-slate-50 flex gap-2">
-                  <button onClick={() => setActivePrintTab('layout')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${activePrintTab === 'layout' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-300 text-slate-600'}`}>787778y7</button>
-                  <button onClick={() => setActivePrintTab('content')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${activePrintTab === 'content' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-300 text-slate-600'}`}>788&77880</button>
-                  <button onClick={() => setActivePrintTab('branding')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${activePrintTab === 'branding' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-300 text-slate-600'}`}>787878&77</button>
+                  <button onClick={() => setActivePrintTab('layout')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${activePrintTab === 'layout' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-300 text-slate-600'}`}>التخطيط</button>
+                  <button onClick={() => setActivePrintTab('content')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${activePrintTab === 'content' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-300 text-slate-600'}`}>المحتوى</button>
+                  <button onClick={() => setActivePrintTab('branding')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${activePrintTab === 'branding' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-300 text-slate-600'}`}>الهوية البصرية</button>
                 </div>
 
                 <div className="p-4 space-y-4 text-xs">
@@ -1429,7 +1429,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                             />
                           </div>
                           <label className="flex items-center justify-between p-2 border border-slate-200 rounded-lg">
-                            <span>78777 777 787878y7 8~8y 88 78~77</span>
+                            <span>تكرار صف الترويسة في كل صفحة</span>
                             <input
                               type="checkbox"
                               checked={printConfig.repeatHeaderEachPage}

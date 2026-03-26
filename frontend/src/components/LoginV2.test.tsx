@@ -10,12 +10,13 @@ import { render, screen, waitFor, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import LoginV2 from './LoginV2';
-import { login } from '@services/authService';
+import { login, resetLoginAttempts } from '@services/authService';
 
 const mockNavigate = vi.fn();
 
 vi.mock('@services/authService', () => ({
   login: vi.fn(),
+  resetLoginAttempts: vi.fn(),
 }));
 
 vi.mock('react-router-dom', async () => {
@@ -36,6 +37,10 @@ const renderLogin = (props: Partial<React.ComponentProps<typeof LoginV2>> = {}) 
 describe('LoginV2', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(resetLoginAttempts).mockResolvedValue({
+      success: true,
+      message: 'تمت إعادة ضبط المحاولات. يمكنك تسجيل الدخول من جديد.',
+    });
   });
 
   afterEach(() => {
@@ -112,6 +117,74 @@ describe('LoginV2', () => {
     });
     expect(screen.getByRole('button', { name: 'تسجيل الدخول' })).toBeInTheDocument();
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('يعرض زر إعادة المحاولة عند خطأ Too many requests ويعيد إرسال الطلب', async () => {
+    const user = userEvent.setup();
+    const loginError = new Error('Request failed with status code 429');
+    (loginError as any).response = {
+      status: 429,
+      data: { message: 'Too many requests' },
+    };
+
+    vi.mocked(login)
+      .mockRejectedValueOnce(loginError)
+      .mockResolvedValueOnce({
+        accessToken: 'token-429',
+        tokenType: 'Bearer',
+        expiresIn: '24h',
+        user: {
+          id: 'u-429',
+          username: 'retry.user',
+          role: 'manager',
+          permissions: [],
+        },
+      });
+
+    renderLogin();
+
+    await user.type(screen.getByPlaceholderText('example@company.com'), 'retry.user');
+    await user.type(screen.getByPlaceholderText('********'), 'retry-pass');
+    await user.click(screen.getByRole('button', { name: 'تسجيل الدخول' }));
+
+    const retryButton = await screen.findByRole('button', { name: 'إعادة المحاولة' });
+    expect(retryButton).toBeInTheDocument();
+    expect(screen.getByText('Too many requests. يرجى الانتظار قليلًا ثم إعادة المحاولة.')).toBeInTheDocument();
+
+    await user.click(retryButton);
+
+    await waitFor(() => {
+      expect(login).toHaveBeenCalledTimes(2);
+      expect(login).toHaveBeenNthCalledWith(1, 'retry.user', 'retry-pass');
+      expect(login).toHaveBeenNthCalledWith(2, 'retry.user', 'retry-pass');
+      expect(mockNavigate).toHaveBeenCalledWith('/operations', { replace: true });
+    });
+  });
+
+  it('يعرض زر إعادة ضبط المحاولات عند خطأ Too many requests وينفذ الطلب بنجاح', async () => {
+    const user = userEvent.setup();
+    const loginError = new Error('Request failed with status code 429');
+    (loginError as any).response = {
+      status: 429,
+      data: { message: 'Too many requests' },
+    };
+
+    vi.mocked(login).mockRejectedValue(loginError);
+
+    renderLogin();
+
+    await user.type(screen.getByPlaceholderText('example@company.com'), 'reset.user');
+    await user.type(screen.getByPlaceholderText('********'), 'reset-pass');
+    await user.click(screen.getByRole('button', { name: 'تسجيل الدخول' }));
+
+    const resetButton = await screen.findByRole('button', { name: 'إعادة ضبط المحاولات' });
+    await user.click(resetButton);
+
+    await waitFor(() => {
+      expect(resetLoginAttempts).toHaveBeenCalledWith('reset.user');
+    });
+
+    expect(screen.getByText('تمت إعادة ضبط المحاولات. يمكنك تسجيل الدخول من جديد.')).toBeInTheDocument();
   });
 
   it('ينفذ onAuthenticated عند تمريره من الأب', async () => {

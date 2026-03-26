@@ -1,11 +1,12 @@
 // ENTERPRISE FIX: Phase 3 – الاختبار + المراقبة + النشر الرسمي - 2026-03-13
 // ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
 import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
-import { DatabaseBackup, FileText, Globe2, LayoutGrid, RefreshCcw, Settings2, Shield, Users } from 'lucide-react';
+import { DatabaseBackup, FileText, Globe2, LayoutGrid, Package, RefreshCcw, Settings2, Shield, Users } from 'lucide-react';
 import { usePermissions } from '@hooks/usePermissions';
 import type { AuditLog, ReportColumnConfig, SystemSettings, User } from '../../../types';
 
 const GeneralSettings = lazy(() => import('../components/GeneralSettings'));
+const ReferenceDataSettings = lazy(() => import('../components/ReferenceDataSettings'));
 const UsersAndRoles = lazy(() => import('../components/UsersAndRoles'));
 const PermissionsMatrix = lazy(() => import('../components/PermissionsMatrix'));
 const BackupAndRestore = lazy(() => import('../components/BackupAndRestore'));
@@ -28,6 +29,7 @@ interface SettingsPageProps {
 
 type SettingsTabKey =
   | 'general'
+  | 'reference-data'
   | 'users'
   | 'permissions'
   | 'backup'
@@ -52,6 +54,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   const isPrivileged = role === 'admin' || role === 'superadmin' || (currentUser?.permissions || []).includes('*');
   const tabs = useMemo(() => ([
     { key: 'general' as const, label: 'الإعدادات العامة', permission: 'settings.view.general', icon: Settings2 },
+    { key: 'reference-data' as const, label: 'الأقسام ووحدات القياس', permission: 'settings.view.general', icon: Package },
     { key: 'users' as const, label: 'المستخدمون والأدوار', permission: 'settings.view.users', icon: Users },
     { key: 'permissions' as const, label: 'مصفوفة الصلاحيات', permission: 'settings.view.permissions', icon: Shield },
     { key: 'backup' as const, label: 'النسخ الاحتياطي', permission: 'settings.view.backup', icon: DatabaseBackup },
@@ -77,6 +80,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     switch (resolvedActiveTab) {
       case 'general':
         return <GeneralSettings settings={settings} onUpdateSettings={onUpdateSettings} forceAccess={isPrivileged} />;
+      case 'reference-data':
+        return <ReferenceDataSettings forceAccess={isPrivileged} />;
       case 'users':
         return <UsersAndRoles forceAccess={isPrivileged} />;
       case 'permissions':
@@ -114,7 +119,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     <div className="space-y-6">
       <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-3xl font-black text-slate-900">الإعدادات العالمية</h1>
-        <p className="mt-2 text-sm text-slate-500">لوحة إعدادات موحدة تغطي التهيئة العامة، الصلاحيات، النسخ الاحتياطية، التدقيق، والطباعة.</p>
+        <p className="mt-2 text-sm text-slate-500">لوحة إعدادات موحدة تغطي التهيئة العامة، الأقسام ووحدات القياس، الصلاحيات، النسخ الاحتياطية، التدقيق، والطباعة.</p>
       </div>
       <div className="flex flex-wrap gap-2 rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
         {visibleTabs.map((tab) => {

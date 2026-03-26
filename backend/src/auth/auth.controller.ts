@@ -7,7 +7,9 @@ import { Request, Response } from 'express';
 import { Public } from './decorators/public.decorator';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { ResetLoginAttemptsDto } from './dto/reset-login-attempts.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { resetGlobalRateLimit } from '../security/global-rate-limit';
 
 // ENTERPRISE FIX: Phase 0 - Fatal Errors Fixed - Blueprint Compliant - 2026-03-02
 @Controller('auth')
@@ -61,6 +63,21 @@ export class AuthController {
       sameSite: 'strict',
     });
     return { success: true, message: 'Logged out successfully' };
+  }
+
+  @Public()
+  @Post('reset-attempts')
+  async resetAttempts(
+    @Body() dto: ResetLoginAttemptsDto,
+    @Req() req: Request,
+  ) {
+    const result = await this.authService.resetLoginAttempts(dto.username, {
+      ipAddress: String(req.ip || req.socket?.remoteAddress || '0.0.0.0'),
+      userAgent: String(req.headers['user-agent'] || 'unknown'),
+    });
+
+    resetGlobalRateLimit(req);
+    return result;
   }
 
   @UseGuards(JwtAuthGuard)

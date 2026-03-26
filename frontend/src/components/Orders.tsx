@@ -200,13 +200,13 @@ const Orders: React.FC<OrdersProps> = ({ orders, items, partners, onAddOrder, on
                   onClick={() => handleComplete(order)}
                   className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white text-sm rounded-lg hover:bg-slate-900 transition"
                 >
-                  <CheckCircle size={16} /> 788&78 87778y7 788&7788 
+                  <CheckCircle size={16} /> إكمال الطلب
                 </button>
               )}
             </div>
 
             <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
-               <h4 className="font-bold text-xs text-slate-500 mb-2 uppercase tracking-wider">78~778y8 78778 78~</h4>
+               <h4 className="font-bold text-xs text-slate-500 mb-2 uppercase tracking-wider">عناصر الطلب</h4>
                <div className="space-y-1">
                  {order.items.map((item, i) => (
                    <div key={i} className="flex justify-between text-sm">
@@ -219,7 +219,7 @@ const Orders: React.FC<OrdersProps> = ({ orders, items, partners, onAddOrder, on
           </div>
         ))}
         {filteredOrders.length === 0 && (
-           <div className="text-center py-12 text-slate-400">87 7877 78777 8~8y 8!78! 788778&7</div>
+           <div className="text-center py-12 text-slate-400">لا توجد طلبات مطابقة لعرضها</div>
         )}
       </div>
     </div>
