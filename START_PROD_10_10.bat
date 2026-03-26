@@ -5,14 +5,14 @@ color 0A
 
 echo ========================================================
 echo   MZ.S-ERP - 10/10 Production Launch
-echo   Enterprise Warehouse & Production System
+echo   Enterprise Warehouse ^& Production System
 echo ========================================================
 
 echo [1/4] Cleaning old containers...
 docker compose down
 
 echo [2/4] Building full stack...
-npm run build:full
+call npm run build:full
 
 echo [3/4] Starting Docker Production Stack...
 docker compose up -d --build
