@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 3 – الاختبار + المراقبة + النشر الرسمي - 2026-03-13
 // ENTERPRISE FIX: Phase 0 – Critical Security & Encoding Lockdown - 2026-03-13
 // ENTERPRISE FIX: Phase 0.2 – Full Runtime Docker Proof - 2026-03-13
 // ENTERPRISE FIX: Phase 0 - التنظيف الأساسي والتحضير - 2026-03-13
@@ -139,6 +140,10 @@ function renderMetrics(metrics: MetricsRegistry): string {
     '# HELP http_request_duration_ms_sum Total accumulated HTTP request duration in milliseconds.',
     '# TYPE http_request_duration_ms_sum counter',
     `http_request_duration_ms_sum ${metrics.requestDurationMsTotal}`,
+    '# HELP http_requests_by_status_total Total HTTP requests grouped by response status code.',
+    '# TYPE http_requests_by_status_total counter',
+    '# HELP http_requests_by_route_total Total HTTP requests grouped by normalized route.',
+    '# TYPE http_requests_by_route_total counter',
   ];
 
   metrics.statusCounts.forEach((count, statusCode) => {

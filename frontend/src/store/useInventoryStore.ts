@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 3 – الاختبار + المراقبة + النشر الرسمي - 2026-03-13
 // ENTERPRISE FIX: Phase 1 – PostgreSQL Pivot + Zustand Single Source of Truth - 2026-03-13
 // ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
 // ENTERPRISE FIX: Phase 0 - التنظيف الأساسي والتحضير - 2026-03-13
@@ -445,6 +446,36 @@ const triggerBlobDownload = (blob: Blob, fileName: string) => {
   URL.revokeObjectURL(url);
 };
 
+const normalizePdfPayload = (payload: unknown, fileName: string) => {
+  const candidate = (payload && typeof payload === 'object' ? payload : {}) as Record<string, unknown>;
+  if (candidate.type && candidate.data) {
+    return candidate;
+  }
+
+  const rows = Array.isArray(candidate.rows) ? candidate.rows : [];
+  const inferredType = String(candidate.title || fileName).toLowerCase().includes('dashboard')
+    ? 'dashboard'
+    : rows.some((row) => {
+        const entry = row as Record<string, unknown>;
+        return 'date' in entry || 'quantity' in entry || 'type' in entry;
+      })
+      ? 'transactions'
+      : 'items';
+
+  return {
+    type: inferredType,
+    data: {
+      columns: Array.isArray(candidate.columns) ? candidate.columns : [],
+      rows,
+      summary: Array.isArray(candidate.summary) ? candidate.summary : [],
+    },
+    title: candidate.title,
+    subtitle: candidate.subtitle,
+    generatedBy: candidate.generatedBy,
+    filename: candidate.filename,
+  };
+};
+
 let xlsxLoader: Promise<typeof import('xlsx')> | null = null;
 let html2PdfLoader: Promise<any> | null = null;
 
@@ -832,7 +863,7 @@ export const useInventoryStore = create<Store>()(
       },
 
       exportPdfReport: async ({ endpoint, payload, fileName }) => {
-        const response = await apiClient.post(endpoint, payload, { responseType: 'blob' });
+        const response = await apiClient.post(endpoint, normalizePdfPayload(payload, fileName), { responseType: 'blob' });
         const blob = response.data instanceof Blob ? response.data : new Blob([response.data], { type: 'application/pdf' });
         triggerBlobDownload(blob, fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`);
       },

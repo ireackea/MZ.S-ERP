@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 3 – الاختبار + المراقبة + النشر الرسمي - 2026-03-13
 // ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
 // ENTERPRISE FIX: Phase 6.6 - Global 100% Cleanup & Absolute Verification - 2026-03-13
 import { v4 as uuidv4 } from 'uuid';
@@ -203,11 +204,14 @@ export function updateRolePermissions(roleId: string, permissionIds: string[]) {
 }
 
 export function ensureUserDefaults(user: User): User {
+  const resolvedActive = user.active ?? user.isActive ?? true;
   return {
     ...user,
     roleId: user.roleId ?? user.role,
     scope: user.scope ?? 'all',
-    status: user.status ?? (user.active ? 'active' : 'suspended'),
+    active: resolvedActive,
+    isActive: user.isActive ?? resolvedActive,
+    status: user.status ?? (resolvedActive ? 'active' : 'suspended'),
     twoFactorEnabled: user.twoFactorEnabled ?? false,
   };
 }
@@ -226,6 +230,22 @@ export function hasPermission(user: User | undefined, permissionId: string): boo
   if (!user) return false;
   const normalizedUser = ensureUserDefaults(user);
   if (normalizedUser.status === 'suspended' || !normalizedUser.active) return false;
+  const directPermissions = Array.isArray(normalizedUser.permissions)
+    ? normalizedUser.permissions.filter((entry): entry is string => typeof entry === 'string')
+    : [];
+
+  if (normalizedUser.role?.toLowerCase() === 'superadmin' || normalizedUser.role?.toLowerCase() === 'admin') {
+    return true;
+  }
+
+  if (directPermissions.includes('*') || directPermissions.includes(permissionId)) {
+    return true;
+  }
+
+  if (directPermissions.some((granted) => granted.endsWith('.*') && (permissionId === granted.slice(0, -2) || permissionId.startsWith(`${granted.slice(0, -2)}.`)))) {
+    return true;
+  }
+
   const role = getUserRole(normalizedUser);
   return Boolean(role?.permissionIds.includes(permissionId));
 }

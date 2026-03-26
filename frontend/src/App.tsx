@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 3 – الاختبار + المراقبة + النشر الرسمي - 2026-03-13
 // ENTERPRISE FIX: Phase 1 – PostgreSQL Pivot + Zustand Single Source of Truth - 2026-03-13
 // ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
 // ENTERPRISE FIX: Phase 0 – التنظيف الأساسي والأمان الحرج - 2026-03-13
@@ -240,7 +241,6 @@ const AppContent = () => {
 
     let active = true;
     setInventoryRouteReady(false);
-    clearAllAuthData();
 
     const syncInventoryAfterLogin = async () => {
       try {

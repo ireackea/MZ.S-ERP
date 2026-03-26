@@ -1,17 +1,19 @@
+// ENTERPRISE FIX: Phase 3 – الاختبار + المراقبة + النشر الرسمي - 2026-03-13
 // ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { DatabaseBackup, FileText, Globe2, LayoutGrid, RefreshCcw, Settings2, Shield, Users } from 'lucide-react';
 import { usePermissions } from '@hooks/usePermissions';
 import type { AuditLog, ReportColumnConfig, SystemSettings, User } from '../../../types';
-import GeneralSettings from '../components/GeneralSettings';
-import UsersAndRoles from '../components/UsersAndRoles';
-import PermissionsMatrix from '../components/PermissionsMatrix';
-import BackupAndRestore from '../components/BackupAndRestore';
-import SystemReset from '../components/SystemReset';
-import AuditLogs from '../components/AuditLogs';
-import OfflineSettings from '../components/OfflineSettings';
-import PrintingTemplates from '../components/PrintingTemplates';
-import ThemeAndLocalization from '../components/ThemeAndLocalization';
+
+const GeneralSettings = lazy(() => import('../components/GeneralSettings'));
+const UsersAndRoles = lazy(() => import('../components/UsersAndRoles'));
+const PermissionsMatrix = lazy(() => import('../components/PermissionsMatrix'));
+const BackupAndRestore = lazy(() => import('../components/BackupAndRestore'));
+const SystemReset = lazy(() => import('../components/SystemReset'));
+const AuditLogs = lazy(() => import('../components/AuditLogs'));
+const OfflineSettings = lazy(() => import('../components/OfflineSettings'));
+const PrintingTemplates = lazy(() => import('../components/PrintingTemplates'));
+const ThemeAndLocalization = lazy(() => import('../components/ThemeAndLocalization'));
 
 interface SettingsPageProps {
   settings: SystemSettings;
@@ -130,7 +132,9 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
           );
         })}
       </div>
-      {renderTab()}
+      <Suspense fallback={<div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">جاري تحميل تبويب الإعدادات...</div>}>
+        {renderTab()}
+      </Suspense>
     </div>
   );
 };
