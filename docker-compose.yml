@@ -1,6 +1,5 @@
 # ENTERPRISE FIX: Phase 0 – Critical Security & Encoding Lockdown - 2026-03-13
 # ENTERPRISE FIX: Phase 1 – PostgreSQL Pivot + Zustand Single Source of Truth - 2026-03-13
-version: '3.9'
 
 services:
   postgres:

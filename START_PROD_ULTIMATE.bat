@@ -1,0 +1,145 @@
+@echo off
+setlocal EnableExtensions EnableDelayedExpansion
+chcp 65001 >nul
+title MZ.S-ERP - Official Full Production Launcher
+color 0A
+
+set "ROOT_DIR=%~dp0"
+cd /d "%ROOT_DIR%"
+
+set "LOG_FILE=%ROOT_DIR%production.log"
+set "DOCKER_BIN_DIR=C:\Program Files\Docker\Docker\resources\bin"
+set "DOCKER_EXE=docker"
+if exist "%DOCKER_BIN_DIR%\docker.exe" (
+    set "PATH=%DOCKER_BIN_DIR%;%PATH%"
+    set "DOCKER_EXE=%DOCKER_BIN_DIR%\docker.exe"
+)
+set "HEALTH_URL=http://localhost:3001/api/health"
+set "FRONTEND_URL=http://localhost:4173"
+set "BACKEND_URL=http://localhost:3001"
+set "METRICS_URL=http://localhost:3001/metrics"
+set "MAX_ATTEMPTS=12"
+set "WAIT_SECONDS=5"
+
+> "%LOG_FILE%" echo ========================================================
+
+echo.
+echo ========================================================
+echo   MZ.S-ERP - OFFICIAL FULL PRODUCTION LAUNCHER
+echo   Enterprise Warehouse ^& Production System
+echo   Verified Startup Flow
+echo ========================================================
+echo.
+
+call :log "========================================================"
+call :log "Launch started at %date% %time%"
+call :log "Root directory: %ROOT_DIR%"
+call :log "Docker bin dir: %DOCKER_BIN_DIR%"
+call :log "Docker executable: %DOCKER_EXE%"
+
+echo [1/7] Recording runtime tool versions...
+"%DOCKER_EXE%" --version >> "%LOG_FILE%" 2>&1
+call npm --version >> "%LOG_FILE%" 2>&1
+curl --version >> "%LOG_FILE%" 2>&1
+echo [OK] Runtime tool probe recorded.
+call :log "[OK] Runtime tool probe recorded."
+
+echo [2/7] Cleaning previous containers...
+"%DOCKER_EXE%" compose down --remove-orphans >> "%LOG_FILE%" 2>&1
+if errorlevel 1 (
+    echo [WARN] docker compose down returned a non-zero exit code. Continuing.
+    call :log "[WARN] docker compose down returned a non-zero exit code."
+) else (
+    call :log "[OK] Previous containers cleaned."
+)
+
+echo [3/7] Building frontend and backend...
+call npm run build:full >> "%LOG_FILE%" 2>&1
+if errorlevel 1 (
+    echo [ERROR] Build failed. See production.log for details.
+    call :log "[ERROR] Build failed."
+    goto :fail
+)
+call :log "[OK] Full build completed successfully."
+
+echo [4/7] Starting Docker production stack...
+"%DOCKER_EXE%" compose up -d --build >> "%LOG_FILE%" 2>&1
+if errorlevel 1 (
+    echo [ERROR] Docker stack failed to start. See production.log for details.
+    call :log "[ERROR] Docker stack failed to start."
+    goto :fail
+)
+call :log "[OK] Docker stack started."
+
+echo [5/7] Waiting for backend health...
+set "attempt=0"
+
+:health_check
+set /a attempt+=1
+echo Checking health attempt !attempt!/%MAX_ATTEMPTS%...
+
+curl -fsS "%HEALTH_URL%" | findstr /I "\"status\":\"healthy\"" >nul
+if not errorlevel 1 (
+    echo [OK] System is healthy.
+    call :log "[OK] Health check passed on attempt !attempt!."
+    goto :after_health
+)
+
+if !attempt! geq %MAX_ATTEMPTS% (
+    echo [WARN] Health check did not pass after %MAX_ATTEMPTS% attempts.
+    call :log "[WARN] Health check did not pass after %MAX_ATTEMPTS% attempts."
+    goto :after_health
+)
+
+timeout /t %WAIT_SECONDS% >nul
+goto :health_check
+
+:after_health
+echo [6/7] Capturing runtime status...
+"%DOCKER_EXE%" compose ps >> "%LOG_FILE%" 2>&1
+call :log "[OK] Runtime status captured."
+
+echo [7/7] Opening service URLs...
+start "" "%FRONTEND_URL%"
+timeout /t 2 >nul
+start "" "%METRICS_URL%"
+call :log "[OK] Browser tabs opened."
+
+setlocal DisableDelayedExpansion
+echo.
+echo ========================================================
+echo   MZ.S-ERP is running.
+echo   Frontend : %FRONTEND_URL%
+echo   Backend  : %BACKEND_URL%
+echo   Metrics  : %METRICS_URL%
+echo   Health   : %HEALTH_URL%
+echo   Login    : superadmin / SecurePassword2026!
+echo ========================================================
+echo.
+echo Log file: %LOG_FILE%
+>> "%LOG_FILE%" echo Frontend: %FRONTEND_URL%
+>> "%LOG_FILE%" echo Backend : %BACKEND_URL%
+>> "%LOG_FILE%" echo Metrics : %METRICS_URL%
+>> "%LOG_FILE%" echo Health  : %HEALTH_URL%
+>> "%LOG_FILE%" echo Login   : superadmin / SecurePassword2026!
+>> "%LOG_FILE%" echo Launch completed at %date% %time%
+>> "%LOG_FILE%" echo ========================================================
+endlocal
+
+pause
+exit /b 0
+
+:fail
+echo.
+echo ========================================================
+echo   Startup failed.
+echo   Review the log file:
+echo   %LOG_FILE%
+echo ========================================================
+call :log "Startup failed at %date% %time%"
+pause
+exit /b 1
+
+:log
+echo %~1>> "%LOG_FILE%"
+exit /b 0
