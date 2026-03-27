@@ -1,3 +1,5 @@
+// ENTERPRISE FIX: Phase 3 Duplication Cleanup - Archive Only - 2026-03-26
+// All legacy files archived in _ARCHIVE_DUPLICATION_CLEANUP_2026-03-26/
 // ENTERPRISE FIX: Phase 3 – الاختبار + المراقبة + النشر الرسمي - 2026-03-13
 // ENTERPRISE FIX: Phase 1 – PostgreSQL Pivot + Zustand Single Source of Truth - 2026-03-13
 // ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
@@ -35,21 +37,13 @@ import {
 
 import { useOfflineSync } from './hooks/useOfflineSync';
 // ENTERPRISE FIX: Phase 1 - Dual Mode Implementation - 2026-03-02
-const Dashboard = lazy(() => import('./components/Dashboard'));
 const StockBalances = lazy(() => import('./components/StockBalances'));
-const DailyOperations = lazy(() => import('./components/DailyOperations'));
-const ItemManagement = lazy(() => import('./components/ItemManagement'));
-const Stocktaking = lazy(() => import('./components/Stocktaking'));
 const StockCardReport = lazy(() => import('./components/StockCardReport'));
 const Statement = lazy(() => import('./components/Statement'));
 const Partners = lazy(() => import('./components/Partners'));
 const Orders = lazy(() => import('./components/Orders'));
-const Settings = lazy(() => import('./components/Settings'));
-const BackupCenter = lazy(() => import('./components/BackupCenter'));
-const Formulation = lazy(() => import('./components/Formulation'));
-const Reports = lazy(() => import('./components/Reports'));
-const OpeningBalancePage = lazy(() => import('./components/OpeningBalancePage'));
 const DashboardPage = lazy(() => import('./pages/Dashboard'));
+const BackupCenterPage = lazy(() => import('./pages/BackupCenter'));
 const ItemsPage = lazy(() => import('./pages/Items'));
 const OperationsPage = lazy(() => import('./pages/Operations'));
 const StocktakingPage = lazy(() => import('./pages/Stocktaking'));
@@ -733,8 +727,8 @@ const AppContent = () => {
             withLazyFallback(<UnifiedIAM />)
           )}
         />
-        <Route path="/backup" element={renderProtectedRoute('backup.view', 'backup', withLazyFallback(<BackupCenter currentUser={currentUser} />))} />
-        <Route path="*" element={renderProtectedRoute('inventory.view.stock', 'fallback-dashboard', withLazyFallback(<Dashboard />))} />
+        <Route path="/backup" element={renderProtectedRoute('backup.view', 'backup', withLazyFallback(<BackupCenterPage currentUser={currentUser} />))} />
+        <Route path="*" element={renderProtectedRoute('inventory.view.stock', 'fallback-dashboard', withLazyFallback(<DashboardPage />))} />
       </Routes>
     </Layout>
     </>
