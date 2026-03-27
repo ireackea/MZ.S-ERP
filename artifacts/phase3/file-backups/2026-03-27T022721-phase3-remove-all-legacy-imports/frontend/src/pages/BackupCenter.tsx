@@ -5,7 +5,7 @@
 // ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Legacy Migration Phase 5 - Final Stabilization & Production - 2026-02-27
 import React from 'react';
-import BackupCenterView from './BackupCenterView';
+import BackupCenterView from '../components/BackupCenter';
 import type { User } from '../types';
 
 interface BackupCenterPageProps {

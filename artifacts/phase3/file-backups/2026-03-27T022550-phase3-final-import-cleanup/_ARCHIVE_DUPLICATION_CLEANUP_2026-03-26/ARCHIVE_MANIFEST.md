@@ -1,4 +1,3 @@
-<!-- // ENTERPRISE FIX: Phase 3 Final Visual Proof & Cleanup - Archive Only - 2026-03-27 -->
 # Archive Manifest
 
 - Archive date: 2026-03-27

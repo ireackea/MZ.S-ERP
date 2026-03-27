@@ -1,3 +1,4 @@
+REM // ENTERPRISE FIX: Phase 3 Final Visual Proof & Cleanup - Archive Only - 2026-03-27
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 chcp 65001 >nul
