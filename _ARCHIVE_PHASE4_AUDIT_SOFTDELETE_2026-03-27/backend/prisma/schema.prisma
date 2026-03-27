@@ -1,5 +1,3 @@
-// ENTERPRISE FIX: Phase 5 Bulk Import + Barcode + Attachments + Audit Viewer - Archive Only - 2026-03-27
-// ENTERPRISE FIX: Phase 4 Audit Logging + Soft Delete Backend + Pagination - Archive Only - 2026-03-27
 // ENTERPRISE FIX: Phase 1 – PostgreSQL Pivot + Zustand Single Source of Truth - 2026-03-13
 // ENTERPRISE FIX: Phase 0.2 – Full Runtime Docker Proof - 2026-03-13
 // ENTERPRISE FIX: Phase 0 – التنظيف الأساسي والأمان الحرج - 2026-03-13
@@ -63,12 +61,10 @@ model User {
 }
 
 model AuditLog {
-  id             String   @id @default(cuid())
+  id             String   @id @default(uuid())
   userId         String?  @map("actorId")
-  action         String   // CREATE / UPDATE / ARCHIVE / DELETE / RESTORE
-  entityType     String   // Item / Transaction / User / etc.
-  entityId       String
-  details        String?  @map("message")
+  action         String
+  details        String   @map("message")
   timestamp      DateTime @default(now())
   ipAddress      String?
   metadata       String?
@@ -76,13 +72,11 @@ model AuditLog {
   actorRole      String
   targetUserId   String?
   targetResource String?
-  status         String   @default("SUCCESS")
+  status         String
   actor          User?    @relation("AuditActor", fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([action])
-  @@index([entityType])
-  @@index([entityId])
   @@index([status])
   @@index([timestamp])
   @@map("audit_logs")
@@ -185,22 +179,12 @@ model Item {
   orderLimit      Decimal?
   currentStock    Decimal          @default(0)
   description     String?
-  imageUrl        String?
-  attachments     Json?
-  isArchived      Boolean          @default(false)
-  archivedAt      DateTime?
-  archivedBy      String?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  createdBy       String?
-  updatedBy       String?
   openingBalances OpeningBalance[]
   transactions    Transaction[]
 
   @@index([name])
   @@index([code])
   @@index([barcode])
-  @@index([isArchived])
 }
 
 model OpeningBalance {

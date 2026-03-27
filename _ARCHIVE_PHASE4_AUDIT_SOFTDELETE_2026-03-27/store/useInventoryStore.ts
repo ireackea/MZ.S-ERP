@@ -1,4 +1,3 @@
-// ENTERPRISE FIX: Phase 4 Audit Logging + Soft Delete Backend + Pagination - Archive Only - 2026-03-27
 // ENTERPRISE FIX: Phase 3 – الاختبار + المراقبة + النشر الرسمي - 2026-03-13
 // ENTERPRISE FIX: Phase 1 – PostgreSQL Pivot + Zustand Single Source of Truth - 2026-03-13
 // ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
@@ -7,14 +6,10 @@ import { create } from 'zustand';
 import { toast } from '@services/toastService';
 import {
   deleteItemsByPublicIds,
-  archiveItems,
-  restoreItems,
-  deleteItemsPermanently,
   getItems as getItemsFromApi,
   syncItems,
   type ItemDto,
   type SyncItemPayload,
-  type PaginatedItemsResult,
 } from '@services/itemsService';
 import {
   getFinancialYearFromDate,
@@ -394,9 +389,8 @@ const extractArrayPayload = (payload: any) => {
 const currentFinancialYear = () => getFinancialYearFromDate();
 
 const syncItemsFromServer = async () => {
-  // Phase 4: Load all items with pagination (load first 1000 items by default)
-  const result = await getItemsFromApi({ page: 1, limit: 1000, isArchived: false });
-  return result.data.map(dto);
+  const apiItems = await getItemsFromApi();
+  return apiItems.map(dto);
 };
 
 const syncTransactionsFromServer = async () => {
@@ -538,8 +532,8 @@ export const useInventoryStore = create<Store>()(
       load: async () => {
         set({ loading: true, error: null });
         try {
-          const result = await getItemsFromApi();
-          const mappedItems = result.data.map(dto);
+          const apiItems = await getItemsFromApi();
+          const mappedItems = apiItems.map(dto);
           const normalized = normalizeCollections(mappedItems, get().sortMode, get().manualOrder, get().categories, get().units);
 
           set({
@@ -1057,67 +1051,42 @@ export const useInventoryStore = create<Store>()(
         });
       },
 
-      softDelete: async (ids, actorName) => {
-        // Phase 4: Call backend API for soft delete (archive)
-        try {
-          await archiveItems(ids);
-          
-          const soft = { ...get().soft };
-          const now = Date.now();
-          ids.forEach((id) => {
-            soft[id] = { deletedAt: now, deletedBy: actorName };
-          });
-          set({ soft });
-          toast.success('تم أرشفة الأصناف بنجاح');
-        } catch (error: any) {
-          console.error('Failed to archive items:', error);
-          toast.error(error?.message || 'فشل أرشفة الأصناف');
-          throw error;
-        }
+      softDelete: (ids, actorName) => {
+        const soft = { ...get().soft };
+        const now = Date.now();
+        ids.forEach((id) => {
+          soft[id] = { deletedAt: now, deletedBy: actorName };
+        });
+        set({ soft });
+        toast.success('تم تصنيف الأصناف كمحذوفة بنجاح');
       },
 
-      restore: async (ids) => {
-        // Phase 4: Call backend API for restore
-        try {
-          await restoreItems(ids);
-          
-          const soft = { ...get().soft };
-          ids.forEach((id) => delete soft[id]);
-          set({ soft });
-          toast.success('تم استعادة الأصناف بنجاح');
-        } catch (error: any) {
-          console.error('Failed to restore items:', error);
-          toast.error(error?.message || 'فشل استعادة الأصناف');
-          throw error;
-        }
+      restore: (ids) => {
+        const soft = { ...get().soft };
+        ids.forEach((id) => delete soft[id]);
+        set({ soft });
+        toast.success('تم استعادة الأصناف بنجاح');
       },
 
       purge: async (ids, actorId, actorName) => {
-        // Phase 4: Call backend API for permanent delete with audit logging
-        try {
-          await deleteItemsPermanently(ids);
+        await deleteItemsByPublicIds(ids);
 
-          const soft = { ...get().soft };
-          ids.forEach((id) => delete soft[id]);
+        const soft = { ...get().soft };
+        ids.forEach((id) => delete soft[id]);
 
-          const setIds = new Set(ids);
-          const nextItems = get().items.filter((item) => !setIds.has(String(item.id)));
-          const normalized = normalizeCollections(nextItems, get().sortMode, get().manualOrder.filter((id) => !setIds.has(id)), get().categories, get().units);
+        const setIds = new Set(ids);
+        const nextItems = get().items.filter((item) => !setIds.has(String(item.id)));
+        const normalized = normalizeCollections(nextItems, get().sortMode, get().manualOrder.filter((id) => !setIds.has(id)), get().categories, get().units);
 
-          set({
-            items: normalized.items,
-            balances: normalized.balances,
-            categories: normalized.categories,
-            units: normalized.units,
-            manualOrder: normalized.manualOrder,
-            soft,
-          });
-          toast.success('تم حذف الأصناف نهائياً بنجاح');
-        } catch (error: any) {
-          console.error('Failed to permanently delete items:', error);
-          toast.error(error?.message || 'فشل حذف الأصناف نهائياً');
-          throw error;
-        }
+        set({
+          items: normalized.items,
+          balances: normalized.balances,
+          categories: normalized.categories,
+          units: normalized.units,
+          manualOrder: normalized.manualOrder,
+          soft,
+        });
+        toast.success('تم حذف الأصناف نهائياً بنجاح');
       },
     })
 );

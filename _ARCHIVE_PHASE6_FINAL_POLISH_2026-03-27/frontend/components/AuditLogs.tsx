@@ -1,13 +1,11 @@
-// ENTERPRISE FIX: Phase 6 Final Polish + Full E2E Tests + Deployment Guide - Archive Only - 2026-03-27
 // ENTERPRISE FIX: Phase 5 Bulk Import + Barcode + Attachments + Audit Viewer - Archive Only - 2026-03-27
 // ENTERPRISE FIX: Phase 3 Duplication Cleanup - Archive Only - 2026-03-26
 // All legacy files archived in _ARCHIVE_DUPLICATION_CLEANUP_2026-03-26/
 // ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
-import React, { useEffect, useState, useRef } from 'react';
-import { Clock, Shield, ShieldAlert, User, Filter, RefreshCcw, Download, Calendar } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Clock, Shield, ShieldAlert, User, Filter, RefreshCcw } from 'lucide-react';
 import { usePermissions } from '@hooks/usePermissions';
 import apiClient from '@api/client';
-import { toast } from '@services/toastService';
 
 interface AuditLogEntry {
   id: string;
@@ -32,28 +30,10 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ forceAccess = false }) => {
   const [error, setError] = useState<string | null>(null);
   const [filterAction, setFilterAction] = useState<string>('all');
   const [filterEntity, setFilterEntity] = useState<string>('all');
-  const [dateRangeStart, setDateRangeStart] = useState<string>('');
-  const [dateRangeEnd, setDateRangeEnd] = useState<string>('');
-  const [isExporting, setIsExporting] = useState(false);
-  const logsRef = useRef<AuditLogEntry[]>([]);
 
   useEffect(() => {
     loadAuditLogs();
   }, []);
-
-  // Phase 6: Real-time Sync for Audit Logs
-  useEffect(() => {
-    logsRef.current = logs;
-    
-    // Listen for real-time updates
-    const handleAuditUpdate = (event: CustomEvent) => {
-      console.log('[AuditLogs] Real-time update received:', event.detail);
-      loadAuditLogs(); // Reload logs on real-time update
-    };
-
-    window.addEventListener('audit-log-updated' as any, handleAuditUpdate);
-    return () => window.removeEventListener('audit-log-updated' as any, handleAuditUpdate);
-  }, [logs]);
 
   const loadAuditLogs = async () => {
     try {
@@ -71,40 +51,6 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ forceAccess = false }) => {
     }
   };
 
-  // Phase 6: Export to CSV
-  const exportToCSV = async () => {
-    try {
-      setIsExporting(true);
-      const headers = ['التوقيت', 'المستخدم', 'الإجراء', 'الكيان', 'المعرف', 'الحالة', 'التفاصيل'];
-      const rows = filteredLogs.map(log => [
-        new Date(log.timestamp).toLocaleString('ar-EG'),
-        log.actorUsername,
-        log.action,
-        log.entityType,
-        log.entityId,
-        log.status,
-        log.details ? JSON.parse(log.details).message || log.details : '-',
-      ]);
-
-      const csvContent = [
-        headers.join(','),
-        ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-      ].join('\n');
-
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `audit-logs-${new Date().toISOString().slice(0, 10)}.csv`;
-      link.click();
-      URL.revokeObjectURL(link.href);
-      toast.success('تم تصدير CSV بنجاح');
-    } catch (error: any) {
-      toast.error(error?.message || 'فشل التصدير');
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
   if (!forceAccess && !hasPermission('settings.view.audit')) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
@@ -117,19 +63,6 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ forceAccess = false }) => {
   const filteredLogs = logs.filter(log => {
     if (filterAction !== 'all' && log.action !== filterAction) return false;
     if (filterEntity !== 'all' && log.entityType !== filterEntity) return false;
-    
-    // Phase 6: Date Range Filter
-    if (dateRangeStart) {
-      const logDate = new Date(log.timestamp).getTime();
-      const startDate = new Date(dateRangeStart).getTime();
-      if (logDate < startDate) return false;
-    }
-    if (dateRangeEnd) {
-      const logDate = new Date(log.timestamp).getTime();
-      const endDate = new Date(dateRangeEnd).setHours(23, 59, 59, 999);
-      if (logDate > endDate) return false;
-    }
-    
     return true;
   });
 
@@ -150,14 +83,6 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ forceAccess = false }) => {
             <RefreshCcw size={14} />
             تحديث
           </button>
-          <button 
-            onClick={exportToCSV} 
-            disabled={isExporting || filteredLogs.length === 0}
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100 disabled:opacity-50"
-          >
-            <Download size={14} />
-            {isExporting ? 'جاري التصدير...' : 'تصدير CSV'}
-          </button>
           <div className="text-xs font-mono bg-slate-200 px-2 py-1 rounded text-slate-600">
             BLOCKCHAIN_READY
           </div>
@@ -165,7 +90,7 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ forceAccess = false }) => {
       </div>
 
       {/* Filters */}
-      <div className="p-4 border-b border-slate-200 bg-slate-50 flex gap-2 flex-wrap items-center">
+      <div className="p-4 border-b border-slate-200 bg-slate-50 flex gap-2 flex-wrap">
         <div className="flex items-center gap-2 text-sm">
           <Filter size={16} className="text-slate-500" />
           <span className="font-semibold">تصفية:</span>
@@ -190,35 +115,6 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ forceAccess = false }) => {
             <option key={entity} value={entity}>{entity}</option>
           ))}
         </select>
-        
-        {/* Phase 6: Date Range Filter */}
-        <div className="flex items-center gap-2 ml-2">
-          <Calendar size={16} className="text-slate-500" />
-          <input
-            type="date"
-            value={dateRangeStart}
-            onChange={(e) => setDateRangeStart(e.target.value)}
-            className="rounded-lg border border-slate-300 px-2 py-1 text-sm"
-            placeholder="من"
-          />
-          <span className="text-slate-500">إلى</span>
-          <input
-            type="date"
-            value={dateRangeEnd}
-            onChange={(e) => setDateRangeEnd(e.target.value)}
-            className="rounded-lg border border-slate-300 px-2 py-1 text-sm"
-            placeholder="إلى"
-          />
-          {(dateRangeStart || dateRangeEnd) && (
-            <button
-              onClick={() => { setDateRangeStart(''); setDateRangeEnd(''); }}
-              className="text-xs text-red-600 hover:underline"
-            >
-              مسح
-            </button>
-          )}
-        </div>
-        
         <span className="ml-auto text-sm text-slate-600">
           عرض {filteredLogs.length} من {logs.length} سجل
         </span>

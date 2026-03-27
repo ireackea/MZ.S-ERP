@@ -410,7 +410,8 @@ const ItemManagement: React.FC<ItemManagementProps> = ({
   };
 
   const refreshCodesFromApi = async () => {
-    const apiItems = await getItemsFromApi();
+    const result = await getItemsFromApi();
+    const apiItems = result.data;
     if (!apiItems.length) return 0;
 
     const apiById = new Map(apiItems.map((row) => [String(row.publicId || row.id), row]));

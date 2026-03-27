@@ -93,7 +93,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
       case 'reset':
         return <SystemReset forceAccess={isPrivileged} />;
       case 'audit':
-        return <AuditLogs logs={auditLogs} forceAccess={isPrivileged} />;
+        return <AuditLogs forceAccess={isPrivileged} />;
       case 'offline':
         return <OfflineSettings forceAccess={isPrivileged} />;
       case 'printing':

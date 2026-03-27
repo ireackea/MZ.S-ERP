@@ -1,7 +1,9 @@
+// ENTERPRISE FIX: Phase 6 Final Polish + Full E2E Tests + Deployment Guide - Archive Only - 2026-03-27
 // ENTERPRISE FIX: Phase 6.6 - Global 100% Cleanup & Absolute Verification - 2026-03-13
 import { Injectable } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma.service';
+import { RealtimeService } from '../realtime/realtime.service';
 
 export type AuditAction =
   | 'LOGIN_SUCCESS'
@@ -59,7 +61,10 @@ export interface ActiveSessionEntry {
 export class AuditService {
   private static prismaService: PrismaService | null = null;
 
-  constructor(private readonly prisma?: PrismaService) {}
+  constructor(
+    private prisma?: PrismaService,
+    private readonly realtimeService?: RealtimeService,
+  ) {}
 
   static configurePrisma(prisma: PrismaService) {
     AuditService.prismaService = prisma;
@@ -196,16 +201,15 @@ export class AuditService {
         data: {
           id: nextEntry.id,
           timestamp: new Date(nextEntry.timestamp),
-          userId: this.normalizeUserReference(nextEntry.actorId),
           action: nextEntry.action,
+          entityType: 'User', // Default for legacy log calls
+          entityId: nextEntry.actorId || 'system',
           details: nextEntry.message,
           ipAddress: this.extractIpAddress(nextEntry.metadata),
           metadata: this.toMetadataJson(nextEntry),
           actorUsername: nextEntry.actorUsername,
           actorRole: nextEntry.actorRole,
-          targetUserId: this.normalizeUserReference(nextEntry.targetUserId),
-          targetResource: nextEntry.targetResource || null,
-          status: nextEntry.status,
+          status: nextEntry.status === 'success' ? 'SUCCESS' : 'FAILED',
         },
       });
     });
@@ -233,6 +237,40 @@ export class AuditService {
     });
 
     return records.map((record) => this.mapAuditLog(record));
+  }
+
+  async logItemAction(
+    userId: string,
+    action: string, // CREATE / UPDATE / ARCHIVE / DELETE / RESTORE
+    entityType: string, // Item / Transaction / User / etc.
+    entityId: string,
+    details: any,
+    actorUsername?: string,
+    status: 'SUCCESS' | 'FAILED' = 'SUCCESS',
+  ): Promise<void> {
+    const prisma = this.getPrisma();
+    await prisma.auditLog.create({
+      data: {
+        id: randomUUID(),
+        action,
+        entityType,
+        entityId,
+        details: details ? JSON.stringify(details) : null,
+        actorUsername: actorUsername || 'system',
+        actorRole: 'system',
+        status,
+        timestamp: new Date(),
+      },
+    });
+    
+    // Phase 6: Real-time sync for audit logs
+    if (this.realtimeService) {
+      this.realtimeService.emitSync(
+        ['audit', 'dashboard'],
+        'audit-log-created',
+        { meta: { action, entityType, entityId, status } },
+      );
+    }
   }
 
   async createSession(params: {

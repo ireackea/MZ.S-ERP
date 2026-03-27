@@ -1,8 +1,7 @@
-// ENTERPRISE FIX: Phase 5 Bulk Import + Barcode + Attachments + Audit Viewer - Archive Only - 2026-03-27
+// ENTERPRISE FIX: Phase 4 Audit Logging + Soft Delete Backend + Pagination - Archive Only - 2026-03-27
 // ENTERPRISE FIX: Exact Legacy UI Restoration - 2026-02-27
 // ENTERPRISE FIX: Server-First Sync + Optimistic UI - 2026-02-28
 import apiClient from '@api/client';
-import ExcelJS from 'exceljs';
 
 export interface ItemDto {
   id: number;
@@ -219,108 +218,4 @@ export const generateMissingCodes = async (maxRetries = 3): Promise<GenerateCode
   }
 
   throw handleApiError(lastError);
-};
-
-// Phase 5: Bulk Import from Excel (JSON)
-export interface ExcelImportRow {
-  name: string;
-  code?: string;
-  barcode?: string;
-  category?: string;
-  unit?: string;
-  minLimit?: number;
-  maxLimit?: number;
-  orderLimit?: number;
-  currentStock?: number;
-  description?: string;
-}
-
-export interface ExcelImportResult {
-  success: number;
-  failed: number;
-  total: number;
-  results: Array<{ row: number; publicId: string; name: string; status: string }>;
-  errors: Array<{ row: number; error: string }>;
-}
-
-export const bulkImportFromExcel = async (items: ExcelImportRow[]): Promise<ExcelImportResult> => {
-  const response = await apiClient.post('/items/import-excel', { items });
-  return response.data as ExcelImportResult;
-};
-
-// Phase 5: Upload Attachment
-export const uploadItemAttachment = async (
-  publicId: string,
-  file: File,
-  type: 'image' | 'file'
-): Promise<{ success: boolean; url: string; fileName: string; type: string }> => {
-  const formData = new FormData();
-  formData.append('file', file);
-
-  const endpoint = type === 'image' ? `/items/${publicId}/upload-image` : `/items/${publicId}/upload-file`;
-  const response = await apiClient.post(endpoint, formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  });
-  return response.data;
-};
-
-// Phase 5: Parse Excel File
-export const parseExcelFile = async (file: File): Promise<ExcelImportRow[]> => {
-  const workbook = new ExcelJS.Workbook();
-  const arrayBuffer = await file.arrayBuffer();
-  await workbook.xlsx.load(arrayBuffer);
-
-  const worksheet = workbook.getWorksheet(1);
-  if (!worksheet) {
-    throw new Error('No worksheet found in Excel file');
-  }
-
-  const items: ExcelImportRow[] = [];
-  const headers: string[] = [];
-
-  worksheet.eachRow((row, rowNumber) => {
-    if (rowNumber === 1) {
-      // Parse headers
-      row.eachCell((cell) => {
-        headers.push(String(cell.value || '').trim().toLowerCase());
-      });
-      return;
-    }
-
-    const item: any = {};
-    row.eachCell((cell, colNumber) => {
-      const header = headers[colNumber - 1];
-      const value = cell.value;
-
-      if (header === 'name' || header === 'الاسم') {
-        item.name = String(value || '').trim();
-      } else if (header === 'code' || header === 'الكود') {
-        item.code = String(value || '').trim();
-      } else if (header === 'barcode' || header === 'الباركود') {
-        item.barcode = String(value || '').trim();
-      } else if (header === 'category' || header === 'التصنيف') {
-        item.category = String(value || '').trim();
-      } else if (header === 'unit' || header === 'الوحدة') {
-        item.unit = String(value || '').trim();
-      } else if (header === 'minlimit' || header === 'min' || header === 'الحد الأدنى') {
-        item.minLimit = Number(value) || 0;
-      } else if (header === 'maxlimit' || header === 'max' || header === 'الحد الأقصى') {
-        item.maxLimit = Number(value) || 1000;
-      } else if (header === 'orderlimit' || header === 'order' || header === 'حد الطلب') {
-        item.orderLimit = Number(value) || undefined;
-      } else if (header === 'currentstock' || header === 'stock' || header === 'الكمية') {
-        item.currentStock = Number(value) || 0;
-      } else if (header === 'description' || header === 'الوصف') {
-        item.description = String(value || '').trim();
-      }
-    });
-
-    if (item.name) {
-      items.push(item);
-    }
-  });
-
-  return items;
 };
