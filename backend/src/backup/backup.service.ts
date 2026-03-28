@@ -154,13 +154,24 @@ export class BackupService implements OnModuleDestroy {
     this.scheduleTimer = null;
   }
 
+  // SECURITY FIX: 2026-03-28 - Fail fast instead of hardcoded fallback
   private getMasterSecret(): string {
-    return (
+    const secret = (
       process.env.BACKUP_ENCRYPTION_SECRET ||
-      process.env.JWT_SECRET ||
-      process.env.ADMIN_TOKEN ||
-      'feedfactory-backup-master-secret'
-    ).trim();
+      process.env.JWT_SECRET
+    )?.trim();
+
+    if (!secret || secret.length < 32) {
+      if (process.env.NODE_ENV === 'production') {
+        this.logger.error('BACKUP_ENCRYPTION_SECRET or JWT_SECRET must be set in production (min 32 chars)');
+        throw new Error('Backup encryption secret not configured. Set BACKUP_ENCRYPTION_SECRET env var.');
+      }
+      // Only in development: warn but allow
+      this.logger.warn('Using development fallback for backup encryption. Set BACKUP_ENCRYPTION_SECRET for production.');
+      return 'dev-only-backup-secret-do-not-use-in-prod';
+    }
+
+    return secret;
   }
 
   private normalizeActor(actor?: Partial<BackupActor>, trigger: BackupTrigger = 'manual'): BackupActor {

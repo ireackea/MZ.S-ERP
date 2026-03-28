@@ -65,13 +65,24 @@ export class MonitoringService {
     };
   }
 
-  // ENTERPRISE FIX: Phase 0 - Fatal Errors Fixed - 2026-03-02
+  // SECURITY FIX: 2026-03-28 - Removed hardcoded reset code
+  private getSystemResetToken(): string {
+    const token = String(process.env.SYSTEM_RESET_TOKEN || '').trim();
+    if (!token || token.length < 16) {
+      this.logger.error('SYSTEM_RESET_TOKEN not configured or too short (min 16 chars)');
+      throw new Error('System reset is not properly configured. Set SYSTEM_RESET_TOKEN env var.');
+    }
+    return token;
+  }
+
   async performSystemReset(dto: SystemResetDto, user: any) {
     this.logger.warn(`SYSTEM RESET REQUESTED by user ${user?.username} (ID: ${user?.id})`);
 
-    // Strict validation for confirmation code
-    if (dto.confirmationCode !== 'CONFIRM_SYSTEM_RESET_2026') {
-      throw new UnauthorizedException('Invalid confirmation code. Please use the exact code from the manual.');
+    // Strict validation for confirmation code - now from environment variable
+    const expectedToken = this.getSystemResetToken();
+    if (dto.confirmationCode !== expectedToken) {
+      this.logger.warn(`Invalid reset attempt by user ${user?.username}`);
+      throw new UnauthorizedException('Invalid confirmation code. Contact administrator.');
     }
 
     // Role check - Only SuperAdmin can reset
