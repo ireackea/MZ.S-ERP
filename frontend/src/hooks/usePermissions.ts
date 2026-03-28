@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
 // ENTERPRISE FIX: Phase 2 - Multi-User Sync - Final Completion Pass - 2026-03-02
 import { useCallback, useMemo } from 'react';
 import { useSession } from './useSession';
@@ -16,6 +17,16 @@ const PERMISSION_ALIASES: Record<string, string[]> = {
   'inventory.update.pricing': ['transactions.update'],
   'inventory.delete.transactions': ['transactions.delete'],
   'settings.view.system': ['theme.view', 'backup.view'],
+  'settings.view': ['settings.view.general'],
+  'settings.view.general': ['settings.view.system'],
+  'settings.view.users': ['users.view.management'],
+  'settings.view.permissions': ['users.view.management'],
+  'settings.view.backup': ['backup.create', 'backup.restore', 'backup.schedule', 'backup.download', 'backup.delete', 'backup.view'],
+  'settings.view.reset': ['admin.reset_system', 'system.reset'],
+  'settings.view.audit': ['users.audit'],
+  'settings.view.offline': ['settings.view.system'],
+  'settings.view.printing': ['settings.view.system'],
+  'settings.view.localization': ['theme.view', 'settings.view.system'],
 };
 
 const normalizePermissions = (permissions: unknown): string[] => {
@@ -38,6 +49,7 @@ const matchWildcard = (granted: string, requested: string) => {
 
 export const usePermissions = () => {
   const { data: session } = useSession();
+  const normalizedRole = String(session?.user?.role || '').trim().toLowerCase();
 
   const normalizedPermissions = useMemo(
     () => normalizePermissions(session?.user?.permissions),
@@ -52,9 +64,9 @@ export const usePermissions = () => {
   const permissionState = useMemo(() => {
     const set = new Set(normalizedPermissions);
     const wildcards = normalizedPermissions.filter((entry) => entry.endsWith('.*'));
-    const isSuper = set.has('*');
+    const isSuper = set.has('*') || normalizedRole === 'admin' || normalizedRole === 'superadmin';
     return { set, wildcards, isSuper };
-  }, [permissionsKey, normalizedPermissions]);
+  }, [permissionsKey, normalizedPermissions, normalizedRole]);
 
   const hasPermission = useCallback(
     (permission: string) => {
@@ -107,6 +119,8 @@ export const usePermissions = () => {
       createBackup: hasAny(['backup.create', 'backup.*']),
       restoreBackup: hasAny(['backup.restore', 'backup.*']),
       scheduleBackup: hasAny(['backup.schedule', 'backup.*']),
+      downloadBackup: hasAny(['backup.download', 'backup.*']),
+      deleteBackup: hasAny(['backup.delete', 'backup.*']),
 
       viewTheme: hasAny(['theme.view', 'theme.*']),
       updateTheme: hasAny(['theme.update', 'theme.*']),

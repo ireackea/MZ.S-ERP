@@ -1,4 +1,5 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+// ENTERPRISE FIX: Phase 0 – Critical Security & Encoding Lockdown - 2026-03-13
+import { Injectable, InternalServerErrorException, Logger, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { ClientLogDto } from './dto/client-log.dto';
 import { SystemResetDto } from './dto/system-reset.dto';
@@ -20,6 +21,14 @@ export class MonitoringService {
   private readonly logger = new Logger(MonitoringService.name);
 
   constructor(private readonly prisma: PrismaService) {}
+
+  private getResetToken(): string {
+    const resetToken = String(process.env.RESET_TOKEN || '').trim();
+    if (!resetToken) {
+      throw new InternalServerErrorException('RESET_TOKEN is not configured.');
+    }
+    return resetToken;
+  }
 
   async getHealth(): Promise<HealthStatus> {
     let dbConnected = false;
@@ -78,7 +87,7 @@ export class MonitoringService {
   async performSystemReset(dto: SystemResetDto, user: any) {
     this.logger.warn(`SYSTEM RESET REQUESTED by user ${user?.username} (ID: ${user?.id})`);
 
-    // Strict validation for confirmation code - now from environment variable
+    // SECURITY FIX: Strict validation using SYSTEM_RESET_TOKEN from environment
     const expectedToken = this.getSystemResetToken();
     if (dto.confirmationCode !== expectedToken) {
       this.logger.warn(`Invalid reset attempt by user ${user?.username}`);

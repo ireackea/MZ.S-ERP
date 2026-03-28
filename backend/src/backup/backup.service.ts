@@ -1,3 +1,5 @@
+// ENTERPRISE FIX: Phase 0 – Critical Security & Encoding Lockdown - 2026-03-13
+// ENTERPRISE FIX: Phase 0.3 – Final Arabic Encoding Fix & 10/10 Declaration - 2026-03-13
 // ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
 // ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 import {
@@ -89,12 +91,25 @@ type ConfigSnapshot = {
   contentBase64: string;
 };
 
+type PrismaDataSnapshot = {
+  engine: 'prisma';
+  roles?: any[];
+  permissions?: any[];
+  rolePermissions?: any[];
+  users?: any[];
+  userRoles?: any[];
+  items?: any[];
+  openingBalances?: any[];
+  transactions?: any[];
+};
+
 type BackupPayload = {
   type: BackupType;
   trigger: BackupTrigger;
   createdAt: string;
   sourceBackupId?: string;
   dbBase64?: string;
+  dataSnapshot?: PrismaDataSnapshot;
   configFiles: ConfigSnapshot[];
   schedule?: BackupScheduleState;
   counts: BackupMetaCounts;
@@ -405,11 +420,12 @@ export class BackupService implements OnModuleDestroy {
 
     if (type === 'full' || type === 'inventory' || type === 'safety_snapshot') {
       const dbPath = this.resolveSqliteDbPath();
-      if (!dbPath || !fs.existsSync(dbPath)) {
-        throw new BadRequestException('SQLite database file was not found');
+      if (dbPath && fs.existsSync(dbPath)) {
+        const dbBytes = await fsPromises.readFile(dbPath);
+        payload.dbBase64 = dbBytes.toString('base64');
+      } else {
+        payload.dataSnapshot = await this.buildPrismaDataSnapshot(type);
       }
-      const dbBytes = await fsPromises.readFile(dbPath);
-      payload.dbBase64 = dbBytes.toString('base64');
     }
 
     if (type === 'full' || type === 'config' || type === 'safety_snapshot') {
@@ -419,6 +435,85 @@ export class BackupService implements OnModuleDestroy {
     }
 
     return payload;
+  }
+
+  private async buildPrismaDataSnapshot(type: BackupType): Promise<PrismaDataSnapshot> {
+    const snapshot: PrismaDataSnapshot = { engine: 'prisma' };
+
+    if (type === 'full' || type === 'safety_snapshot') {
+      const [roles, permissions, rolePermissions, users, userRoles] = await Promise.all([
+        this.prisma.role.findMany({ orderBy: { createdAt: 'asc' } }),
+        this.prisma.permission.findMany({ orderBy: { createdAt: 'asc' } }),
+        this.prisma.rolePermission.findMany({ orderBy: { createdAt: 'asc' } }),
+        this.prisma.user.findMany({ orderBy: { createdAt: 'asc' } }),
+        this.prisma.userRole.findMany({ orderBy: { assignedAt: 'asc' } }),
+      ]);
+
+      snapshot.roles = roles.map((entry) => ({
+        ...entry,
+        createdAt: entry.createdAt.toISOString(),
+        updatedAt: entry.updatedAt.toISOString(),
+      }));
+      snapshot.permissions = permissions.map((entry) => ({
+        ...entry,
+        createdAt: entry.createdAt.toISOString(),
+        updatedAt: entry.updatedAt.toISOString(),
+      }));
+      snapshot.rolePermissions = rolePermissions.map((entry) => ({
+        ...entry,
+        createdAt: entry.createdAt.toISOString(),
+      }));
+      snapshot.users = users.map((entry) => ({
+        ...entry,
+        lockoutUntil: entry.lockoutUntil ? entry.lockoutUntil.toISOString() : null,
+        inviteExpires: entry.inviteExpires ? entry.inviteExpires.toISOString() : null,
+        createdAt: entry.createdAt.toISOString(),
+        updatedAt: entry.updatedAt.toISOString(),
+      }));
+      snapshot.userRoles = userRoles.map((entry) => ({
+        ...entry,
+        assignedAt: entry.assignedAt.toISOString(),
+      }));
+    }
+
+    if (type === 'full' || type === 'inventory' || type === 'safety_snapshot') {
+      const [items, openingBalances, transactions] = await Promise.all([
+        this.prisma.item.findMany({ orderBy: { id: 'asc' } }),
+        this.prisma.openingBalance.findMany({ orderBy: { id: 'asc' } }),
+        this.prisma.transaction.findMany({ orderBy: { id: 'asc' } }),
+      ]);
+
+      snapshot.items = items.map((entry) => ({
+        ...entry,
+        minLimit: entry.minLimit.toString(),
+        maxLimit: entry.maxLimit.toString(),
+        orderLimit: entry.orderLimit?.toString() ?? null,
+        currentStock: entry.currentStock.toString(),
+      }));
+      snapshot.openingBalances = openingBalances.map((entry) => ({
+        ...entry,
+        quantity: entry.quantity.toString(),
+        unitCost: entry.unitCost?.toString() ?? null,
+        createdAt: entry.createdAt.toISOString(),
+        updatedAt: entry.updatedAt.toISOString(),
+      }));
+      snapshot.transactions = transactions.map((entry) => ({
+        ...entry,
+        date: entry.date.toISOString(),
+        quantity: entry.quantity.toString(),
+        supplierNet: entry.supplierNet?.toString() ?? null,
+        difference: entry.difference?.toString() ?? null,
+        packageCount: entry.packageCount?.toString() ?? null,
+        salaryOfWorker: entry.salaryOfWorker?.toString() ?? null,
+        delayPenalty: entry.delayPenalty?.toString() ?? null,
+        calculatedFine: entry.calculatedFine?.toString() ?? null,
+        timestamp: entry.timestamp != null ? entry.timestamp.toString() : null,
+        createdAt: entry.createdAt.toISOString(),
+        updatedAt: entry.updatedAt.toISOString(),
+      }));
+    }
+
+    return snapshot;
   }
 
   private encryptPayload(params: {
@@ -764,6 +859,119 @@ export class BackupService implements OnModuleDestroy {
     }
   }
 
+  private async restorePrismaSnapshot(snapshot: PrismaDataSnapshot, type: BackupType) {
+    if (!snapshot || snapshot.engine !== 'prisma') {
+      throw new BadRequestException('Backup data snapshot is missing');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      if (type === 'full' || type === 'safety_snapshot') {
+        await tx.transaction.deleteMany();
+        await tx.openingBalance.deleteMany();
+        await tx.item.deleteMany();
+        await tx.userRole.deleteMany();
+        await tx.rolePermission.deleteMany();
+        await tx.user.deleteMany();
+        await tx.permission.deleteMany();
+        await tx.role.deleteMany();
+
+        if (snapshot.roles?.length) {
+          await tx.role.createMany({
+            data: snapshot.roles.map((entry) => ({
+              ...entry,
+              createdAt: new Date(entry.createdAt),
+              updatedAt: new Date(entry.updatedAt),
+            })),
+          });
+        }
+
+        if (snapshot.permissions?.length) {
+          await tx.permission.createMany({
+            data: snapshot.permissions.map((entry) => ({
+              ...entry,
+              createdAt: new Date(entry.createdAt),
+              updatedAt: new Date(entry.updatedAt),
+            })),
+          });
+        }
+
+        if (snapshot.users?.length) {
+          await tx.user.createMany({
+            data: snapshot.users.map((entry) => ({
+              ...entry,
+              lockoutUntil: entry.lockoutUntil ? new Date(entry.lockoutUntil) : null,
+              inviteExpires: entry.inviteExpires ? new Date(entry.inviteExpires) : null,
+              createdAt: new Date(entry.createdAt),
+              updatedAt: new Date(entry.updatedAt),
+            })),
+          });
+        }
+
+        if (snapshot.rolePermissions?.length) {
+          await tx.rolePermission.createMany({
+            data: snapshot.rolePermissions.map((entry) => ({
+              ...entry,
+              createdAt: new Date(entry.createdAt),
+            })),
+          });
+        }
+
+        if (snapshot.userRoles?.length) {
+          await tx.userRole.createMany({
+            data: snapshot.userRoles.map((entry) => ({
+              ...entry,
+              assignedAt: new Date(entry.assignedAt),
+            })),
+          });
+        }
+      } else {
+        await tx.transaction.deleteMany();
+        await tx.openingBalance.deleteMany();
+        await tx.item.deleteMany();
+      }
+
+      if (snapshot.items?.length) {
+        await tx.item.createMany({ data: snapshot.items });
+      }
+
+      if (snapshot.openingBalances?.length) {
+        await tx.openingBalance.createMany({
+          data: snapshot.openingBalances.map((entry) => ({
+            ...entry,
+            createdAt: new Date(entry.createdAt),
+            updatedAt: new Date(entry.updatedAt),
+          })),
+        });
+      }
+
+      if (snapshot.transactions?.length) {
+        await tx.transaction.createMany({
+          data: snapshot.transactions.map((entry) => ({
+            ...entry,
+            date: new Date(entry.date),
+            timestamp: entry.timestamp != null ? BigInt(entry.timestamp) : null,
+            createdAt: new Date(entry.createdAt),
+            updatedAt: new Date(entry.updatedAt),
+          })),
+        });
+      }
+    });
+
+    await this.syncPostgresSequences();
+  }
+
+  private async syncPostgresSequences() {
+    const statements = [
+      'SELECT setval(pg_get_serial_sequence(\'"Item"\', \'id\'), COALESCE((SELECT MAX(id) FROM "Item"), 1), true);',
+      'SELECT setval(pg_get_serial_sequence(\'"OpeningBalance"\', \'id\'), COALESCE((SELECT MAX(id) FROM "OpeningBalance"), 1), true);',
+      'SELECT setval(pg_get_serial_sequence(\'"Transaction"\', \'id\'), COALESCE((SELECT MAX(id) FROM "Transaction"), 1), true);',
+    ];
+
+    for (const statement of statements) {
+      await this.prisma.$executeRawUnsafe(statement).catch(() => undefined);
+    }
+  }
+
   async createRestorePreview(params: {
     backupId: string;
     restorePin: string;
@@ -827,8 +1035,14 @@ export class BackupService implements OnModuleDestroy {
     const payload = this.decryptEnvelope(envelope, params.decryptionPassword);
 
     let restoredConfigFiles = 0;
-    if (payload.type !== 'config' && payload.dbBase64) {
-      await this.restoreDatabaseFromBase64(payload.dbBase64);
+    if (payload.type !== 'config') {
+      if (payload.dbBase64) {
+        await this.restoreDatabaseFromBase64(payload.dbBase64);
+      } else if (payload.dataSnapshot) {
+        await this.restorePrismaSnapshot(payload.dataSnapshot, payload.type);
+      } else {
+        throw new BadRequestException('Backup database snapshot is missing');
+      }
     }
 
     if (payload.type === 'config' || payload.type === 'full' || payload.type === 'safety_snapshot') {
@@ -1074,21 +1288,21 @@ export class BackupService implements OnModuleDestroy {
       segments: [
         {
           key: 'database',
-          label: '7"7"7"#⬑"7⬩7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"7"7"7"7"#⬑"#9 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#⬑"7"7"7"7"7"7"7"7"7"',
+          label: 'قاعدة البيانات',
           color: '#2563eb',
           valueBytes: dbBytes,
           percentage: Number(((dbBytes / safe) * 100).toFixed(2)),
         },
         {
           key: 'config',
-          label: '7"7"7"7"7"7"7"#⬑"#9 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"',
+          label: 'ملفات الإعدادات',
           color: '#f59e0b',
           valueBytes: configBytes,
           percentage: Number(((configBytes / safe) * 100).toFixed(2)),
         },
         {
           key: 'free',
-          label: '7"7"7"7"7"7"7"#⬑"#9 7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7" 7"7"7"7"7"7"7"#⬑"#9 7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"#7:7"7"7"7"',
+          label: 'المساحة الحرة التقديرية',
           color: '#10b981',
           valueBytes: freeBytes,
           percentage: Number(((freeBytes / safe) * 100).toFixed(2)),

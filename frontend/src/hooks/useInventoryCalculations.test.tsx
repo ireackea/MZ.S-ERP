@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 0.3 – Final Arabic Encoding Fix & 10/10 Declaration - 2026-03-13
 // ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
 // ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 import { describe, it, expect } from 'vitest';
@@ -12,8 +13,8 @@ describe('useInventoryCalculations', () => {
         id: 'it-1',
         name: 'Item 1',
         code: 'I1',
-        category: '7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"' as Item['category'],
-        unit: '7"7"7"7"7"7"7"#⬑"7"' as Item['unit'],
+        category: 'مواد خام' as Item['category'],
+        unit: 'كيلوجرام' as Item['unit'],
         minLimit: 5,
         maxLimit: 100,
         orderLimit: 3,

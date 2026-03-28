@@ -1,6 +1,13 @@
+// ENTERPRISE FIX: Phase 3 Final Visual Proof & Cleanup - Archive Only - 2026-03-27
+// ENTERPRISE FIX: Phase 3 Route Ownership Cleanup - Archive Only - 2026-03-26
+// ENTERPRISE FIX: Phase 3 Duplication Cleanup - Archive Only - 2026-03-26
+// All legacy files archived in _ARCHIVE_DUPLICATION_CLEANUP_2026-03-26/
+// ENTERPRISE FIX: Phase 3 – الاختبار + المراقبة + النشر الرسمي - 2026-03-13
+// ENTERPRISE FIX: Phase 1 – PostgreSQL Pivot + Zustand Single Source of Truth - 2026-03-13
+// ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
+// ENTERPRISE FIX: Phase 0 – التنظيف الأساسي والأمان الحرج - 2026-03-13
 // ENTERPRISE FIX: Phase 0.2 – Full Runtime Docker Proof - 2026-03-13
 // ENTERPRISE FIX: Phase 0 - التنظيف الأساسي والتحضير - 2026-03-13
-
 import React, { Suspense, lazy, useState, useEffect, useRef } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { Toaster } from 'sonner';
@@ -13,49 +20,39 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { clearLegacyInventoryBootstrapState, useInventoryStore } from './store/useInventoryStore';
 import { Transaction, Partner, Order, User, Tag, SystemSettings, OperationAppearance, ReportColumnConfig, UnloadingRule, Formula, AuditLog } from './types';
 import { v4 as uuidv4 } from 'uuid';
-import { ensureAuthCredentialsSeeded, loginAsUser, logout, provisionInitialAdmin } from './services/authController';
-import { clearAllAuthData, getAuthToken, getAuthUser } from '@services/authService';
+import { ensureAuthCredentialsSeeded, logout, provisionInitialAdmin } from './services/authController';
+import { clearAllAuthData } from '@services/authService';
 import { filterByDataScope, getIamConfig, hasPermission, logUserActivity, normalizeUsers, upsertCurrentSession } from './services/iamService';
 import {
   bulkCreateTransactions,
   deleteTransactionsInApi,
-  getTransactionsFromApi,
   migrateFromLocalTransactions,
   updateTransactionInApi,
 } from '@services/transactionsService';
 import {
-  getTransactions, saveTransactions,
   getPartners, savePartners,
   getOrders, saveOrders,
-  getUsers, saveUsers,
-  getUnits,
-  getCategories,
   getTags, saveTags,
-  getSettings, saveSettings,
   getAppearanceSettings, saveAppearanceSettings,
-  getReportConfig, saveReportConfig,
-  getOpeningBalanceReportConfig, saveOpeningBalanceReportConfig,
-  getUnloadingRules, saveUnloadingRules,
-  getFormulas, saveFormulas,
   clearStrictEmptyBootFlag,
 } from './services/storage';
 
 import { useOfflineSync } from './hooks/useOfflineSync';
 // ENTERPRISE FIX: Phase 1 - Dual Mode Implementation - 2026-03-02
-const Dashboard = lazy(() => import('./components/Dashboard'));
 const StockBalances = lazy(() => import('./components/StockBalances'));
-const DailyOperations = lazy(() => import('./components/DailyOperations'));
-const ItemManagement = lazy(() => import('./components/ItemManagement'));
-const Stocktaking = lazy(() => import('./components/Stocktaking'));
 const StockCardReport = lazy(() => import('./components/StockCardReport'));
 const Statement = lazy(() => import('./components/Statement'));
 const Partners = lazy(() => import('./components/Partners'));
 const Orders = lazy(() => import('./components/Orders'));
-const Settings = lazy(() => import('./components/Settings'));
-const BackupCenter = lazy(() => import('./components/BackupCenter'));
-const Formulation = lazy(() => import('./components/Formulation'));
-const Reports = lazy(() => import('./components/Reports'));
-const OpeningBalancePage = lazy(() => import('./components/OpeningBalancePage'));
+const DashboardPage = lazy(() => import('./pages/Dashboard'));
+const BackupCenterPage = lazy(() => import('./pages/BackupCenter'));
+const ItemsPage = lazy(() => import('./pages/Items'));
+const OperationsPage = lazy(() => import('./pages/Operations'));
+const StocktakingPage = lazy(() => import('./pages/Stocktaking'));
+const ReportsPage = lazy(() => import('./pages/Reports'));
+const FormulationPage = lazy(() => import('./pages/Formulation'));
+const OpeningBalanceRoutePage = lazy(() => import('./pages/OpeningBalancePage'));
+const SettingsPage = lazy(() => import('./modules/settings/pages/Settings'));
 // DISABLED: AuthenticationPortal - Using LoginV2 only
 const LoginV2 = lazy(() => import('./components/LoginV2'));
 const AcceptInvitation = lazy(() => import('./components/AcceptInvitation'));
@@ -100,6 +97,8 @@ const mapBackendAuditEntity = (entry: {
 const AppContent = () => {
   const { isOffline, isSyncing } = useOfflineSync();
   const items = useInventoryStore((state) => state.items);
+  const transactions = useInventoryStore((state) => state.transactions);
+  const users = useInventoryStore((state) => state.users);
   const units = useInventoryStore((state) => state.units);
   const categories = useInventoryStore((state) => state.categories);
   const addUnit = useInventoryStore((state) => state.addUnit);
@@ -111,25 +110,26 @@ const AppContent = () => {
   const setInventoryUsers = useInventoryStore((state) => state.setUsers);
   const setInventoryRoles = useInventoryStore((state) => state.setRoles);
   const setReferenceData = useInventoryStore((state) => state.setReferenceData);
+  const systemSettings = useInventoryStore((state) => state.systemSettings);
+  const unloadingRules = useInventoryStore((state) => state.unloadingRules);
+  const reportConfig = useInventoryStore((state) => state.reportConfig);
+  const openingBalanceReportConfig = useInventoryStore((state) => state.openingBalanceReportConfig);
+  const formulas = useInventoryStore((state) => state.formulas);
+  const setSystemSettings = useInventoryStore((state) => state.setSystemSettings);
+  const setUnloadingRules = useInventoryStore((state) => state.setUnloadingRules);
+  const setReportConfig = useInventoryStore((state) => state.setReportConfig);
+  const setOpeningBalanceReportConfig = useInventoryStore((state) => state.setOpeningBalanceReportConfig);
+  const setFormulas = useInventoryStore((state) => state.setFormulas);
   const inventoryStoreLoading = useInventoryStore((state) => state.loading);
 
   // Core Data
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
-  const [formulas, setFormulas] = useState<Formula[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
   // Settings
-  const [systemSettings, setSystemSettings] = useState<SystemSettings>({
-      companyName: '', currency: '', address: '', phone: ''
-  });
   const [appearance, setAppearance] = useState<OperationAppearance[]>([]);
-  const [reportConfig, setReportConfig] = useState<ReportColumnConfig[]>([]);
-  const [openingBalanceReportConfig, setOpeningBalanceReportConfig] = useState<ReportColumnConfig[]>([]);
-  const [unloadingRules, setUnloadingRules] = useState<UnloadingRule[]>([]);
 
   const [currentUser, setCurrentUser] = useState<User | undefined>(undefined);
   // ENTERPRISE FIX: authReady starts as false
@@ -150,68 +150,57 @@ const AppContent = () => {
       try {
         console.log('[App.tsx] Starting auth initialization...');
 
-        // Load local data first (for non-items data)
-        const localTransactions = getTransactions();
-        setTransactions(localTransactions);
-        setInventoryTransactions(localTransactions);
+        // Load only non-inventory local UI data here. Inventory data is server-first via Zustand.
         setPartners(getPartners());
         setOrders(getOrders());
-        const loadedUsers = normalizeUsers(getUsers());
-        void ensureAuthCredentialsSeeded(loadedUsers);
-        setUsers(loadedUsers);
-        setInventoryUsers(loadedUsers);
-        setInventoryRoles(getIamConfig().roles);
-        setReferenceData({ units: getUnits(), categories: getCategories() });
+        void ensureAuthCredentialsSeeded(users);
         setTags(getTags());
-        setSystemSettings(getSettings());
         setAppearance(getAppearanceSettings());
-        setReportConfig(getReportConfig());
-        setOpeningBalanceReportConfig(getOpeningBalanceReportConfig());
-        setUnloadingRules(getUnloadingRules());
-        setFormulas(getFormulas());
         setAuditLogs([]);
 
-        // Safe JWT auth check with Optional Chaining
-        const jwtUser = getAuthUser();
+        try {
+          const response = await apiClient.get('/auth/me');
+          const sessionUser = response.data as Partial<User> | undefined;
 
-        console.log('[App.tsx] Auth Check - JWT Token:', getAuthToken() ? 'EXISTS' : 'NONE');
-        console.log('[App.tsx] Auth Check - JWT User:', jwtUser);
+          if (sessionUser?.id) {
+            const normalizeValue = (value?: string | null) => (value ?? '').trim().toLowerCase();
+            const normalizedSessionId = normalizeValue(sessionUser.id);
+            const normalizedSessionUsername = normalizeValue(sessionUser.username);
+            const normalizedSessionEmail = normalizeValue((sessionUser as any)?.email);
+            const normalizedSessionName = normalizeValue(sessionUser.name);
 
-        if (jwtUser) {
-          // ENTERPRISE FIX: Server-First + Robust Matching + Full Permissions Guard - 2026-02-28
-          const normalizeValue = (value?: string | null) => (value ?? '').trim().toLowerCase();
-          const normalizedJwtId = normalizeValue(jwtUser?.id);
-          const normalizedJwtUsername = normalizeValue(jwtUser?.username);
-          const normalizedJwtEmail = normalizeValue((jwtUser as any)?.email);
-          const normalizedJwtName = normalizeValue(jwtUser?.name);
+            const matchedUser = users.find((user) => {
+              const userId = normalizeValue(user?.id);
+              const userUsername = normalizeValue(user?.username);
+              const userEmail = normalizeValue((user as any)?.email);
+              const userName = normalizeValue(user?.name);
 
-          const matchedUser = loadedUsers.find((u) => {
-            const userId = normalizeValue(u?.id);
-            const userUsername = normalizeValue(u?.username);
-            const userEmail = normalizeValue((u as any)?.email);
-            const userName = normalizeValue(u?.name);
+              if (normalizedSessionId && userId && userId === normalizedSessionId) return true;
+              if (normalizedSessionUsername && userUsername && userUsername === normalizedSessionUsername) return true;
+              if (normalizedSessionEmail && userEmail && userEmail === normalizedSessionEmail) return true;
+              if (normalizedSessionName && userName && userName === normalizedSessionName) return true;
 
-            if (normalizedJwtId && userId && userId === normalizedJwtId) return true;
-            if (normalizedJwtUsername && userUsername && userUsername === normalizedJwtUsername) return true;
-            if (normalizedJwtEmail && userEmail && userEmail === normalizedJwtEmail) return true;
-            if (normalizedJwtName && userName && userName === normalizedJwtName) return true;
+              return false;
+            });
 
-            return false;
-          });
+            const sourceUser = matchedUser ?? (sessionUser as User);
+            const role = (sourceUser?.role ?? '').toString();
+            const isSuperAdminRole = role.toLowerCase() === 'superadmin' || role.toLowerCase() === 'admin';
+            const targetUser: User = {
+              ...sourceUser,
+              permissions: sourceUser?.permissions?.length > 0
+                ? sourceUser.permissions
+                : (isSuperAdminRole ? ['*'] : []),
+            };
 
-          const sourceUser = matchedUser ?? (jwtUser as User);
-          const role = (sourceUser?.role ?? '').toString();
-          const isSuperAdminRole = role.toLowerCase() === 'superadmin' || role.toLowerCase() === 'admin';
-          const targetUser: User = {
-            ...sourceUser,
-            permissions: sourceUser?.permissions?.length > 0
-              ? sourceUser.permissions
-              : (isSuperAdminRole ? ['*'] : []),
-          };
-
-          console.log('[App.tsx] Setting currentUser from JWT:', targetUser.username);
-          setCurrentUser(targetUser);
-          upsertCurrentSession(targetUser);
+            console.log('[App.tsx] Restored authenticated session from server:', targetUser.username);
+            setCurrentUser(targetUser);
+            upsertCurrentSession(targetUser);
+          }
+        } catch (sessionError: any) {
+          if (sessionError?.response?.status !== 401) {
+            console.error('[App.tsx] Server session bootstrap failed:', sessionError);
+          }
         }
 
         // Mark auth as ready AFTER all checks are complete
@@ -228,7 +217,7 @@ const AppContent = () => {
     };
 
     initializeAuth();
-  }, [setInventoryRoles, setInventoryTransactions, setInventoryUsers, setReferenceData]);
+  }, [setInventoryRoles, setReferenceData, users]);
 
   useEffect(() => {
     if (users.length > 0 && currentUser) {
@@ -303,30 +292,11 @@ const AppContent = () => {
     };
   }, [authReady, currentUser]);
 
-  useEffect(() => {
-    setInventoryTransactions(transactions);
-  }, [transactions, setInventoryTransactions]);
-
-  useEffect(() => {
-    setInventoryUsers(users);
-  }, [users, setInventoryUsers]);
-
-  useEffect(() => {
-    setInventoryRoles(getIamConfig().roles);
-  }, [setInventoryRoles]);
-
   // Persist data
-  useEffect(() => { if (!authReady) return; saveTransactions(transactions); }, [transactions, authReady]);
   useEffect(() => { if (!authReady) return; savePartners(partners); }, [partners, authReady]);
   useEffect(() => { if (!authReady) return; saveOrders(orders); }, [orders, authReady]);
-  useEffect(() => { if (!authReady) return; saveUsers(users); }, [users, authReady]);
   useEffect(() => { if (!authReady) return; saveTags(tags); }, [tags, authReady]);
-  useEffect(() => { if (!authReady) return; saveSettings(systemSettings); }, [systemSettings, authReady]);
   useEffect(() => { if (!authReady) return; saveAppearanceSettings(appearance); }, [appearance, authReady]);
-  useEffect(() => { if (!authReady) return; saveReportConfig(reportConfig); }, [reportConfig, authReady]);
-  useEffect(() => { if (!authReady) return; saveOpeningBalanceReportConfig(openingBalanceReportConfig); }, [openingBalanceReportConfig, authReady]);
-  useEffect(() => { if (!authReady) return; saveUnloadingRules(unloadingRules); }, [unloadingRules, authReady]);
-  useEffect(() => { if (!authReady) return; saveFormulas(formulas); }, [formulas, authReady]);
 
   const logAction = (action: AuditLog['action'], entity: AuditLog['entity'], details: string) => {
     if (!currentUser) return;
@@ -362,7 +332,7 @@ const AppContent = () => {
     try {
       const created = await bulkCreateTransactions(mapped);
       if (!created.length) return;
-      setTransactions(prev => [...prev, ...created]);
+      setInventoryTransactions([...transactions, ...created]);
       created.forEach(t => updateStockFromTransaction(t, 'add'));
       logAction('CREATE', 'TRANSACTION', `Added ${created.length} transactions`);
     } catch (error) {
@@ -377,7 +347,7 @@ const AppContent = () => {
       await deleteTransactionsInApi(ids);
       const toDelete = transactions.filter(t => ids.includes(t.id));
       toDelete.forEach(t => updateStockFromTransaction(t, 'remove'));
-      setTransactions(prev => prev.filter(t => !ids.includes(t.id)));
+      setInventoryTransactions(transactions.filter(t => !ids.includes(t.id)));
       logAction('DELETE', 'TRANSACTION', `Deleted ${ids.length} transactions`);
     } catch (error) {
       console.error('Failed to delete transactions via API', error);
@@ -392,7 +362,7 @@ const AppContent = () => {
     try {
       const saved = await updateTransactionInApi(updated.id, updated);
       updateStockFromTransaction(saved, 'update', old);
-      setTransactions(prev => prev.map(t => t.id === saved.id ? saved : t));
+      setInventoryTransactions(transactions.map(t => t.id === saved.id ? saved : t));
       logAction('UPDATE', 'TRANSACTION', `Updated transaction ${saved.warehouseInvoice}`);
     } catch (error) {
       console.error('Failed to update transaction via API', error);
@@ -435,18 +405,18 @@ const AppContent = () => {
 
   const handleAddUser = (u: User) => {
     if (denyPermission('users.create.management', 'إضافة مستخدم')) return;
-    setUsers(prev => normalizeUsers([...prev, u]));
+    setInventoryUsers(normalizeUsers([...users, u]));
   };
   const handleUpdateUser = (u: User) => {
     if (currentUser?.id !== u.id && denyPermission('users.update.management', 'تعديل مستخدم')) return;
-    setUsers(prev => normalizeUsers(prev.map(user => user.id === u.id ? u : user)));
+    setInventoryUsers(normalizeUsers(users.map(user => user.id === u.id ? u : user)));
     if (currentUser?.id === u.id) {
       logUserActivity({ userId: u.id, userName: u.name, event: 'profile_updated', details: 'تم تحديث الملف الشخصي' });
     }
   };
   const handleDeleteUser = (id: string) => {
     if (denyPermission('users.delete.management', 'حذف مستخدم')) return;
-    setUsers(prev => prev.filter(u => u.id !== id));
+    setInventoryUsers(users.filter(u => u.id !== id));
   };
 
   useEffect(() => { if (!currentUser) return; upsertCurrentSession(currentUser); }, [currentUser?.id]);
@@ -462,7 +432,6 @@ const AppContent = () => {
     }
 
     setCurrentUser(targetUser);
-    loginAsUser(targetUser, false);
     upsertCurrentSession(targetUser);
     logUserActivity({ userId: targetUser.id, userName: targetUser.name, event: 'login_success', details: 'تسجيل دخول ناجح' });
   };
@@ -487,6 +456,7 @@ const AppContent = () => {
   // ENTERPRISE FIX: Permission Guard Fixed - 2026-02-26
   const handleAuthenticated = (user: any, redirectTo: string) => {
     console.log('[App] LOGIN SUCCESS:', { username: user?.username, role: user?.role, id: user?.id, redirectTo, permissions: user?.permissions });
+    clearAllAuthData();
 
     const targetUser: User = {
       id: user?.id || `user-${user?.username || 'unknown'}`,
@@ -573,10 +543,8 @@ const AppContent = () => {
         }
 
         clearStrictEmptyBootFlag();
-        const updatedUsers = normalizeUsers(getUsers());
-        setUsers(updatedUsers);
+        setInventoryUsers(normalizeUsers([...users, result.user]));
         setCurrentUser(result.user);
-        loginAsUser(result.user, false);
         upsertCurrentSession(result.user);
         logUserActivity({ userId: result.user.id, userName: result.user.name, event: 'login_success', details: 'تم إنشاء حساب المدير بنجاح' });
       } finally {
@@ -676,12 +644,12 @@ const AppContent = () => {
   const handleUpdateSettings = (s: SystemSettings) => setSystemSettings(s);
   const handleUpdateAppearance = (a: OperationAppearance[]) => setAppearance(a);
   const handleUpdateReportConfig = (c: ReportColumnConfig[]) => setReportConfig(c);
-  const handleAddUnloadingRule = (r: UnloadingRule) => setUnloadingRules(prev => [...prev, r]);
-  const handleUpdateUnloadingRule = (rule: UnloadingRule) => setUnloadingRules(prev => prev.map(r => r.id === rule.id ? rule : r));
-  const handleDeleteUnloadingRule = (id: string) => setUnloadingRules(prev => prev.filter(r => r.id !== id));
-  const handleAddFormula = (f: Formula) => { setFormulas(prev => [...prev, f]); logAction('CREATE', 'FORMULA', f.name); };
-  const handleUpdateFormula = (f: Formula) => { setFormulas(prev => prev.map(fo => fo.id === f.id ? f : fo)); logAction('UPDATE', 'FORMULA', f.name); };
-  const handleDeleteFormula = (id: string) => { setFormulas(prev => prev.filter(f => f.id !== id)); logAction('DELETE', 'FORMULA', id); };
+  const handleAddUnloadingRule = (r: UnloadingRule) => setUnloadingRules([...unloadingRules, r]);
+  const handleUpdateUnloadingRule = (rule: UnloadingRule) => setUnloadingRules(unloadingRules.map(r => r.id === rule.id ? rule : r));
+  const handleDeleteUnloadingRule = (id: string) => setUnloadingRules(unloadingRules.filter(r => r.id !== id));
+  const handleAddFormula = (f: Formula) => { setFormulas([...formulas, f]); logAction('CREATE', 'FORMULA', f.name); };
+  const handleUpdateFormula = (f: Formula) => { setFormulas(formulas.map(fo => fo.id === f.id ? f : fo)); logAction('UPDATE', 'FORMULA', f.name); };
+  const handleDeleteFormula = (id: string) => { setFormulas(formulas.filter(f => f.id !== id)); logAction('DELETE', 'FORMULA', id); };
 
   const withLazyFallback = (element: React.ReactNode) => (
     <Suspense fallback={<RouteLoadingFallback />}>{element}</Suspense>
@@ -703,13 +671,13 @@ const AppContent = () => {
       <OfflineBanner />
       <Layout currentUser={currentUser} onLogout={handleLogout}>
       <Routes>
-        <Route path="/" element={renderProtectedRoute('inventory.view.stock', 'dashboard', withLazyFallback(<Dashboard />))} />
-        <Route path="/dashboard" element={renderProtectedRoute('inventory.view.stock', 'dashboard', withLazyFallback(<Dashboard />))} />
+        <Route path="/" element={renderProtectedRoute('inventory.view.stock', 'dashboard', withLazyFallback(<DashboardPage />))} />
+        <Route path="/dashboard" element={renderProtectedRoute('inventory.view.stock', 'dashboard', withLazyFallback(<DashboardPage />))} />
         <Route path="/balances" element={renderProtectedRoute('inventory.view.stock', 'balances', withLazyFallback(<StockBalances settings={systemSettings} />))} />
-        <Route path="/operations" element={renderProtectedRoute('inventory.view.operations', 'operations', withLazyFallback(<DailyOperations partners={partners} settings={systemSettings} unloadingRules={unloadingRules} onAddTransaction={handleAddTransactions} onUpdateTransaction={handleUpdateTransaction} onDeleteTransactions={handleDeleteTransactions} currentUserId={currentUser?.id} canExport={canExportInventory} canImport={canImportOperations} onExport={(rowCount) => logDataExport('operations', rowCount)} onImport={(rowCount) => logDataImport('operations', rowCount)} />))} />
-        <Route path="/transactions" element={renderProtectedRoute('inventory.view.operations', 'operations', withLazyFallback(<DailyOperations partners={partners} settings={systemSettings} unloadingRules={unloadingRules} onAddTransaction={handleAddTransactions} onUpdateTransaction={handleUpdateTransaction} onDeleteTransactions={handleDeleteTransactions} currentUserId={currentUser?.id} canExport={canExportInventory} canImport={canImportOperations} onExport={(rowCount) => logDataExport('operations', rowCount)} onImport={(rowCount) => logDataImport('operations', rowCount)} />))} />
-        <Route path="/items" element={renderProtectedRoute('inventory.view.items', 'items', withLazyFallback(<ItemManagement transactions={scopedTransactions} availableTags={tags} />))} />
-        <Route path="/stocktaking" element={renderProtectedRoute('inventory.view.stocktaking', 'stocktaking', withLazyFallback(<Stocktaking currentUserName={currentUser?.name} companyName={systemSettings.companyName} />))} />
+        <Route path="/operations" element={renderProtectedRoute('inventory.view.operations', 'operations', withLazyFallback(<OperationsPage />))} />
+        <Route path="/transactions" element={renderProtectedRoute('inventory.view.operations', 'operations', withLazyFallback(<OperationsPage />))} />
+        <Route path="/items" element={renderProtectedRoute('inventory.view.items', 'items', withLazyFallback(<ItemsPage />))} />
+        <Route path="/stocktaking" element={renderProtectedRoute('inventory.view.stocktaking', 'stocktaking', withLazyFallback(<StocktakingPage />))} />
         <Route path="/stock-card" element={renderProtectedRoute('inventory.reports.stock_card', 'stock-card', withLazyFallback(<StockCardReport items={scopedItems} transactions={scopedTransactions} companyName={systemSettings.companyName} companyAddress={systemSettings.address} companyPhone={systemSettings.phone} canExport={canExportInventory} onExport={(rowCount) => logDataExport('stock-card', rowCount)} />))} />
         <Route
           path="/statement"
@@ -731,46 +699,24 @@ const AppContent = () => {
         />
         <Route path="/partners" element={renderProtectedRoute('partners.view', 'partners', withLazyFallback(<Partners partners={partners} onAddPartner={handleAddPartner} onUpdatePartner={handleUpdatePartner} onDeletePartner={handleDeletePartner} transactions={scopedTransactions} orders={scopedOrders} />))} />
         <Route path="/orders" element={renderProtectedRoute('sales.view.orders', 'orders', withLazyFallback(<Orders orders={scopedOrders} partners={partners} items={scopedItems} onAddOrder={handleAddOrder} onUpdateOrder={handleUpdateOrder} onCompleteOrder={handleCompleteOrder} />))} />
-        <Route path="/reports" element={renderProtectedRoute('reports.view', 'reports', withLazyFallback(<Reports />))} />
-        <Route path="/formulation" element={renderProtectedRoute('formulation.view', 'formulation', withLazyFallback(<Formulation formulas={formulas} onAddFormula={handleAddFormula} onUpdateFormula={handleUpdateFormula} onDeleteFormula={handleDeleteFormula} />))} />
-        <Route path="/opening-balance" element={renderProtectedRoute('inventory.view.opening_balances', 'opening-balance', withLazyFallback(<OpeningBalancePage columnConfig={openingBalanceReportConfig} onUpdateColumnConfig={setOpeningBalanceReportConfig} />))} />
+        <Route path="/reports" element={renderProtectedRoute('reports.view', 'reports', withLazyFallback(<ReportsPage />))} />
+        <Route path="/formulation" element={renderProtectedRoute('formulation.view', 'formulation', withLazyFallback(<FormulationPage />))} />
+        <Route path="/opening-balance" element={renderProtectedRoute('inventory.view.opening_balances', 'opening-balance', withLazyFallback(<OpeningBalanceRoutePage />))} />
         <Route
           path="/settings"
           element={renderProtectedRoute(
             'settings.view',
             'settings',
             withLazyFallback(
-              <Settings
-                users={users}
-                onAddUser={handleAddUser}
-                onUpdateUser={handleUpdateUser}
-                onDeleteUser={handleDeleteUser}
-                tags={tags}
-                onAddTag={handleAddTag}
-                onDeleteTag={handleDeleteTag}
-                units={units}
-                onAddUnit={addUnit}
-                onDeleteUnit={deleteUnit}
-                categories={categories}
-                onAddCategory={addCategory}
-                onDeleteCategory={deleteCategory}
+              <SettingsPage
                 settings={systemSettings}
                 onUpdateSettings={handleUpdateSettings}
-                appearance={appearance}
-                onUpdateAppearance={handleUpdateAppearance}
                 reportConfig={reportConfig}
                 onUpdateReportConfig={handleUpdateReportConfig}
                 openingBalanceReportConfig={openingBalanceReportConfig}
                 onUpdateOpeningBalanceReportConfig={setOpeningBalanceReportConfig}
-                unloadingRules={unloadingRules}
-                onAddUnloadingRule={handleAddUnloadingRule}
-                onDeleteUnloadingRule={handleDeleteUnloadingRule}
-                onUpdateUnloadingRule={handleUpdateUnloadingRule}
-                allItems={scopedItems}
-                allTransactions={scopedTransactions}
                 auditLogs={auditLogs}
                 currentUser={currentUser}
-                onSwitchUser={handleSwitchCurrentUser}
               />
             )
           )}
@@ -783,8 +729,8 @@ const AppContent = () => {
             withLazyFallback(<UnifiedIAM />)
           )}
         />
-        <Route path="/backup" element={renderProtectedRoute('backup.view', 'backup', withLazyFallback(<BackupCenter currentUser={currentUser} />))} />
-        <Route path="*" element={withLazyFallback(<Dashboard />)} />
+        <Route path="/backup" element={renderProtectedRoute('backup.view', 'backup', withLazyFallback(<BackupCenterPage currentUser={currentUser} />))} />
+        <Route path="*" element={renderProtectedRoute('inventory.view.stock', 'fallback-dashboard', withLazyFallback(<DashboardPage />))} />
       </Routes>
     </Layout>
     </>

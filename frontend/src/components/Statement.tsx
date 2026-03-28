@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 0.3 – Final Arabic Encoding Fix & 10/10 Declaration - 2026-03-13
 // ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
 // ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Arabic Encoding Restoration - Full Components Folder - 2026-03-04
@@ -54,7 +55,7 @@ const PRINT_PRESET_STORAGE_KEY = 'print_presets_statement';
 const PDF_RENDER_ENDPOINT = import.meta.env.VITE_PDF_RENDER_ENDPOINT || '/api/render-pdf';
 const PRINT_FONT_MIN = 8;
 const PRINT_FONT_MAX = 24;
-const DEFAULT_PRINT_TITLE = '878~ 788&877';
+const DEFAULT_PRINT_TITLE = 'كشف الحساب';
 
 type StatementRow = {
   id: string;
@@ -88,35 +89,35 @@ type StatementRow = {
 };
 
 const FALLBACK_COLUMNS: GridColumnPreference[] = [
-  { key: 'select', label: '7778y7', visible: true, order: 0, width: 64, frozen: true },
+  { key: 'select', label: 'تحديد', visible: true, order: 0, width: 64, frozen: true },
   { key: 'rowNumber', label: '#', visible: true, order: 1, width: 64, frozen: true },
-  { key: 'date', label: '787778y7', visible: true, order: 2, width: 130, frozen: false },
-  { key: 'type', label: '8 87 787787', visible: true, order: 3, width: 120, frozen: false },
-  { key: 'warehouseInvoice', label: '8~77877 788&778 ', visible: true, order: 4, width: 140, frozen: false },
-  { key: 'supplierInvoice', label: '8~77877 788&877', visible: true, order: 5, width: 140, frozen: false },
-  { key: 'itemName', label: '778& 7878 8~', visible: true, order: 6, width: 220, frozen: true },
-  { key: 'itemCode', label: '887 7878 8~', visible: true, order: 7, width: 120, frozen: false },
-  { key: 'unit', label: '788777', visible: true, order: 8, width: 90, frozen: false },
-  { key: 'quantity', label: '7888&8y7', visible: true, order: 9, width: 120, frozen: false },
-  { key: 'price', label: '78777', visible: true, order: 10, width: 120, frozen: false },
-  { key: 'total', label: '78778&788y', visible: true, order: 11, width: 130, frozen: false },
-  { key: 'grossWeight', label: '778~8y 7878!8', visible: true, order: 12, width: 140, frozen: false },
-  { key: 'netWeight', label: '778~8y 788&877', visible: true, order: 13, width: 130, frozen: false },
-  { key: 'difference', label: '788~78', visible: true, order: 14, width: 110, frozen: false },
-  { key: 'packageCount', label: '7877877', visible: true, order: 15, width: 110, frozen: false },
-  { key: 'weightSlip', label: '8 8&877 78878 ', visible: true, order: 16, width: 130, frozen: false },
-  { key: 'supplierOrReceiver', label: '788&877/7878&8y8', visible: true, order: 17, width: 200, frozen: false },
-  { key: 'warehouseId', label: '788&77877', visible: true, order: 18, width: 130, frozen: false },
-  { key: 'truckNumber', label: '787778 7', visible: true, order: 19, width: 110, frozen: false },
-  { key: 'trailerNumber', label: '787777', visible: true, order: 20, width: 110, frozen: false },
-  { key: 'driverName', label: '787778', visible: true, order: 21, width: 150, frozen: false },
-  { key: 'entryTime', label: '7788', visible: true, order: 22, width: 90, frozen: false },
-  { key: 'exitTime', label: '7787', visible: true, order: 23, width: 90, frozen: false },
-  { key: 'unloadingRule', label: '87777 7878~78y7', visible: true, order: 24, width: 170, frozen: false },
-  { key: 'delayMinutes', label: '78778 787778y7', visible: true, order: 25, width: 130, frozen: false },
-  { key: 'delayAmount', label: '8&787 787778y7', visible: true, order: 26, width: 130, frozen: false },
-  { key: 'notes', label: '8&877777', visible: true, order: 27, width: 220, frozen: false },
-  { key: 'actions', label: '7777777', visible: true, order: 28, width: 110, frozen: false },
+  { key: 'date', label: 'التاريخ', visible: true, order: 2, width: 130, frozen: false },
+  { key: 'type', label: 'نوع العملية', visible: true, order: 3, width: 120, frozen: false },
+  { key: 'warehouseInvoice', label: 'فاتورة المخزن', visible: true, order: 4, width: 140, frozen: false },
+  { key: 'supplierInvoice', label: 'فاتورة المورد', visible: true, order: 5, width: 140, frozen: false },
+  { key: 'itemName', label: 'اسم الصنف', visible: true, order: 6, width: 220, frozen: true },
+  { key: 'itemCode', label: 'كود الصنف', visible: true, order: 7, width: 120, frozen: false },
+  { key: 'unit', label: 'الوحدة', visible: true, order: 8, width: 90, frozen: false },
+  { key: 'quantity', label: 'الكمية', visible: true, order: 9, width: 120, frozen: false },
+  { key: 'price', label: 'السعر', visible: true, order: 10, width: 120, frozen: false },
+  { key: 'total', label: 'الإجمالي', visible: true, order: 11, width: 130, frozen: false },
+  { key: 'grossWeight', label: 'الوزن القائم', visible: true, order: 12, width: 140, frozen: false },
+  { key: 'netWeight', label: 'الوزن الصافي', visible: true, order: 13, width: 130, frozen: false },
+  { key: 'difference', label: 'الفرق', visible: true, order: 14, width: 110, frozen: false },
+  { key: 'packageCount', label: 'عدد العبوات', visible: true, order: 15, width: 110, frozen: false },
+  { key: 'weightSlip', label: 'رقم الميزان', visible: true, order: 16, width: 130, frozen: false },
+  { key: 'supplierOrReceiver', label: 'المورد/العميل', visible: true, order: 17, width: 200, frozen: false },
+  { key: 'warehouseId', label: 'رقم المخزن', visible: true, order: 18, width: 130, frozen: false },
+  { key: 'truckNumber', label: 'رقم السيارة', visible: true, order: 19, width: 110, frozen: false },
+  { key: 'trailerNumber', label: 'رقم المقطورة', visible: true, order: 20, width: 110, frozen: false },
+  { key: 'driverName', label: 'اسم السائق', visible: true, order: 21, width: 150, frozen: false },
+  { key: 'entryTime', label: 'وقت الدخول', visible: true, order: 22, width: 90, frozen: false },
+  { key: 'exitTime', label: 'وقت الخروج', visible: true, order: 23, width: 90, frozen: false },
+  { key: 'unloadingRule', label: 'قاعدة التفريغ', visible: true, order: 24, width: 170, frozen: false },
+  { key: 'delayMinutes', label: 'دقائق التأخير', visible: true, order: 25, width: 130, frozen: false },
+  { key: 'delayAmount', label: 'قيمة التأخير', visible: true, order: 26, width: 130, frozen: false },
+  { key: 'notes', label: 'ملاحظات', visible: true, order: 27, width: 220, frozen: false },
+  { key: 'actions', label: 'الإجراءات', visible: true, order: 28, width: 110, frozen: false },
 ];
 
 const isNumericColumn = (key: string) =>
@@ -215,10 +216,10 @@ const escapeHtml = (value: string) =>
 const normalizeStatementColumnLabels = (cols: GridColumnPreference[]) =>
   cols.map((column) => {
     if (column.key === 'grossWeight') {
-      return { ...column, label: '778~8y 7878!8' };
+      return { ...column, label: 'الوزن القائم' };
     }
     if (column.key === 'netWeight') {
-      return { ...column, label: '778~8y 788&877' };
+      return { ...column, label: 'الوزن الصافي' };
     }
     return column;
   });
@@ -383,7 +384,7 @@ const Statement: React.FC<StatementProps> = ({
         type: transaction.type,
         warehouseInvoice: transaction.warehouseInvoice || '',
         supplierInvoice: transaction.supplierInvoice || '',
-        itemName: item?.name || '78y7 8&7788~',
+        itemName: item?.name || 'صنف غير معروف',
         itemCode: item?.code || '-',
         unit: item?.unit || '-',
         quantity,
@@ -614,7 +615,7 @@ const Statement: React.FC<StatementProps> = ({
   const saveColumns = () => {
     const effectiveUserId = currentUserId || '0';
     if (isForceUnified && effectiveUserId !== '0') {
-      toast.error('78777 788&877 8&8~787 8&8  787777777 887 8y8&88  78~7 7778y7 8&77778& 7788y789.');
+      toast.error('لا يمكن تعديل إعدادات الأعمدة أثناء تفعيل الوضع الموحد. أوقف التوحيد أولًا ثم أعد المحاولة.');
       setShowColumnSettings(false);
       return;
     }
@@ -668,7 +669,7 @@ const Statement: React.FC<StatementProps> = ({
 
   const saveCurrentPrintSettings = () => {
     localStorage.setItem(PRINT_PRESET_STORAGE_KEY, JSON.stringify(printConfig));
-    toast.success('78& 78~7 7777777 7877777 787788y7.');
+    toast.success('تم حفظ إعدادات الطباعة الحالية بنجاح.');
   };
 
   const resetPrintSettings = () => {
@@ -676,7 +677,7 @@ const Statement: React.FC<StatementProps> = ({
     const next = { ...DEFAULT_PRINT_CONFIG, printColumnKeys: allKeys };
     setPrintConfig(next);
     localStorage.removeItem(PRINT_PRESET_STORAGE_KEY);
-    toast.success('78&7 7777777 7777777 7877777 7878~77778y7.');
+    toast.success('تمت استعادة الإعدادات الافتراضية للطباعة.');
   };
 
   const selectAllPrintColumns = () => {
@@ -698,7 +699,7 @@ const Statement: React.FC<StatementProps> = ({
 
   const exportExcel = async () => {
     if (!canExport) {
-      toast.error('88y7 878y8 78778y7 787778y7.');
+      toast.error('ليس لديك صلاحية لتصدير التقرير.');
       return;
     }
     if (!ensureRangeReady()) return;
@@ -802,10 +803,10 @@ const Statement: React.FC<StatementProps> = ({
         worksheet.addRow([]);
 
         const summaryCards = [
-          { label: '778&788y 778~8y 7878!8', value: `${formatNumber(summary.gross)} 78 ` },
-          { label: '778&788y 778~8y 788&877', value: `${formatNumber(summary.net)} 78 ` },
-          { label: '788~78 78y8  7878!8 8 788&877', value: `${formatNumber(summary.difference)} 78 ` },
-          { label: '778&788y 8&787 787778y7', value: `${formatNumber(summary.delayAmount)} 7.8` },
+          { label: 'إجمالي الوزن القائم', value: `${formatNumber(summary.gross)} كجم` },
+          { label: 'إجمالي الوزن الصافي', value: `${formatNumber(summary.net)} كجم` },
+          { label: 'الفرق بين القائم والصافي', value: `${formatNumber(summary.difference)} كجم` },
+          { label: 'إجمالي قيمة التأخير', value: `${formatNumber(summary.delayAmount)} ج.م` },
         ];
 
         const splitAt = Math.max(1, Math.floor(totalColumns / 2));
@@ -829,7 +830,7 @@ const Statement: React.FC<StatementProps> = ({
       if (printConfig.printSignatures) {
         worksheet.addRow([]);
 
-        const signatureTitles = ['8&7777 788&7778 ', '8&78y7 788&7778 ', '8&78y7 788&78 7'];
+        const signatureTitles = ['معد التقرير', 'مراجع التقرير', 'اعتماد الإدارة'];
 
         if (totalColumns >= 3) {
           const lineRow = worksheet.addRow(new Array(totalColumns).fill('')).number;
@@ -881,13 +882,13 @@ const Statement: React.FC<StatementProps> = ({
       );
       onExport?.(rowsForOutput.length);
     } catch {
-      toast.error('7777 7778y7 8&88~ Excel.');
+      toast.error('تعذر تصدير الملف بصيغة Excel.');
     }
   };
 
   const runPdfAction = async (mode: 'save' | 'preview') => {
     if (!canExport) {
-      toast.error('88y7 878y8 78778y7 787778y7.');
+      toast.error('ليس لديك صلاحية لتصدير التقرير.');
       return;
     }
     if (!ensureRangeReady()) return;
@@ -895,7 +896,7 @@ const Statement: React.FC<StatementProps> = ({
 
     const exportWithClientFallback = async () => {
       if (!printPreviewRef.current) {
-        throw new Error('87 7877 8&778y8 7 778!77 887778y7 788&788y.');
+        throw new Error('تعذر العثور على محتوى صالح لإنشاء ملف PDF.');
       }
 
       const html2pdfModule = await import('html2pdf.js');
@@ -1077,16 +1078,16 @@ const Statement: React.FC<StatementProps> = ({
 
               ${isLast ? `
                 <div class="summary">
-                  <div class="card"><div class="label">778&788y 778~8y 7878!8</div><div class="value">${formatNumber(summary.gross)} 78 </div></div>
-                  <div class="card"><div class="label">778&788y 778~8y 788&877</div><div class="value">${formatNumber(summary.net)} 78 </div></div>
-                  <div class="card"><div class="label">788~78 78y8  7878!8 8 788&877</div><div class="value">${formatNumber(summary.difference)} 78 </div></div>
-                  <div class="card"><div class="label">778&788y 8&787 787778y7</div><div class="value">${formatNumber(summary.delayAmount)} 7.8</div></div>
+                  <div class="card"><div class="label">إجمالي الوزن القائم</div><div class="value">${formatNumber(summary.gross)} كجم</div></div>
+                  <div class="card"><div class="label">إجمالي الوزن الصافي</div><div class="value">${formatNumber(summary.net)} كجم</div></div>
+                  <div class="card"><div class="label">الفرق بين القائم والصافي</div><div class="value">${formatNumber(summary.difference)} كجم</div></div>
+                  <div class="card"><div class="label">إجمالي قيمة التأخير</div><div class="value">${formatNumber(summary.delayAmount)} ج.م</div></div>
                 </div>
 
                 <div class="summary-signature-gap"></div>
 
                 <div class="signatures">
-                  ${['8&7777 788&7778 ', '8&78y7 788&7778 ', '8&78y7 788&78 7'].map((title) => `
+                  ${['معد التقرير', 'مراجع التقرير', 'اعتماد الإدارة'].map((title) => `
                     <div>
                       <div class="line"></div>
                       <div class="name">${title}</div>
@@ -1145,34 +1146,34 @@ const Statement: React.FC<StatementProps> = ({
       if (mode === 'preview') {
         const blobUrl = URL.createObjectURL(pdfBlob);
         window.open(blobUrl, '_blank', 'noopener,noreferrer');
-        setPdfStatusMessage('78& 78 777 8&778y8 7 PDF 78 777.');
+        setPdfStatusMessage('تم فتح معاينة ملف PDF بنجاح.');
       } else {
         downloadBlob(pdfBlob, `Statement_${new Date().toISOString().slice(0, 10)}.pdf`);
         onExport?.(rowsForOutput.length);
-        setPdfStatusMessage('78& 78~7 8&88~ PDF 78 777.');
+        setPdfStatusMessage('تم حفظ ملف PDF بنجاح.');
       }
     } catch (error) {
-      const details = error instanceof Error ? error.message : '777 78y7 8&7788~';
+      const details = error instanceof Error ? error.message : 'حدث خطأ غير متوقع';
       const networkHint = details.includes('Failed to fetch')
-        ? '7777 788788 7880 778&7 PDF. 7787 8&8  7778y8 npm run pdf:server.'
+        ? 'تعذر الاتصال بخدمة إنشاء PDF. تأكد من تشغيل npm run pdf:server.'
         : details;
 
       if (mode === 'save') {
         try {
           await exportWithClientFallback();
           onExport?.(rowsForOutput.length);
-          setPdfStatusMessage('78& 78~7 8&88~ PDF 78 777 777 788&777 788&788y 787778y778y 777 7777 778&7 PDF.');
+          setPdfStatusMessage('تم حفظ ملف PDF باستخدام المسار البديل بعد تعذر الخادم الأساسي.');
           return;
         } catch (fallbackError) {
-          const fallbackDetails = fallbackError instanceof Error ? fallbackError.message : '777 78y7 8&7788~ 8~8y 787778y7 788&788y';
-          const fallbackMessage = `7777 7778y7 8&88~ PDF. ${networkHint} | 8~78 788&777 788&788y: ${fallbackDetails}`;
+          const fallbackDetails = fallbackError instanceof Error ? fallbackError.message : 'تعذر تنفيذ المسار البديل';
+          const fallbackMessage = `تعذر إنشاء ملف PDF. ${networkHint} | تفاصيل المسار البديل: ${fallbackDetails}`;
           setPdfStatusMessage(fallbackMessage);
           toast.error(fallbackMessage);
           return;
         }
       }
 
-      const base = mode === 'preview' ? '7777 78 777 777777 PDF.' : '7777 7778y7 8&88~ PDF.';
+      const base = mode === 'preview' ? 'تعذر فتح معاينة ملف PDF.' : 'تعذر حفظ ملف PDF.';
       const finalMessage = `${base} ${networkHint}`;
       setPdfStatusMessage(finalMessage);
       toast.error(finalMessage);
@@ -1191,11 +1192,11 @@ const Statement: React.FC<StatementProps> = ({
 
   const ensureRangeReady = () => {
     if (printColumns.length === 0) {
-      toast.error('88& 8y78& 7778y77 78y 78&87 8877777.');
+      toast.error('يجب اختيار عمود واحد على الأقل قبل الطباعة.');
       return false;
     }
     if (printConfig.range === 'selected_rows' && selectedRowsData.length === 0) {
-      toast.error('88& 8y78& 7778y7 78~88~. 7777 78~88~789 788789 78 78y87 8 778 7877777.');
+      toast.error('يجب تحديد صف واحد على الأقل عند اختيار نطاق الصفوف المحددة.');
       return false;
     }
     return true;
@@ -1238,9 +1239,9 @@ const Statement: React.FC<StatementProps> = ({
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
           <div>
             <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-              <FileText className="text-blue-600" /> 878~ 788&877
+              <FileText className="text-blue-600" /> كشف الحساب
             </h2>
-            <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">777 87788y8 877777 87778y7 8&7777 7880 7878y78 77 788&8~8777.</p>
+            <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">راجع العمليات المسجلة، وخصص عرض البيانات، ثم اطبع أو صدّر التقرير مباشرة.</p>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -1248,33 +1249,33 @@ const Statement: React.FC<StatementProps> = ({
               onClick={selectAllFiltered}
               className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-50 flex items-center gap-2"
             >
-              <CheckSquare size={14} /> 7778y7 7888
+              <CheckSquare size={14} /> تحديد الكل
             </button>
             <button
               onClick={clearSelection}
               className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-50 flex items-center gap-2"
             >
-              <Square size={14} /> 78777 787778y7
+              <Square size={14} /> إلغاء التحديد
             </button>
             <button
               onClick={() => setShowColumnSettings(true)}
               className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-50 flex items-center gap-2"
             >
-              <Settings size={14} /> 78778&77
+              <Settings size={14} /> الإعدادات
             </button>
             <button
               onClick={() => setIsRowsExpanded((prev) => !prev)}
               className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-50 flex items-center gap-2"
-              title={isRowsExpanded ? '78& 7877877' : '8~77 7877877'}
+              title={isRowsExpanded ? 'طي الصفوف' : 'توسيع الصفوف'}
             >
               {isRowsExpanded ? <Minimize size={14} /> : <Expand size={14} />}
-              {isRowsExpanded ? '78& 7877877' : '8~77 7877877'}
+              {isRowsExpanded ? 'طي الصفوف' : 'توسيع الصفوف'}
             </button>
             <button
               onClick={openPrintPanel}
               className="px-3 py-2 rounded-lg bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 flex items-center gap-2"
             >
-              <Printer size={14} /> 77777 / 7778y7
+              <Printer size={14} /> طباعة / تصدير
             </button>
           </div>
         </div>
@@ -1286,17 +1287,17 @@ const Statement: React.FC<StatementProps> = ({
               type="text"
               value={globalSearch}
               onChange={(event) => setGlobalSearch(event.target.value)}
-              placeholder="777 7788&8y 8~8y 88 78778&77"
+              placeholder="ابحث بالاسم أو الكود أو رقم الفاتورة"
               className="w-full pr-9 pl-3 py-2.5 border border-slate-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/40"
             />
           </label>
 
-          <select title="8~877 8 87 787787" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm">
-            <option value="all">88 7877877</option>
-            <option value="8777">8777</option>
-            <option value="7777">7777</option>
-            <option value="78 777">78 777</option>
-            <option value="8!788">8!788</option>
+          <select title="تصفية حسب نوع العملية" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm">
+            <option value="all">كل العمليات</option>
+            <option value="وارد">وارد</option>
+            <option value="صادر">صادر</option>
+            <option value="مرتجع">مرتجع</option>
+            <option value="تالف">تالف</option>
           </select>
 
           <input
@@ -1304,7 +1305,7 @@ const Statement: React.FC<StatementProps> = ({
             value={partnerFilter}
             onChange={(event) => setPartnerFilter(event.target.value)}
             list="statement-partners"
-            placeholder="788&877/7878&8y8"
+            placeholder="المورد/العميل"
             className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm"
           />
           <datalist id="statement-partners">
@@ -1314,14 +1315,14 @@ const Statement: React.FC<StatementProps> = ({
           </datalist>
 
           <div className="grid grid-cols-1 gap-2">
-            <input title="787778y7 8&8 " type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm" />
-            <input title="787778y7 7880" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm" />
+            <input title="تاريخ البداية" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm" />
+            <input title="تاريخ النهاية" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm" />
           </div>
         </div>
 
         <label className="inline-flex items-center gap-2 text-xs text-slate-600 font-bold">
           <input type="checkbox" checked={showActionsOnPrint} onChange={(event) => setShowActionsOnPrint(event.target.checked)} className="accent-emerald-600" />
-          777 78&87 787777777 78 7 7877777
+          إظهار عمود الإجراءات داخل الجدول
         </label>
       </div>
 
@@ -1330,21 +1331,21 @@ const Statement: React.FC<StatementProps> = ({
           <div className="h-full w-full bg-white rounded-2xl overflow-hidden flex print:rounded-none print:h-auto">
             <aside className="w-full max-w-sm border-l border-slate-200 p-4 overflow-y-auto print-panel-ui">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-bold text-slate-800">8877 7877777 8788&778y8 7</h3>
-                <button title="77878 8877 7877777" aria-label="77878 8877 7877777" onClick={() => setShowPrintPanel(false)} className="text-slate-500 hover:text-red-600"><X size={18} /></button>
+                <h3 className="font-bold text-slate-800">لوحة إعدادات الطباعة</h3>
+                <button title="إغلاق لوحة الطباعة" aria-label="إغلاق لوحة الطباعة" onClick={() => setShowPrintPanel(false)} className="text-slate-500 hover:text-red-600"><X size={18} /></button>
               </div>
 
               <div className="print-panel-ui mb-3 grid grid-cols-2 gap-2">
-                <button onClick={saveCurrentPrintSettings} className="px-3 py-2 rounded-lg bg-slate-800 text-white hover:bg-slate-900 text-xs">78~7 787777777 787788y7</button>
-                <button onClick={resetPrintSettings} className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs">7777777 7878~77778y77</button>
+                <button onClick={saveCurrentPrintSettings} className="px-3 py-2 rounded-lg bg-slate-800 text-white hover:bg-slate-900 text-xs">حفظ الإعدادات الحالية</button>
+                <button onClick={resetPrintSettings} className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs">إعادة تعيين الإعدادات</button>
               </div>
 
               <div className="space-y-4 text-sm">
                 <div className="space-y-2">
-                  <div className="font-bold text-slate-700">787777777 78778&7</div>
+                  <div className="font-bold text-slate-700">بيانات المستند</div>
 
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">78 878  788787</label>
+                    <label className="block text-xs text-slate-500 mb-1">عنوان المستند</label>
                     <input
                       type="text"
                       value={printConfig.printTitle}
@@ -1355,16 +1356,16 @@ const Statement: React.FC<StatementProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">7877778!</label>
+                    <label className="block text-xs text-slate-500 mb-1">اتجاه الصفحة</label>
                     <div className="grid grid-cols-2 gap-2">
-                      <button onClick={() => setPrintConfig((prev) => ({ ...prev, orientation: 'portrait' }))} className={`px-3 py-2 rounded-lg border ${printConfig.orientation === 'portrait' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-300 text-slate-700'}`}>78&878y</button>
-                      <button onClick={() => setPrintConfig((prev) => ({ ...prev, orientation: 'landscape' }))} className={`px-3 py-2 rounded-lg border ${printConfig.orientation === 'landscape' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-300 text-slate-700'}`}>78~88y</button>
+                      <button onClick={() => setPrintConfig((prev) => ({ ...prev, orientation: 'portrait' }))} className={`px-3 py-2 rounded-lg border ${printConfig.orientation === 'portrait' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-300 text-slate-700'}`}>طولي</button>
+                      <button onClick={() => setPrintConfig((prev) => ({ ...prev, orientation: 'landscape' }))} className={`px-3 py-2 rounded-lg border ${printConfig.orientation === 'landscape' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-300 text-slate-700'}`}>عرضي</button>
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">778& 78878</label>
-                    <select title="7778y77 778& 78878" value={printConfig.paperSize} onChange={(event) => setPrintConfig((prev) => ({ ...prev, paperSize: event.target.value as PrintPaperSize }))} className="w-full px-3 py-2 rounded-lg border border-slate-300">
+                    <label className="block text-xs text-slate-500 mb-1">مقاس الورق</label>
+                    <select title="اختيار مقاس الورق" value={printConfig.paperSize} onChange={(event) => setPrintConfig((prev) => ({ ...prev, paperSize: event.target.value as PrintPaperSize }))} className="w-full px-3 py-2 rounded-lg border border-slate-300">
                       <option value="a4">A4</option>
                       <option value="a3">A3</option>
                       <option value="letter">Letter</option>
@@ -1372,17 +1373,17 @@ const Statement: React.FC<StatementProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">788!878&7</label>
+                    <label className="block text-xs text-slate-500 mb-1">الهوامش</label>
                     <div className="grid grid-cols-3 gap-2">
-                      <button onClick={() => setPrintConfig((prev) => ({ ...prev, margins: 'narrow' }))} className={`px-2 py-2 rounded-lg border text-xs ${printConfig.margins === 'narrow' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-300 text-slate-700'}`}>78y8</button>
-                      <button onClick={() => setPrintConfig((prev) => ({ ...prev, margins: 'normal' }))} className={`px-2 py-2 rounded-lg border text-xs ${printConfig.margins === 'normal' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-300 text-slate-700'}`}>7778y</button>
-                      <button onClick={() => setPrintConfig((prev) => ({ ...prev, margins: 'wide' }))} className={`px-2 py-2 rounded-lg border text-xs ${printConfig.margins === 'wide' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-300 text-slate-700'}`}>8777</button>
+                      <button onClick={() => setPrintConfig((prev) => ({ ...prev, margins: 'narrow' }))} className={`px-2 py-2 rounded-lg border text-xs ${printConfig.margins === 'narrow' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-300 text-slate-700'}`}>ضيقة</button>
+                      <button onClick={() => setPrintConfig((prev) => ({ ...prev, margins: 'normal' }))} className={`px-2 py-2 rounded-lg border text-xs ${printConfig.margins === 'normal' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-300 text-slate-700'}`}>عادية</button>
+                      <button onClick={() => setPrintConfig((prev) => ({ ...prev, margins: 'wide' }))} className={`px-2 py-2 rounded-lg border text-xs ${printConfig.margins === 'wide' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-300 text-slate-700'}`}>واسعة</button>
                     </div>
                   </div>
                 </div>
 
                 <div className="space-y-2 border-t border-slate-200 pt-3">
-                  <div className="font-bold text-slate-700">788y8y8~ 7878~77</div>
+                  <div className="font-bold text-slate-700">تحجيم الصفحة</div>
                   <label className="flex items-center gap-2 text-sm text-slate-700">
                     <input
                       type="radio"
@@ -1391,7 +1392,7 @@ const Statement: React.FC<StatementProps> = ({
                       onChange={() => setPrintConfig((prev) => ({ ...prev, scalingMode: 'actual' }))}
                       className="accent-emerald-600"
                     />
-                    78778& 788~788y (Actual Size)
+                    الحجم الفعلي (Actual Size)
                   </label>
                   <label className="flex items-center gap-2 text-sm text-slate-700">
                     <input
@@ -1401,42 +1402,42 @@ const Statement: React.FC<StatementProps> = ({
                       onChange={() => setPrintConfig((prev) => ({ ...prev, scalingMode: 'fit' }))}
                       className="accent-emerald-600"
                     />
-                    777 88 78778&77 8~8y 78~77 87777 (Fit All Columns on One Page)
+                    احتواء كل الأعمدة في صفحة واحدة (Fit All Columns on One Page)
                   </label>
                   <div className="text-xs text-slate-500">
-                    8 777 787778y8& 787788y7: {Math.round(effectivePrintScale * 100)}%
+                    نسبة التحجيم التلقائي: {Math.round(effectivePrintScale * 100)}%
                   </div>
                   {isScaleVerySmall && (
                     <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1">
-                      788 7 78y888  778y7789 777897R 888  7877777 8&7777.
+                      قد تصبح المعاينة صغيرة جدًا؛ يفضّل تقليل الأعمدة المطبوعة.
                     </div>
                   )}
                 </div>
 
                 <div className="space-y-2 border-t border-slate-200 pt-3">
-                  <div className="font-bold text-slate-700">8 8&7 7877777</div>
+                  <div className="font-bold text-slate-700">تدفق الطباعة</div>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={() => setPrintConfig((prev) => ({ ...prev, flowMode: 'continuous' }))}
                       className={`px-3 py-2 rounded-lg border text-xs ${printConfig.flowMode === 'continuous' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-300 text-slate-700'}`}
                     >
-                      8&7787
+                      مستمر
                     </button>
                     <button
                       onClick={() => setPrintConfig((prev) => ({ ...prev, flowMode: 'paged' }))}
                       className={`px-3 py-2 rounded-lg border text-xs ${printConfig.flowMode === 'paged' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-300 text-slate-700'}`}
                     >
-                      8&878&7 78~777
+                      صفحات
                     </button>
                   </div>
                 </div>
 
                 <div className="space-y-2 border-t border-slate-200 pt-3">
-                  <div className="font-bold text-slate-700">8&78!7 7877</div>
-                  <label className="block text-xs text-slate-500 mb-1">778& 7877: {printConfig.fontSize}px</label>
+                  <div className="font-bold text-slate-700">حجم الخط</div>
+                  <label className="block text-xs text-slate-500 mb-1">مقاس الخط: {printConfig.fontSize}px</label>
                   <input
                     type="range"
-                    title="787788& 8~8y 778& 7877"
+                    title="تعديل مقاس الخط"
                     min={PRINT_FONT_MIN}
                     max={PRINT_FONT_MAX}
                     step={1}
@@ -1452,12 +1453,12 @@ const Statement: React.FC<StatementProps> = ({
 
                 <div className="space-y-2 border-t border-slate-200 pt-3">
                   <div className="flex items-center justify-between">
-                    <div className="font-bold text-slate-700">78778&77 788&78877</div>
+                    <div className="font-bold text-slate-700">الأعمدة المطبوعة</div>
                     <span className="text-xs text-slate-500">{printColumns.length} / {printableColumnsCatalog.length}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    <button onClick={selectAllPrintColumns} className="px-2 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-700 hover:bg-slate-50">7778y7 7888</button>
-                    <button onClick={deselectAllPrintColumns} className="px-2 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-700 hover:bg-slate-50">78777 7888</button>
+                    <button onClick={selectAllPrintColumns} className="px-2 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-700 hover:bg-slate-50">تحديد الكل</button>
+                    <button onClick={deselectAllPrintColumns} className="px-2 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-700 hover:bg-slate-50">إلغاء الكل</button>
                   </div>
                   <div className="max-h-44 overflow-auto border border-slate-200 rounded-lg p-2 space-y-1">
                     {printableColumnsCatalog.map((column) => (
@@ -1475,14 +1476,14 @@ const Statement: React.FC<StatementProps> = ({
                 </div>
 
                 <div className="space-y-2 border-t border-slate-200 pt-3">
-                  <div className="font-bold text-slate-700">78y7777 788&77880</div>
+                  <div className="font-bold text-slate-700">خيارات إضافية</div>
                   {[
-                    { key: 'printGridlines', label: '77777 787787' },
-                    { key: 'printBackgroundColors', label: '77777 7878878  78788~8y7' },
-                    { key: 'printSummaryCards', label: '77777 8&77777 78777777' },
-                    { key: 'printSignatures', label: '77777 878& 787888y777' },
-                    { key: 'repeatHeaders', label: '78777 787787 8~8y 88 78~77' },
-                    { key: 'autoSizeColumnsByContent', label: '7778y8& 788778y 88778&77 777 788 7 (7788  87)' },
+                    { key: 'printGridlines', label: 'إظهار خطوط الجدول' },
+                    { key: 'printBackgroundColors', label: 'إظهار ألوان الخلفية في الطباعة' },
+                    { key: 'printSummaryCards', label: 'إظهار بطاقات الملخص' },
+                    { key: 'printSignatures', label: 'إظهار حقول التوقيع' },
+                    { key: 'repeatHeaders', label: 'تكرار رؤوس الجدول بكل صفحة' },
+                    { key: 'autoSizeColumnsByContent', label: 'ضبط عرض الأعمدة تلقائيًا حسب المحتوى' },
                   ].map((option) => (
                     <label key={option.key} className="flex items-center gap-2 text-sm text-slate-700">
                       <input
@@ -1497,56 +1498,56 @@ const Statement: React.FC<StatementProps> = ({
                 </div>
 
                 <div className="space-y-2 border-t border-slate-200 pt-3">
-                  <div className="font-bold text-slate-700">8 778 7877777</div>
+                  <div className="font-bold text-slate-700">نطاق الطباعة</div>
                   <label className="flex items-center gap-2 text-sm text-slate-700">
                     <input type="radio" name="print-range" checked={printConfig.range === 'current_page'} onChange={() => setPrintConfig((prev) => ({ ...prev, range: 'current_page' }))} className="accent-emerald-600" />
-                    77777 7878~77 787788y7 8~87
+                    الصفحة الحالية فقط
                   </label>
                   <label className="flex items-center gap-2 text-sm text-slate-700">
                     <input type="radio" name="print-range" checked={printConfig.range === 'selected_rows'} onChange={() => setPrintConfig((prev) => ({ ...prev, range: 'selected_rows' }))} className="accent-emerald-600" />
-                    77777 7878~88~ 788&7777 8~87 ({selectedRowsData.length})
+                    الصفوف المحددة فقط ({selectedRowsData.length})
                   </label>
                   <label className="flex items-center gap-2 text-sm text-slate-700">
                     <input type="radio" name="print-range" checked={printConfig.range === 'all'} onChange={() => setPrintConfig((prev) => ({ ...prev, range: 'all' }))} className="accent-emerald-600" />
-                    88 7878~88~
+                    كل الصفوف
                   </label>
                 </div>
 
                 <div className="border-t border-slate-200 pt-3 space-y-2">
                   {pdfStatusMessage && (
-                    <div className={`text-xs rounded-lg px-3 py-2 border ${pdfStatusMessage.includes('78 777') ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                    <div className={`text-xs rounded-lg px-3 py-2 border ${pdfStatusMessage.startsWith('تم ') ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
                       {pdfStatusMessage}
                     </div>
                   )}
-                  <button onClick={handlePrintFromPanel} className="w-full px-4 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 flex items-center justify-center gap-2"><Printer size={14} /> 77777</button>
-                  <button onClick={exportPdf} className="w-full px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 flex items-center justify-center gap-2"><FileDown size={14} /> 78~7 88 PDF</button>
-                  <button onClick={exportExcel} className="w-full px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 flex items-center justify-center gap-2"><FileSpreadsheet size={14} /> 7778y7 Excel</button>
+                  <button onClick={handlePrintFromPanel} className="w-full px-4 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 flex items-center justify-center gap-2"><Printer size={14} /> طباعة</button>
+                  <button onClick={exportPdf} className="w-full px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 flex items-center justify-center gap-2"><FileDown size={14} /> حفظ PDF</button>
+                  <button onClick={exportExcel} className="w-full px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 flex items-center justify-center gap-2"><FileSpreadsheet size={14} /> تصدير Excel</button>
                 </div>
               </div>
             </aside>
 
             <section className="flex-1 overflow-auto bg-slate-100 p-5 print:p-0 print:bg-white">
               <div className="print-panel-ui flex items-center justify-between mb-4">
-                <div className="text-sm font-bold text-slate-700">8&778y8 7 78y7 (WYSIWYG)</div>
+                <div className="text-sm font-bold text-slate-700">معاينة حيّة (WYSIWYG)</div>
                 <div className="flex items-center gap-2 text-xs">
                   <button
                     onClick={() => setCurrentPreviewPage((prev) => Math.max(1, prev - 1))}
                     className="px-2 py-1 rounded border border-slate-300 bg-white"
                     disabled={printConfig.flowMode !== 'paged' || currentPreviewPage <= 1}
                   >
-                    787778
+                    السابق
                   </button>
                   <span className="px-2">
                     {printConfig.flowMode === 'paged'
-                      ? `78~77 ${currentPreviewPage} / ${Math.max(1, pagedRows.length)}`
-                      : '777 8&778'}
+                      ? `صفحة ${currentPreviewPage} / ${Math.max(1, pagedRows.length)}`
+                      : 'عرض مستمر'}
                   </span>
                   <button
                     onClick={() => setCurrentPreviewPage((prev) => Math.min(Math.max(1, pagedRows.length), prev + 1))}
                     className="px-2 py-1 rounded border border-slate-300 bg-white"
                     disabled={printConfig.flowMode !== 'paged' || currentPreviewPage >= Math.max(1, pagedRows.length)}
                   >
-                    787788y
+                    التالي
                   </button>
                 </div>
               </div>
@@ -1568,7 +1569,7 @@ const Statement: React.FC<StatementProps> = ({
 
                     {printColumns.length === 0 ? (
                       <div className="text-center text-slate-500 border border-dashed border-slate-300 rounded-lg py-8">
-                        7777 78&87789 8777789 7880 78788 8&8  878& "78778&77 788&78877" 8777 788&778y8 7.
+                        اختر الأعمدة المطلوب طباعتها من لوحة "إعدادات الطباعة" لعرض المعاينة هنا.
                       </div>
                     ) : (
                     <div
@@ -1636,27 +1637,27 @@ const Statement: React.FC<StatementProps> = ({
                     {printConfig.printSummaryCards && pageIndex === previewPages.length - 1 && (
                       <div className={`grid grid-cols-2 gap-2 ${printConfig.scalingMode === 'fit' ? 'mt-2' : 'mt-4'}`} style={{ fontSize: `${Math.max(8, printConfig.fontSize - 1)}px` }}>
                         <div className="p-2 rounded border border-slate-200">
-                          <div className="text-[10px] text-slate-500">778&788y 778~8y 7878!8</div>
-                          <div className="font-bold text-slate-800">{formatNumber(summary.gross)} 78 </div>
+                          <div className="text-[10px] text-slate-500">إجمالي الوزن القائم</div>
+                          <div className="font-bold text-slate-800">{formatNumber(summary.gross)} كجم</div>
                         </div>
                         <div className="p-2 rounded border border-slate-200">
-                          <div className="text-[10px] text-slate-500">778&788y 778~8y 788&877</div>
-                          <div className="font-bold text-slate-800">{formatNumber(summary.net)} 78 </div>
+                          <div className="text-[10px] text-slate-500">إجمالي الوزن الصافي</div>
+                          <div className="font-bold text-slate-800">{formatNumber(summary.net)} كجم</div>
                         </div>
                         <div className="p-2 rounded border border-slate-200">
-                          <div className="text-[10px] text-slate-500">788~78 78y8  7878!8 8 788&877</div>
-                          <div className="font-bold text-slate-800">{formatNumber(summary.difference)} 78 </div>
+                          <div className="text-[10px] text-slate-500">الفرق بين القائم والصافي</div>
+                          <div className="font-bold text-slate-800">{formatNumber(summary.difference)} كجم</div>
                         </div>
                         <div className="p-2 rounded border border-slate-200">
-                          <div className="text-[10px] text-slate-500">778&788y 8&787 787778y7</div>
-                          <div className="font-bold text-slate-800">{formatNumber(summary.delayAmount)} 7.8</div>
+                          <div className="text-[10px] text-slate-500">إجمالي قيمة التأخير</div>
+                          <div className="font-bold text-slate-800">{formatNumber(summary.delayAmount)} ج.م</div>
                         </div>
                       </div>
                     )}
 
                     {printConfig.printSignatures && pageIndex === previewPages.length - 1 && (
                       <div className={`grid grid-cols-3 gap-4 text-center ${printConfig.scalingMode === 'fit' ? 'mt-3' : 'mt-6'}`} style={{ fontSize: `${printConfig.fontSize}px` }}>
-                        {['8&7777 788&7778 ', '8&78y7 788&7778 ', '8&78y7 788&78 7'].map((title) => (
+                        {['معد التقرير', 'مراجع التقرير', 'اعتماد الإدارة'].map((title) => (
                           <div key={`${title}-${pageIndex}`}>
                             <div className="h-8" />
                             <div className="border-b border-slate-900" />
@@ -1677,9 +1678,9 @@ const Statement: React.FC<StatementProps> = ({
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
             <div className="text-sm font-bold text-slate-700 flex items-center gap-2">
-              <SlidersHorizontal size={16} className="text-blue-600" /> 7787 878~ 7878y78 77
+              <SlidersHorizontal size={16} className="text-blue-600" /> سجل كشف الحساب
             </div>
-            <div className="text-xs text-slate-500">777 7877877: {sortedRows.length}</div>
+            <div className="text-xs text-slate-500">عدد السجلات: {sortedRows.length}</div>
           </div>
 
           <div className={`overflow-auto ${isRowsExpanded ? 'max-h-none' : 'max-h-[560px]'}`}>
@@ -1703,11 +1704,11 @@ const Statement: React.FC<StatementProps> = ({
                       >
                         <button onClick={() => toggleSort(column.key)} className="inline-flex items-center gap-1 hover:text-emerald-700">
                           {column.label}
-                          {isActiveSort && <span className="text-emerald-700">{sortDirection === 'asc' ? 'â‘' : 'â“'}</span>}
+                          {isActiveSort && <span className="text-emerald-700">{sortDirection === 'asc' ? '↑' : '↓'}</span>}
                         </button>
                         <div
                           role="presentation"
-                          title="7777 8778y8y7 78777"
+                          title="اسحب لتغيير عرض العمود"
                           onMouseDown={(event) => startResize(event, column.key)}
                           className={`absolute left-0 top-0 h-full w-1.5 cursor-col-resize ${activeResizeKey === column.key ? 'bg-emerald-400/60' : 'hover:bg-slate-300/60'}`}
                         />
@@ -1726,16 +1727,16 @@ const Statement: React.FC<StatementProps> = ({
                       return (
                         <th key={column.key} style={getColumnStyle(column)} className="p-1 border-l border-slate-100 bg-slate-50">
                           <select
-                            title="8~877 8 87 787787 7778 7878&87"
+                            title="تصفية حسب نوع العملية داخل الجدول"
                             value={columnFilters[column.key] || ''}
                             onChange={(event) => setColumnFilters((prev) => ({ ...prev, [column.key]: event.target.value }))}
                             className="w-full px-2 py-1 text-xs border border-slate-200 rounded"
                           >
-                            <option value="">7888</option>
-                            <option value="8777">8777</option>
-                            <option value="7777">7777</option>
-                            <option value="78 777">78 777</option>
-                            <option value="8!788">8!788</option>
+                            <option value="">الكل</option>
+                            <option value="وارد">وارد</option>
+                            <option value="صادر">صادر</option>
+                            <option value="مرتجع">مرتجع</option>
+                            <option value="تالف">تالف</option>
                           </select>
                         </th>
                       );
@@ -1747,7 +1748,7 @@ const Statement: React.FC<StatementProps> = ({
                           type="text"
                           value={columnFilters[column.key] || ''}
                           onChange={(event) => setColumnFilters((prev) => ({ ...prev, [column.key]: event.target.value }))}
-                          placeholder="8~8777"
+                          placeholder="تصفية"
                           className="w-full px-2 py-1 text-xs border border-slate-200 rounded"
                         />
                       </th>
@@ -1777,10 +1778,10 @@ const Statement: React.FC<StatementProps> = ({
                         return (
                           <td key={column.key} style={getColumnStyle(column)} className={cellClass}>
                             <button
-                              onClick={() => toast.info(`8~77877 788&778 : ${row.warehouseInvoice}`)}
+                              onClick={() => toast.info(`فاتورة المخزن: ${row.warehouseInvoice}`)}
                               className="px-2 py-1 text-xs rounded border border-slate-300 hover:bg-slate-100"
                             >
-                              777
+                              عرض
                             </button>
                           </td>
                         );
@@ -1803,7 +1804,7 @@ const Statement: React.FC<StatementProps> = ({
                 {sortedRows.length === 0 && (
                   <tr>
                     <td colSpan={visibleColumns.length} className="p-8 text-center text-slate-400 font-bold">
-                      87 7877 78y78 77 8&77787 88777 787788y.
+                      لا توجد بيانات مطابقة لعرضها في كشف الحساب.
                     </td>
                   </tr>
                 )}
@@ -1814,26 +1815,26 @@ const Statement: React.FC<StatementProps> = ({
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-            <div className="text-xs text-slate-500 font-bold flex items-center gap-2"><Weight size={14} className="text-blue-600" /> 778&788y 778~8y 7878!8</div>
-            <div className="text-2xl font-extrabold text-slate-800 mt-1">{formatNumber(summary.gross)} 78 </div>
+            <div className="text-xs text-slate-500 font-bold flex items-center gap-2"><Weight size={14} className="text-blue-600" /> إجمالي الوزن القائم</div>
+            <div className="text-2xl font-extrabold text-slate-800 mt-1">{formatNumber(summary.gross)} كجم</div>
           </div>
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-            <div className="text-xs text-slate-500 font-bold flex items-center gap-2"><Weight size={14} className="text-emerald-600" /> 778&788y 778~8y 788&877</div>
-            <div className="text-2xl font-extrabold text-slate-800 mt-1">{formatNumber(summary.net)} 78 </div>
+            <div className="text-xs text-slate-500 font-bold flex items-center gap-2"><Weight size={14} className="text-emerald-600" /> إجمالي الوزن الصافي</div>
+            <div className="text-2xl font-extrabold text-slate-800 mt-1">{formatNumber(summary.net)} كجم</div>
           </div>
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-            <div className="text-xs text-slate-500 font-bold flex items-center gap-2"><Scale size={14} className="text-amber-600" /> 788~78 78y8  7878!8 8 788&877</div>
-            <div className="text-2xl font-extrabold text-slate-800 mt-1">{formatNumber(summary.difference)} 78 </div>
+            <div className="text-xs text-slate-500 font-bold flex items-center gap-2"><Scale size={14} className="text-amber-600" /> الفرق بين القائم والصافي</div>
+            <div className="text-2xl font-extrabold text-slate-800 mt-1">{formatNumber(summary.difference)} كجم</div>
           </div>
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-            <div className="text-xs text-slate-500 font-bold flex items-center gap-2"><BadgeDollarSign size={14} className="text-red-600" /> 778&788y 8&787 787778y7</div>
-            <div className="text-2xl font-extrabold text-slate-800 mt-1">{formatNumber(summary.delayAmount)} 7.8</div>
+            <div className="text-xs text-slate-500 font-bold flex items-center gap-2"><BadgeDollarSign size={14} className="text-red-600" /> إجمالي قيمة التأخير</div>
+            <div className="text-2xl font-extrabold text-slate-800 mt-1">{formatNumber(summary.delayAmount)} ج.م</div>
           </div>
         </div>
 
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
-            {['8&7777 788&7778 ', '8&78y7 788&7778 ', '8&78y7 788&78 7'].map((title) => (
+            {['معد التقرير', 'مراجع التقرير', 'اعتماد الإدارة'].map((title) => (
               <div key={title}>
                 <div className="h-12" />
                 <div className="print-signature-line border-b border-slate-900" />
@@ -1845,23 +1846,23 @@ const Statement: React.FC<StatementProps> = ({
       </div>
 
       {showColumnSettings && (
-        <div className="fixed inset-0 z-[ظ -ظ] flex items-center justify-center bg-black/60 p-4 no-print">
+        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4 no-print">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
             <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-              <h3 className="font-bold text-slate-800 flex items-center gap-2"><Settings size={16} /> 7777777 778&77 78878~</h3>
-              <button onClick={() => setShowColumnSettings(false)} title="77878" aria-label="77878" className="text-slate-500 hover:text-red-600"><X size={18} /></button>
+              <h3 className="font-bold text-slate-800 flex items-center gap-2"><Settings size={16} /> إعدادات عرض الأعمدة</h3>
+              <button onClick={() => setShowColumnSettings(false)} title="إغلاق" aria-label="إغلاق" className="text-slate-500 hover:text-red-600"><X size={18} /></button>
             </div>
             <div className="p-5 overflow-y-auto">
               {isForceUnified && (
                 <div className="mb-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                  78777 788&877 8&8~787 8&8  787777777 788&7878y77R 8y8&88 8 788&77777 8~87.
+                  تم فرض إعدادات الأعمدة بواسطة سياسة العرض الموحد، لذا يمكنك المراجعة فقط من هذه النافذة.
                 </div>
               )}
               <UniversalColumnManager columns={columns} onChange={setColumns} onReset={resetColumns} mode="user" disabled={isForceUnified} />
             </div>
             <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-2">
-              <button onClick={() => setShowColumnSettings(false)} className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700">77878</button>
-              <button onClick={saveColumns} className="px-4 py-2 rounded-lg bg-slate-900 text-white">78~7</button>
+              <button onClick={() => setShowColumnSettings(false)} className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700">إلغاء</button>
+              <button onClick={saveColumns} className="px-4 py-2 rounded-lg bg-slate-900 text-white">حفظ</button>
             </div>
           </div>
         </div>

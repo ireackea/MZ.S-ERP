@@ -1,3 +1,6 @@
+// ENTERPRISE FIX: Phase 3 – الاختبار + المراقبة + النشر الرسمي - 2026-03-13
+// ENTERPRISE FIX: Phase 0 – Critical Security & Encoding Lockdown - 2026-03-13
+// ENTERPRISE FIX: Phase 0.2 – Full Runtime Docker Proof - 2026-03-13
 // ENTERPRISE FIX: Phase 0 - التنظيف الأساسي والتحضير - 2026-03-13
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
@@ -9,6 +12,7 @@ import { NextFunction, Request, Response } from 'express';
 import cookieParser from 'cookie-parser';
 import { PrismaService } from './prisma.service';
 import { AuditService } from './audit/audit.service';
+import { extractClientIp, globalRateLimiter } from './security/global-rate-limit';
 
 // ENTERPRISE FIX: Phase 0 - Fatal Errors Fixed - 2026-03-02
 
@@ -43,7 +47,7 @@ function loadBackendEnv() {
 function getAllowedOrigins() {
   const rawOrigins =
     process.env.CORS_ORIGINS ||
-    'http://localhost:5173,http://localhost:5174,http://localhost:3000';
+    'http://localhost:4173,http://localhost:5173,http://localhost:5174,http://localhost:3000';
   return rawOrigins
     .split(',')
     .map((origin) => origin.trim())
@@ -73,13 +77,6 @@ function matchesConfiguredOrigin(origin: string, allowedOrigins: string[]): bool
 
 function isTrustedLocalOrigin(origin: string): boolean {
   return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
-}
-
-function extractIp(req: Request): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (Array.isArray(forwarded) && forwarded[0]) return forwarded[0].split(',')[0].trim();
-  if (typeof forwarded === 'string' && forwarded) return forwarded.split(',')[0].trim();
-  return req.ip || 'unknown';
 }
 
 function normalizeRequestPath(req: Request): string {
@@ -136,6 +133,10 @@ function renderMetrics(metrics: MetricsRegistry): string {
     '# HELP http_request_duration_ms_sum Total accumulated HTTP request duration in milliseconds.',
     '# TYPE http_request_duration_ms_sum counter',
     `http_request_duration_ms_sum ${metrics.requestDurationMsTotal}`,
+    '# HELP http_requests_by_status_total Total HTTP requests grouped by response status code.',
+    '# TYPE http_requests_by_status_total counter',
+    '# HELP http_requests_by_route_total Total HTTP requests grouped by normalized route.',
+    '# TYPE http_requests_by_route_total counter',
   ];
 
   metrics.statusCounts.forEach((count, statusCode) => {
@@ -182,40 +183,7 @@ async function bootstrap() {
 
   // ENTERPRISE FIX: Phase 0 - Fatal Errors Fixed - 2026-03-02
   app.use(cookieParser());
-  const rateLimitWindowMs = 60 * 1000;
-  const rateLimitPerMinute = Number(process.env.RATE_LIMIT_PER_MINUTE || 100);
-  const rateBuckets = new Map<string, { count: number; resetAt: number }>();
-
-  app.use((req: Request, res: Response, next: NextFunction) => {
-    const ip = extractIp(req);
-    const now = Date.now();
-    const existing = rateBuckets.get(ip);
-
-    if (!existing || existing.resetAt <= now) {
-      rateBuckets.set(ip, { count: 1, resetAt: now + rateLimitWindowMs });
-    } else {
-      existing.count += 1;
-      rateBuckets.set(ip, existing);
-    }
-
-    const bucket = rateBuckets.get(ip)!;
-    const retryAfterMs = Math.max(0, bucket.resetAt - now);
-
-    res.setHeader('X-RateLimit-Limit', String(rateLimitPerMinute));
-    res.setHeader('X-RateLimit-Remaining', String(Math.max(0, rateLimitPerMinute - bucket.count)));
-    res.setHeader('X-RateLimit-Reset', String(Math.ceil(bucket.resetAt / 1000)));
-
-    if (bucket.count > rateLimitPerMinute) {
-      res.setHeader('Retry-After', String(Math.ceil(retryAfterMs / 1000)));
-      res.status(429).json({
-        message: 'Too many requests',
-        code: 'RATE_LIMIT_EXCEEDED',
-      });
-      return;
-    }
-
-    next();
-  });
+  app.use(globalRateLimiter);
 
   app.use((req: Request, res: Response, next: NextFunction) => {
     const start = Date.now();
@@ -232,7 +200,7 @@ async function bootstrap() {
         path: normalizeRequestPath(req),
         statusCode: res.statusCode,
         durationMs,
-        ip: extractIp(req),
+        ip: extractClientIp(req),
         userAgent: req.headers['user-agent'] || 'unknown',
         timestamp: new Date().toISOString(),
       };
@@ -246,7 +214,7 @@ async function bootstrap() {
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.url.includes('auth') || req.url.includes('/auth')) {
       console.log(`\n[Auth Monitor] [Backend Entry] Incoming: ${req.method} ${req.url}`);
-      console.log(`   [Auth Monitor] IP: ${extractIp(req)}`);
+      console.log(`   [Auth Monitor] IP: ${extractClientIp(req)}`);
       if (req.body && Object.keys(req.body).length > 0) {
         console.log(`   [Auth Monitor] Body: ${JSON.stringify(req.body).substring(0, 100)}`);
       }
@@ -287,7 +255,13 @@ async function bootstrap() {
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
 
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
   await app.listen(process.env.PORT || 3001);
   if (envPath) {
     console.log('Loaded env from', envPath);

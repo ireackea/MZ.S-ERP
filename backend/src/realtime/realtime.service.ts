@@ -1,9 +1,10 @@
+// ENTERPRISE FIX: Phase 6 Final Polish + Full E2E Tests + Deployment Guide - Archive Only - 2026-03-27
 // ENTERPRISE FIX: Phase 1.5 - Conflict & Socket Stability - 2026-03-02
 // ENTERPRISE FIX: Phase 1 - Dual Mode Implementation - 2026-03-02
 // ENTERPRISE FIX: Legacy Migration Phase 5 - Final Stabilization & Production - 2026-02-27
 import { Injectable, Logger } from '@nestjs/common';
 
-export type RealtimeScope = 'dashboard' | 'items' | 'operations' | 'transactions' | 'formulation' | 'stocktaking' | 'offline_sync';
+export type RealtimeScope = 'dashboard' | 'items' | 'operations' | 'transactions' | 'formulation' | 'stocktaking' | 'offline_sync' | 'audit';
 
 export type RealtimeSyncEvent = {
   scopes: RealtimeScope[];

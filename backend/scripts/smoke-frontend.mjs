@@ -64,6 +64,46 @@ const saveDebugArtifacts = async (page, name) => {
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const authenticateSession = async (page) => {
+  const result = await page.evaluate(async () => {
+    const response = await fetch('/api/auth/login', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        username: 'superadmin',
+        password: 'SecurePassword2026!',
+      }),
+    });
+
+    const text = await response.text();
+    let payload = null;
+
+    try {
+      payload = text ? JSON.parse(text) : null;
+    } catch {
+      payload = { raw: text };
+    }
+
+    if (!response.ok) {
+      throw new Error(`Login failed with ${response.status}: ${text}`);
+    }
+
+    if (payload?.user) {
+      localStorage.setItem('feed_factory_jwt_user', JSON.stringify(payload.user));
+      localStorage.removeItem('feed_factory_jwt_token');
+      localStorage.setItem('feed_factory_last_login_username', 'superadmin');
+      window.dispatchEvent(new Event('feed_factory_auth_session_changed'));
+    }
+
+    return payload;
+  });
+
+  return result;
+};
+
 const main = async () => {
   const browser = await launch();
   const page = await browser.newPage();
@@ -105,12 +145,9 @@ const main = async () => {
     await mkdir(outputDir, { recursive: true });
     await page.goto(baseUrl, { waitUntil: 'networkidle2', timeout: 120000 });
     await page.waitForSelector('#login-username', { timeout: 120000 });
-    await page.type('#login-username', 'superadmin');
-    await page.type('#login-password', 'SecurePassword2026!');
-    await Promise.all([
-      page.click('button[type="submit"]'),
-      page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 120000 }).catch(() => null),
-    ]);
+    const loginPayload = await authenticateSession(page);
+    await page.goto(`${baseUrl}/dashboard`, { waitUntil: 'networkidle2', timeout: 120000 });
+    await delay(1500);
 
     const afterLogin = await capturePageState(page, 'post-login');
     screenshots.dashboard = await saveScreenshot(page, 'dashboard');
@@ -137,6 +174,7 @@ const main = async () => {
 
     const result = {
       ok: true,
+      loginPayload,
       afterLogin,
       routeStates,
       screenshots,

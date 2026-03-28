@@ -28,7 +28,7 @@ import { RealtimeModule } from './realtime/realtime.module';
     ReportsModule,
     TransactionModule,
     UsersModule,
-    DashboardModule, // 7"7"7"#%7"#⬑"7" ENTERPRISE FIX: Dashboard Module
+    DashboardModule, // ENTERPRISE FIX: Dashboard module registration
   ],
 })
 export class AppModule {}

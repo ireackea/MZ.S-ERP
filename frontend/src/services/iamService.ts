@@ -1,3 +1,5 @@
+// ENTERPRISE FIX: Phase 3 – الاختبار + المراقبة + النشر الرسمي - 2026-03-13
+// ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
 // ENTERPRISE FIX: Phase 6.6 - Global 100% Cleanup & Absolute Verification - 2026-03-13
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -51,10 +53,22 @@ const permissionCatalog: PermissionDefinition[] = [
   { id: 'reports.view.general', module: 'reports', resource: 'general', action: 'view', label: 'عرض التقارير' },
   { id: 'reports.export.general', module: 'reports', resource: 'general', action: 'export', label: 'تصدير التقارير' },
 
+  { id: 'settings.view.general', module: 'settings', resource: 'general', action: 'view', label: 'عرض الإعدادات العامة' },
+  { id: 'settings.view.users', module: 'settings', resource: 'users', action: 'view', label: 'عرض المستخدمين والأدوار' },
+  { id: 'settings.view.permissions', module: 'settings', resource: 'permissions', action: 'view', label: 'عرض مصفوفة الصلاحيات' },
+  { id: 'settings.view.backup', module: 'settings', resource: 'backup', action: 'view', label: 'عرض النسخ الاحتياطية' },
+  { id: 'settings.view.reset', module: 'settings', resource: 'reset', action: 'view', label: 'عرض إعادة الضبط' },
+  { id: 'settings.view.audit', module: 'settings', resource: 'audit', action: 'view', label: 'عرض سجلات التدقيق' },
+  { id: 'settings.view.offline', module: 'settings', resource: 'offline', action: 'view', label: 'عرض إعدادات الأوفلاين' },
+  { id: 'settings.view.printing', module: 'settings', resource: 'printing', action: 'view', label: 'عرض قوالب الطباعة' },
+  { id: 'settings.view.localization', module: 'settings', resource: 'localization', action: 'view', label: 'عرض الثيم واللغة' },
   { id: 'settings.view.system', module: 'settings', resource: 'system', action: 'view', label: 'عرض الإعدادات' },
   { id: 'settings.update.system', module: 'settings', resource: 'system', action: 'update', label: 'تعديل الإعدادات' },
   { id: 'backup.create', module: 'settings', resource: 'backup', action: 'create', label: 'إنشاء نسخة احتياطية' },
   { id: 'backup.restore', module: 'settings', resource: 'backup', action: 'update', label: 'استعادة النسخة الاحتياطية' },
+  { id: 'backup.schedule', module: 'settings', resource: 'backup', action: 'update', label: 'إدارة جدولة النسخ الاحتياطية' },
+  { id: 'backup.download', module: 'settings', resource: 'backup', action: 'export', label: 'تنزيل النسخ الاحتياطية' },
+  { id: 'backup.delete', module: 'settings', resource: 'backup', action: 'delete', label: 'حذف النسخ الاحتياطية' },
 
   { id: 'users.view.management', module: 'users', resource: 'management', action: 'view', label: 'عرض المستخدمين' },
   { id: 'users.create.management', module: 'users', resource: 'management', action: 'create', label: 'إضافة مستخدم' },
@@ -78,6 +92,9 @@ const rolePermissionTemplates: Record<string, string[]> = {
     'inventory.update.items',
     'inventory.view.operations',
     'inventory.create.operations',
+    'settings.view.general',
+    'settings.view.offline',
+    'settings.view.printing',
     'settings.view.system',
   ],
   storekeeper: [
@@ -85,12 +102,15 @@ const rolePermissionTemplates: Record<string, string[]> = {
     'inventory.create.inbound',
     'inventory.create.outbound',
     'reports.view.general',
+    'settings.view.offline',
   ],
   general_supervisor: [
     'inventory.view.stock',
     'reports.view.general',
     'reports.export.general',
     'sales.view.orders',
+    'settings.view.general',
+    'settings.view.audit',
   ],
   special_supervisor: [
     'inventory.view.stock',
@@ -99,6 +119,8 @@ const rolePermissionTemplates: Record<string, string[]> = {
     'sales.update.orders',
     'reports.view.general',
     'reports.export.general',
+    'settings.view.general',
+    'settings.view.audit',
   ],
   dispatch_officer: ['sales.view.orders', 'sales.create.orders', 'sales.update.orders'],
   dispatch_manager: ['sales.view.orders', 'sales.create.orders', 'sales.update.orders', 'sales.export.orders'],
@@ -109,6 +131,8 @@ const rolePermissionTemplates: Record<string, string[]> = {
     'reports.view.general',
     'reports.export.general',
     'sales.view.orders',
+    'settings.view.general',
+    'settings.view.printing',
   ],
   customer: ['sales.view.orders'],
 };
@@ -183,11 +207,14 @@ export function updateRolePermissions(roleId: string, permissionIds: string[]) {
 }
 
 export function ensureUserDefaults(user: User): User {
+  const resolvedActive = user.active ?? user.isActive ?? true;
   return {
     ...user,
     roleId: user.roleId ?? user.role,
     scope: user.scope ?? 'all',
-    status: user.status ?? (user.active ? 'active' : 'suspended'),
+    active: resolvedActive,
+    isActive: user.isActive ?? resolvedActive,
+    status: user.status ?? (resolvedActive ? 'active' : 'suspended'),
     twoFactorEnabled: user.twoFactorEnabled ?? false,
   };
 }
@@ -206,6 +233,22 @@ export function hasPermission(user: User | undefined, permissionId: string): boo
   if (!user) return false;
   const normalizedUser = ensureUserDefaults(user);
   if (normalizedUser.status === 'suspended' || !normalizedUser.active) return false;
+  const directPermissions = Array.isArray(normalizedUser.permissions)
+    ? normalizedUser.permissions.filter((entry): entry is string => typeof entry === 'string')
+    : [];
+
+  if (normalizedUser.role?.toLowerCase() === 'superadmin' || normalizedUser.role?.toLowerCase() === 'admin') {
+    return true;
+  }
+
+  if (directPermissions.includes('*') || directPermissions.includes(permissionId)) {
+    return true;
+  }
+
+  if (directPermissions.some((granted) => granted.endsWith('.*') && (permissionId === granted.slice(0, -2) || permissionId.startsWith(`${granted.slice(0, -2)}.`)))) {
+    return true;
+  }
+
   const role = getUserRole(normalizedUser);
   return Boolean(role?.permissionIds.includes(permissionId));
 }

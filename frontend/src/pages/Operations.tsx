@@ -1,7 +1,10 @@
+// ENTERPRISE FIX: Phase 3 Duplication Cleanup - Archive Only - 2026-03-26
+// All legacy files archived in _ARCHIVE_DUPLICATION_CLEANUP_2026-03-26/
+// ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
 // ENTERPRISE FIX: Phase 6.6 - Global 100% Cleanup & Absolute Verification - 2026-03-13
 import React, { useEffect, useMemo } from 'react';
-import DailyOperations from '../components/DailyOperations';
-import { getAuthUser } from '../services/authService';
+import DailyOperations from './OperationsView';
+import { useSession } from '@hooks/useSession';
 import {
   bulkCreateTransactions,
   deleteTransactionsInApi,
@@ -9,25 +12,18 @@ import {
 } from '../services/transactionsService';
 import { useInventoryStore } from '../store/useInventoryStore';
 import { toast } from '@services/toastService';
-import type { Partner, SystemSettings, Transaction, UnloadingRule } from '../types';
-
-const DEFAULT_SETTINGS: SystemSettings = {
-  companyName: '',
-  currency: 'EGP',
-  address: '',
-  phone: '',
-  defaultUnloadingDuration: 60,
-  defaultDelayPenalty: 0,
-};
+import type { Partner, Transaction } from '../types';
 
 const OperationsPage: React.FC = () => {
+  const { data: session } = useSession();
   const items = useInventoryStore((state) => state.items);
   const transactions = useInventoryStore((state) => state.transactions);
+  const settings = useInventoryStore((state) => state.systemSettings);
+  const unloadingRules = useInventoryStore((state) => state.unloadingRules);
   const loadAll = useInventoryStore((state) => state.loadAll);
   const setInventoryTransactions = useInventoryStore((state) => state.setTransactions);
   const updateStockFromTransaction = useInventoryStore((state) => state.updateStockFromTransaction);
 
-  const authUser = getAuthUser();
   const partners = useMemo<Partner[]>(() => {
     const uniqueNames = Array.from(
       new Set(
@@ -44,8 +40,6 @@ const OperationsPage: React.FC = () => {
       phone: '',
     }));
   }, [transactions]);
-  const settings = useMemo<SystemSettings>(() => DEFAULT_SETTINGS, []);
-  const unloadingRules = useMemo<UnloadingRule[]>(() => [], []);
 
   useEffect(() => {
     void loadAll();
@@ -107,7 +101,7 @@ const OperationsPage: React.FC = () => {
       onAddTransaction={(rows) => void handleAddTransaction(rows)}
       onUpdateTransaction={(row) => void handleUpdateTransaction(row)}
       onDeleteTransactions={(ids) => void handleDeleteTransactions(ids)}
-      currentUserId={String(authUser?.id || '')}
+      currentUserId={String(session?.user?.id || '')}
     />
   );
 };

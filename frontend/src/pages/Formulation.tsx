@@ -1,84 +1,43 @@
+// ENTERPRISE FIX: Phase 3 Duplication Cleanup - Archive Only - 2026-03-26
+// All legacy files archived in _ARCHIVE_DUPLICATION_CLEANUP_2026-03-26/
+// ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
 // ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
 // Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
-import React, { useEffect, useState } from 'react';
-import apiClient from '@api/client';
+import React, { useEffect } from 'react';
 import { toast } from '@services/toastService';
-import FormulationView from '../components/Formulation';
+import FormulationView from './FormulationView';
+import { useInventoryStore } from '../store/useInventoryStore';
 import type { Formula } from '../types';
 
-const normalizeFormula = (raw: any): Formula => ({
-  id: String(raw?.id || crypto.randomUUID()),
-  code: String(raw?.code || ''),
-  name: String(raw?.name || ''),
-  targetProductId: String(raw?.targetProductId || raw?.targetItemId || ''),
-  isActive: raw?.isActive !== false,
-  notes: raw?.notes ? String(raw.notes) : undefined,
-  items: Array.isArray(raw?.items)
-    ? raw.items.map((entry: any) => ({
-        itemId: String(entry?.itemId || ''),
-        percentage: Number(entry?.percentage || 0),
-        weightPerTon: Number(entry?.weightPerTon || 0),
-      }))
-    : [],
-});
-
-const toPayload = (formula: Formula) => ({
-  id: formula.id,
-  code: formula.code,
-  name: formula.name,
-  targetProductId: formula.targetProductId,
-  targetItemId: formula.targetProductId,
-  isActive: formula.isActive,
-  notes: formula.notes || '',
-  items: formula.items.map((entry) => ({
-    itemId: entry.itemId,
-    percentage: Number(entry.percentage || 0),
-    weightPerTon: Number(entry.weightPerTon || 0),
-  })),
-});
-
 const FormulationPage: React.FC = () => {
-  const [formulas, setFormulas] = useState<Formula[]>([]);
+  const formulas = useInventoryStore((state) => state.formulas);
+  const loadFormulas = useInventoryStore((state) => state.loadFormulas);
+  const createFormula = useInventoryStore((state) => state.createFormula);
+  const updateFormula = useInventoryStore((state) => state.updateFormula);
+  const deleteFormula = useInventoryStore((state) => state.deleteFormula);
 
   useEffect(() => {
-    let active = true;
-
     const load = async () => {
       try {
-        const response = await apiClient.get('/formulations');
-        const rows = Array.isArray(response.data)
-          ? response.data
-          : Array.isArray(response.data?.data)
-            ? response.data.data
-            : [];
-        if (!active) return;
-        setFormulas(rows.map(normalizeFormula));
+        await loadFormulas();
       } catch (error: any) {
         toast.error(error?.response?.data?.message || error?.message || 'تعذر تحميل التركيبات.');
       }
     };
 
     void load();
-    return () => {
-      active = false;
-    };
-  }, []);
+  }, [loadFormulas]);
 
   const onAddFormula = async (formula: Formula) => {
-    const response = await apiClient.post('/formulations', toPayload(formula));
-    const saved = normalizeFormula(response.data);
-    setFormulas((current) => [saved, ...current]);
+    await createFormula(formula);
   };
 
   const onUpdateFormula = async (formula: Formula) => {
-    const response = await apiClient.put(`/formulations/${encodeURIComponent(String(formula.id))}`, toPayload(formula));
-    const saved = normalizeFormula(response.data);
-    setFormulas((current) => current.map((entry) => (String(entry.id) === String(saved.id) ? saved : entry)));
+    await updateFormula(formula);
   };
 
   const onDeleteFormula = async (id: string) => {
-    await apiClient.post('/formulations/delete', { ids: [id] });
-    setFormulas((current) => current.filter((entry) => String(entry.id) !== String(id)));
+    await deleteFormula(id);
   };
 
   return (

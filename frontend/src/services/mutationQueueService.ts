@@ -119,9 +119,9 @@ export const mutationQueueService = {
         if (error.response && error.response.status === 409) {
           console.warn('[MutationQueue] Conflict detected (Server Wins). Dropping local mutation.');
           
-          toast('78& 7778y8 78778y7 8&8  878 777 777. 7778 7778y7 78y78 778.', {
+          toast('تم اكتشاف تعارض أثناء المزامنة. تم اعتماد بيانات الخادم مؤقتًا.', {
             action: {
-              label: '777 7878~778y8',
+              label: 'عرض تفاصيل التعارض',
               onClick: () => {
                 window.dispatchEvent(new CustomEvent('show-conflict-modal', {
                   detail: { task, serverData: error.response.data }

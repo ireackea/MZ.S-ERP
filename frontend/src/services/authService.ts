@@ -126,6 +126,20 @@ export const login = async (username: string, password: string): Promise<AuthLog
   }
 };
 
+export const resetLoginAttempts = async (username: string): Promise<{ success: boolean; message: string }> => {
+  try {
+    const response = await apiClient.post<{ success: boolean; message: string }>('/auth/reset-attempts', { username });
+    return response.data;
+  } catch (error: any) {
+    console.error('[authService] Reset login attempts failed:', {
+      message: error?.message,
+      status: error?.response?.status,
+      data: error?.response?.data,
+    });
+    throw error;
+  }
+};
+
 export const logout = () => {
   try {
     clearAllAuthData();

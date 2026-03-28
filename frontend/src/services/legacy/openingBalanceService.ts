@@ -1,5 +1,4 @@
-// ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
-// ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
+// ENTERPRISE FIX: Phase 0.3 – Final Arabic Encoding Fix & 10/10 Declaration - 2026-03-13
 import { Item, Transaction } from '../../types';
 
 const OPENING_BALANCES_KEY = 'feed_factory_opening_balances';
@@ -109,8 +108,8 @@ export function getFinancialYearFromDate(input?: string | Date): number {
 }
 
 function movementToSignedQuantity(tx: Transaction): number {
-  if (tx.type === '7"7"7"#"7"7"7"7"7"7"7"7"7"7"7"7"' || tx.type === '7"7"7"7"7"7"7"#⬑"7"7"7"7"7"7"7"7"7"7"7"7"7"') return Number(tx.quantity || 0);
-  if (tx.type === '7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"7"' || tx.type === '7"7"7"#⬑"7%7"7"7"7"7"7"7"#⬑"#9 7"7"7"#') return -Number(tx.quantity || 0);
+  if (tx.type === 'وارد' || tx.type === 'استلام') return Number(tx.quantity || 0);
+  if (tx.type === 'صادر' || tx.type === 'صرف') return -Number(tx.quantity || 0);
   return 0;
 }
 
@@ -139,6 +138,7 @@ export function calculateCurrentBalance(params: {
     typeof params.openingQuantityOverride === 'number'
       ? Number(params.openingQuantityOverride)
       : getOpeningQuantity(params.itemId, params.financialYear);
+
   const movement = params.transactions
     .filter((tx) => tx.itemId === params.itemId)
     .filter((tx) => getFinancialYearFromDate(tx.date) === params.financialYear)
@@ -155,12 +155,15 @@ export function calculateBalancesMap(params: {
 }): Map<string, number> {
   const map = new Map<string, number>();
   params.items.forEach((item) => {
-    map.set(item.id, calculateCurrentBalance({
-      itemId: item.id,
-      financialYear: params.financialYear,
-      transactions: params.transactions,
-      openingQuantityOverride: params.openingQuantities?.get(item.id),
-    }));
+    map.set(
+      item.id,
+      calculateCurrentBalance({
+        itemId: item.id,
+        financialYear: params.financialYear,
+        transactions: params.transactions,
+        openingQuantityOverride: params.openingQuantities?.get(item.id),
+      }),
+    );
   });
   return map;
 }

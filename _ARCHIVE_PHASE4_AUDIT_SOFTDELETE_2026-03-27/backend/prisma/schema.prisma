@@ -1,0 +1,249 @@
+// ENTERPRISE FIX: Phase 1 – PostgreSQL Pivot + Zustand Single Source of Truth - 2026-03-13
+// ENTERPRISE FIX: Phase 0.2 – Full Runtime Docker Proof - 2026-03-13
+// ENTERPRISE FIX: Phase 0 – التنظيف الأساسي والأمان الحرج - 2026-03-13
+// Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
+// Prisma Schema - Database Configuration
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  permissions String   @default("[]")
+  color       String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  users       User[]
+  roleUsers   UserRole[]
+  rolePerms   RolePermission[]
+  invitations Invitation[]
+
+  @@map("roles")
+}
+
+model User {
+  id                     String           @id @default(uuid())
+  username               String           @unique
+  email                  String?          @unique
+  passwordHash           String
+  firstName              String?
+  lastName               String?
+  isActive               Boolean          @default(true)
+  failedAttempts         Int              @default(0)
+  lockoutUntil           DateTime?
+  theme                  String           @default("classic")
+  roleId                 String
+  role                   Role             @relation(fields: [roleId], references: [id])
+  updatedAt              DateTime         @updatedAt
+  createdAt              DateTime         @default(now())
+  createdOpeningBalances OpeningBalance[] @relation("BalanceCreator")
+  
+  // Phase 2: Multi-login and Email Invites
+  googleId               String?          @unique
+  inviteToken            String?          @unique
+  inviteExpires          DateTime?
+  isEmailConfirmed       Boolean          @default(false)
+  userRoles              UserRole[]
+  sentInvitations        Invitation[]     @relation("InvitationSender")
+  acceptedInvitation     Invitation?      @relation("InvitationRecipient")
+  auditLogs              AuditLog[]       @relation("AuditActor")
+  activeSessions         ActiveSession[]
+
+  @@map("users")
+}
+
+model AuditLog {
+  id             String   @id @default(uuid())
+  userId         String?  @map("actorId")
+  action         String
+  details        String   @map("message")
+  timestamp      DateTime @default(now())
+  ipAddress      String?
+  metadata       String?
+  actorUsername  String
+  actorRole      String
+  targetUserId   String?
+  targetResource String?
+  status         String
+  actor          User?    @relation("AuditActor", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([status])
+  @@index([timestamp])
+  @@map("audit_logs")
+}
+
+model ActiveSession {
+  id                String   @id @default(uuid())
+  userId            String
+  tokenHash         String?  @unique
+  expiresAt         DateTime
+  deviceInfo        String?  @map("deviceFingerprint")
+  isRevoked         Boolean  @default(false)
+  username          String
+  role              String
+  ipAddress         String
+  userAgent         String
+  createdAt         DateTime @default(now())
+  lastActivityAt    DateTime @default(now())
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([expiresAt])
+  @@index([isRevoked])
+  @@map("active_sessions")
+}
+
+model Permission {
+  id          String           @id @default(uuid())
+  key         String           @unique
+  description String?
+  module      String?
+  action      String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  rolePerms   RolePermission[]
+
+  @@map("permissions")
+}
+
+model UserRole {
+  id           String   @id @default(uuid())
+  userId       String
+  roleId       String
+  assignedById String?
+  assignedAt   DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role         Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  roleId       String
+  permissionId String
+  createdAt    DateTime   @default(now())
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model Invitation {
+  id             String    @id @default(uuid())
+  email          String
+  token          String    @unique
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  status         String    @default("pending")
+  roleId         String
+  invitedById    String?
+  recipientUserId String?  @unique
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  role           Role      @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  invitedBy      User?     @relation("InvitationSender", fields: [invitedById], references: [id], onDelete: SetNull)
+  recipientUser  User?     @relation("InvitationRecipient", fields: [recipientUserId], references: [id], onDelete: SetNull)
+
+  @@index([email])
+  @@index([status])
+  @@map("invitations")
+}
+
+model Item {
+  id              Int              @id @default(autoincrement())
+  publicId        String?          @unique
+  code            String?          @unique
+  codeGenerated   Boolean          @default(false)
+  barcode         String?
+  name            String
+  unit            String?
+  category        String           @default("غير مصنف")
+  minLimit        Decimal          @default(0)
+  maxLimit        Decimal          @default(1000)
+  orderLimit      Decimal?
+  currentStock    Decimal          @default(0)
+  description     String?
+  openingBalances OpeningBalance[]
+  transactions    Transaction[]
+
+  @@index([name])
+  @@index([code])
+  @@index([barcode])
+}
+
+model OpeningBalance {
+  id            Int      @id @default(autoincrement())
+  itemId        Int
+  financialYear Int
+  quantity      Decimal
+  unitCost      Decimal?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  createdBy     String?
+
+  item    Item  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  creator User? @relation("BalanceCreator", fields: [createdBy], references: [id])
+
+  @@unique([itemId, financialYear])
+  @@index([financialYear])
+}
+
+model Transaction {
+  id                 Int      @id @default(autoincrement())
+  publicId           String   @unique
+  date               DateTime
+  itemId             Int
+  warehouseId        String?
+  warehouseInvoice   String?
+  supplierInvoice    String?
+  type               String
+  quantity           Decimal
+  supplierNet        Decimal?
+  difference         Decimal?
+  packageCount       Decimal?
+  weightSlip         String?
+  salaryOfWorker     Decimal?
+  supplierOrReceiver String
+  truckNumber        String?
+  trailerNumber      String?
+  driverName         String?
+  entryTime          String?
+  exitTime           String?
+  unloadingRuleId    String?
+  unloadingDuration  Int?
+  delayDuration      Int?
+  delayPenalty       Decimal?
+  calculatedFine     Decimal?
+  notes              String?
+  attachmentData     String?
+  attachmentName     String?
+  attachmentType     String?
+  googleDriveLink    String?
+  createdByUserId    String?
+  timestamp          BigInt?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([date])
+  @@index([itemId])
+  @@index([type])
+  @@index([warehouseInvoice])
+}

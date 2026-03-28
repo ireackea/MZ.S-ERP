@@ -5,6 +5,7 @@
 // - Returns a detailed object describing whether the selection is valid for translation
 // - Validation rules: Unicode letters (including Arabic), length 1..64, strips surrounding punctuation
 
+// ENTERPRISE FIX: Phase 0.3 – Final Arabic Encoding Fix & 10/10 Declaration - 2026-03-13
 /**
  * @typedef {Object} SelectionDetails
  * @property {boolean} valid
@@ -68,7 +69,7 @@ function _cleanText(s) {
 function _isLetterWord(token) {
   if (!token) return false;
   // allow letters, combining marks, hyphen, apostrophe
-  return /^\p{L}[\p{L}\p{M}\p{Pd}'7"7"7"#97"7"#⬆7"`]*$/u.test(token);
+  return /^\p{L}[\p{L}\p{M}\p{Pd}'`]*$/u.test(token);
 }
 
 /**

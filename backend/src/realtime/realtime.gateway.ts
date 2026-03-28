@@ -1,3 +1,4 @@
+// ENTERPRISE FIX: Phase 0 – Critical Security & Encoding Lockdown - 2026-03-13
 // ENTERPRISE FIX: Legacy Migration Phase 5 - Final Stabilization & Production - 2026-02-27
 // SECURITY FIX: 2026-03-28 - Fixed permissive CORS
 import {
@@ -18,6 +19,7 @@ import { RealtimeService, RealtimeSyncEvent } from './realtime.service';
 function getAllowedOrigins(): string[] {
   const rawOrigins =
     process.env.CORS_ORIGINS ||
+    process.env.ALLOWED_ORIGINS ||
     'http://localhost:5173,http://localhost:5174,http://localhost:3000';
   return rawOrigins
     .split(',')
@@ -45,13 +47,13 @@ function matchesConfiguredOrigin(origin: string, allowedOrigins: string[]): bool
       const suffix = normalizedCandidate.slice(1);
       return normalizedOrigin.endsWith(suffix);
     }
-    return normalizedCandidate === normalizedCandidate;
+    return normalizedOrigin === normalizedCandidate;
   });
 }
 
 function validateWebSocketOrigin(origin: string): boolean {
   if (!origin) return false;
-  
+
   const normalizedOrigin = normalizeOrigin(origin);
   const allowedOrigins = getAllowedOrigins();
   const allowCodespacesOrigin = String(process.env.ALLOW_CODESPACES_ORIGINS || '').toLowerCase() === 'true';
@@ -81,7 +83,7 @@ function validateWebSocketOrigin(origin: string): boolean {
     origin: (origin, callback) => {
       // Allow requests with no origin (like mobile apps or curl)
       if (!origin) return callback(null, true);
-      
+
       if (validateWebSocketOrigin(origin)) {
         callback(null, true);
       } else {
@@ -134,4 +136,3 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     return this.server?.sockets?.sockets?.size ?? 0;
   }
 }
-

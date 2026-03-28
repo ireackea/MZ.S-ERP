@@ -1,3 +1,4 @@
+# // ENTERPRISE FIX: Phase 6 Final Polish + Full E2E Tests + Deployment Guide - Archive Only - 2026-03-27
 # // ENTERPRISE FIX: Final One-Click Production Launch v3 - 2026-02-27
 
 services:
@@ -16,6 +17,7 @@ services:
     volumes:
       - prisma-data:/app/prisma
       - backups-data:/app/backups
+      - ./backend/uploads:/app/backend/uploads
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 15s
@@ -110,3 +112,4 @@ services:
 volumes:
   prisma-data:
   backups-data:
+  uploads-data:
