@@ -142,17 +142,27 @@ export class UsersService {
   }
 
   // ENTERPRISE FIX: Phase 2 - Multi-User Sync & Unified User Management - 2026-03-02
-  async createRole(dto: { name: string; description?: string; color?: string; permissions?: string[] }) {
+  // SECURITY FIX: 2026-03-28 - Added permission validation for role management
+  async createRole(dto: { name: string; description?: string; color?: string; permissions?: string[] }, actor?: ActorContext) {
     const exists = await this.prisma.role.findUnique({ where: { name: dto.name } });
     if (exists) {
       throw new BadRequestException('Role name already exists');
     }
+    
+    // SECURITY FIX: 2026-03-28 - Validate permissions don't include dangerous wildcards
+    const requestedPermissions = dto.permissions || [];
+    const hasWildcard = requestedPermissions.includes('*');
+    
+    if (hasWildcard && actor?.role?.toLowerCase() !== 'superadmin') {
+      throw new ForbiddenException('Only SuperAdmin can create roles with wildcard (*) permissions');
+    }
+    
     const role = await this.prisma.role.create({
       data: {
         name: dto.name,
         description: dto.description || '',
         color: dto.color || '#64748b',
-        permissions: JSON.stringify(dto.permissions || []),
+        permissions: JSON.stringify(requestedPermissions),
       },
     });
     return this.toRoleDto(role);

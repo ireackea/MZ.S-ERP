@@ -164,22 +164,49 @@ async function bootstrap() {
   };
 
   expressApp.set('trust proxy', 1);
-  expressApp.get('/metrics', (_req: Request, res: Response) => {
+  
+  // SECURITY FIX: 2026-03-28 - Add authentication to /metrics endpoint
+  const metricsAuthToken = String(process.env.METRICS_AUTH_TOKEN || '').trim();
+  expressApp.get('/metrics', (req: Request, res: Response) => {
+    // Require authentication token for metrics access
+    const providedToken = req.headers['x-metrics-token'] || req.query['token'];
+    if (metricsAuthToken && providedToken !== metricsAuthToken) {
+      res.status(401).json({ error: 'Unauthorized access to metrics' });
+      return;
+    }
+    // If no token configured, only allow localhost in production
+    if (!metricsAuthToken && process.env.NODE_ENV === 'production') {
+      const clientIp = extractClientIp(req);
+      if (!['127.0.0.1', '::1', 'localhost'].includes(clientIp)) {
+        res.status(401).json({ error: 'Unauthorized access to metrics' });
+        return;
+      }
+    }
     res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
     res.status(200).send(renderMetrics(metrics));
   });
   app.setGlobalPrefix('api');
 
   const prisma = app.get(PrismaService);
+  
+  // SECURITY FIX: 2026-03-28 - Enable shutdown hooks for graceful database connection closure
+  await prisma.enableShutdownHooks(app);
+  
   AuditService.configurePrisma(prisma);
   await prisma.auditLog.count();
   await prisma.activeSession.count();
   const runtimeAuditService = new AuditService(prisma);
-  setInterval(() => {
+  
+  // SECURITY FIX: 2026-03-28 - Store interval reference for cleanup
+  const sessionPurgeInterval = setInterval(() => {
     void runtimeAuditService.purgeExpiredSessions().catch((error) => {
       console.error('[Audit Cleanup] Failed to purge expired sessions:', error instanceof Error ? error.message : String(error));
     });
   }, 5 * 60 * 1000);
+  
+  // Cleanup on shutdown
+  process.on('SIGTERM', () => clearInterval(sessionPurgeInterval));
+  process.on('SIGINT', () => clearInterval(sessionPurgeInterval));
 
   // ENTERPRISE FIX: Phase 0 - Fatal Errors Fixed - 2026-03-02
   app.use(cookieParser());
@@ -209,15 +236,13 @@ async function bootstrap() {
     next();
   });
 
-  // ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
-  // Auth request monitor
+  // SECURITY FIX: 2026-03-28 - Removed auth body logging (password exposure)
+  // Auth request monitor - sanitized version
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.url.includes('auth') || req.url.includes('/auth')) {
       console.log(`\n[Auth Monitor] [Backend Entry] Incoming: ${req.method} ${req.url}`);
       console.log(`   [Auth Monitor] IP: ${extractClientIp(req)}`);
-      if (req.body && Object.keys(req.body).length > 0) {
-        console.log(`   [Auth Monitor] Body: ${JSON.stringify(req.body).substring(0, 100)}`);
-      }
+      // REMOVED: Body logging to prevent password/credential exposure in logs
     }
     next();
   });

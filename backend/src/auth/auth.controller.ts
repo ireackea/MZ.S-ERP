@@ -65,12 +65,26 @@ export class AuthController {
     return { success: true, message: 'Logged out successfully' };
   }
 
-  @Public()
+  // SECURITY FIX: 2026-03-28 - Removed @Public() decorator
+  // This endpoint now requires authentication to prevent brute force bypass
+  @UseGuards(JwtAuthGuard)
   @Post('reset-attempts')
   async resetAttempts(
     @Body() dto: ResetLoginAttemptsDto,
-    @Req() req: Request,
+    @Req() req: Request & { user?: { username?: string; role?: string } },
   ) {
+    // Only admins can reset login attempts for other users
+    const requestingUser = req.user?.username;
+    const isSelf = requestingUser === dto.username;
+    const isAdmin = req.user?.role === 'SuperAdmin' || req.user?.role === 'Admin';
+    
+    if (!isSelf && !isAdmin) {
+      return { 
+        success: false, 
+        message: 'You can only reset your own login attempts or must be an admin' 
+      };
+    }
+    
     const result = await this.authService.resetLoginAttempts(dto.username, {
       ipAddress: String(req.ip || req.socket?.remoteAddress || '0.0.0.0'),
       userAgent: String(req.headers['user-agent'] || 'unknown'),

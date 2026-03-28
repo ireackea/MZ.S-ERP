@@ -150,30 +150,58 @@ export class JwtAuthGuard implements CanActivate {
     expiredToken: string,
   ): Promise<boolean> {
     try {
+      // SECURITY FIX: 2026-03-28 - Verify token signature only (not expiration)
+      // Then validate the session is still active before refreshing
       const payload = await this.jwtService.verifyAsync<JwtPayloadLike>(expiredToken, {
         secret: this.getJwtSecret(),
-        ignoreExpiration: true,
+        ignoreExpiration: true, // Allow expired token for refresh flow only
       });
 
       const userId = String(payload?.sub || '');
       const sessionId = String(payload?.sid || '');
       if (!userId || !sessionId) return false;
 
+      // SECURITY FIX: 2026-03-28 - Check if session is still valid before refreshing
+      // This prevents refresh of revoked sessions
       const activeSession = await this.auditService.findActiveSession({
         sessionId,
         userId,
         tokenHash: AuditService.hashToken(expiredToken),
       });
-      if (!activeSession) return false;
+      if (!activeSession) {
+        await this.logGuardAttempt(request, {
+          status: 'failed',
+          source,
+          message: 'Session not found or already revoked during refresh attempt',
+        });
+        return false;
+      }
+
+      // SECURITY FIX: 2026-03-28 - Re-validate user permissions from database
+      // Don't trust permissions from the expired token
+      const user = await this.prisma?.user.findUnique({
+        where: { id: userId },
+        include: { role: true },
+      });
+      
+      if (!user || !user.isActive) {
+        await this.logGuardAttempt(request, {
+          status: 'failed',
+          source,
+          userId,
+          message: 'User not found or inactive during token refresh',
+        });
+        return false;
+      }
+
+      const freshPermissions = this.parsePermissions(user.role?.permissions);
 
       const nextPayload = {
         sub: userId,
-        username: String(payload?.username || ''),
-        role: String(payload?.role || 'Viewer'),
-        permissions: Array.isArray(payload?.permissions)
-          ? payload.permissions.filter((entry): entry is string => typeof entry === 'string')
-          : [],
-        name: payload?.name ? String(payload.name) : null,
+        username: String(user.username || payload?.username || ''),
+        role: String(user.role?.name || 'Viewer'),
+        permissions: freshPermissions, // Use fresh permissions from DB
+        name: user.firstName ? String(user.firstName) : null,
         sid: sessionId,
       };
 
@@ -237,6 +265,17 @@ export class JwtAuthGuard implements CanActivate {
     if (!error) return 'unknown error';
     if (error instanceof Error) return error.message || 'error';
     return String(error);
+  }
+
+  private parsePermissions(raw: string | null | undefined): string[] {
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((entry): entry is string => typeof entry === 'string');
+    } catch {
+      return [];
+    }
   }
 
   private async logGuardAttempt(

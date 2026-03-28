@@ -1,20 +1,18 @@
-// ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
+// SECURITY FIX: 2026-03-28 - Removed forceAccess prop bypass
 import React, { useState } from 'react';
 import { AlertTriangle, ShieldAlert } from 'lucide-react';
 import { usePermissions } from '@hooks/usePermissions';
 import { toast } from '@services/toastService';
 import { systemResetService } from '@services/systemResetService';
 
-interface SystemResetProps {
-  forceAccess?: boolean;
-}
-
-const SystemReset: React.FC<SystemResetProps> = ({ forceAccess = false }) => {
+// SECURITY FIX: 2026-03-28 - Removed forceAccess prop entirely
+const SystemReset: React.FC = () => {
   const { hasPermission } = usePermissions();
   const [confirmationCode, setConfirmationCode] = useState('');
   const [loading, setLoading] = useState(false);
 
-  if (!forceAccess && !hasPermission('settings.view.reset')) {
+  // SECURITY FIX: 2026-03-28 - Only permission check, no bypass
+  if (!hasPermission('settings.view.reset')) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
         <div className="mb-2 flex items-center gap-2 font-bold"><ShieldAlert size={18} />لا تملك صلاحية عرض إعادة الضبط</div>
@@ -42,15 +40,21 @@ const SystemReset: React.FC<SystemResetProps> = ({ forceAccess = false }) => {
         <AlertTriangle className="mt-0.5" size={20} />
         <div>
           <div className="font-black">إعادة ضبط النظام</div>
-          <div className="mt-1 text-sm">هذا الإجراء شديد الخطورة ويجب تنفيذه فقط عند الحاجة القصوى وبكود التأكيد المؤسسي الكامل.</div>
+          <div className="mt-1 text-sm">هذا الإجراء شديد الخطورة ويجب تنفيذه فقط عند الحاجة القصوى. أدخل رمز التأكيد الذي حصلت عليه من المسؤول.</div>
         </div>
       </div>
       <label className="block space-y-2 text-sm font-semibold text-slate-700">
         <span>رمز التأكيد</span>
-        <input value={confirmationCode} onChange={(e) => setConfirmationCode(e.target.value)} placeholder="CONFIRM_SYSTEM_RESET_2026" className="w-full rounded-2xl border border-slate-300 px-4 py-3 font-mono" />
+        <input 
+          value={confirmationCode} 
+          onChange={(e) => setConfirmationCode(e.target.value)} 
+          placeholder="أدخل رمز التأكيد" 
+          className="w-full rounded-2xl border border-slate-300 px-4 py-3 font-mono" 
+          autoComplete="off"
+        />
       </label>
       <div className="mt-5 flex justify-end">
-        <button type="submit" disabled={loading} className="rounded-2xl bg-red-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-60">
+        <button type="submit" disabled={loading || !confirmationCode.trim()} className="rounded-2xl bg-red-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-60">
           {loading ? 'جارٍ التنفيذ...' : 'تنفيذ إعادة الضبط'}
         </button>
       </div>
