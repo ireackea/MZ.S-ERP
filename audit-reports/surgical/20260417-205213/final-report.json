@@ -1,0 +1,22 @@
+{
+  "generatedAt": "2026-04-17T18:52:16.406Z",
+  "mode": "runtime",
+  "score": 80,
+  "counts": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "info": 0
+  },
+  "verdict": {
+    "decision": "RED",
+    "exitCode": 2,
+    "summary": "Runtime audit was required but did not complete."
+  },
+  "inventory": null,
+  "static": null,
+  "runtime": null,
+  "findings": [],
+  "exitCode": 2
+}

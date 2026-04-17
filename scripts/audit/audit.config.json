@@ -1,0 +1,60 @@
+{
+  "excludedPaths": [
+    "node_modules",
+    "dist",
+    "build",
+    ".git",
+    ".vs",
+    ".vscode",
+    ".qwen",
+    "artifacts",
+    "audit-reports",
+    "backups",
+    "coverage",
+    "tmp",
+    "temp",
+    "_ARCHIVE_*",
+    "FINAL_SURGICAL_AUDIT_REPORT_*.md",
+    "MZS-ERP_FINAL_AUDIT_REPORT_*.pdf",
+    "SECURITY_FIXES_REPORT_*.md",
+    "SYSTEM_RUN_REPORT_*.md",
+    "production.log"
+  ],
+  "publicEndpointsAllowlist": [
+    "/auth/login",
+    "/auth/logout",
+    "/users/invite/verify",
+    "/users/invite/accept",
+    "/health"
+  ],
+  "reactComponentThresholds": {
+    "warningLines": 300,
+    "highLines": 800
+  },
+  "localEnvFiles": [
+    ".env",
+    "backend/.env"
+  ],
+  "redactionKeys": [
+    "JWT_SECRET",
+    "POSTGRES_PASSWORD",
+    "DATABASE_URL",
+    "RESET_TOKEN",
+    "BACKUP_ENCRYPTION_SECRET",
+    "ADMIN_PASSWORD",
+    "METRICS_AUTH_TOKEN",
+    "VITE_API_URL",
+    "VITE_REALTIME_URL"
+  ],
+  "runtime": {
+    "healthPath": "/api/health",
+    "metricsPath": "/metrics",
+    "loginPath": "/api/auth/login",
+    "protectedPaths": [
+      "/api/users",
+      "/api/items"
+    ],
+    "socketNamespace": "/realtime",
+    "socketPath": "/socket.io"
+  }
+}

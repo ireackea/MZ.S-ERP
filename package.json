@@ -10,6 +10,10 @@
   "scripts": {
     "dev": "npm run frontend:dev",
     "postinstall": "node scripts/postinstall.mjs || echo 'Postinstall skipped - run manually'",
+    "audit:surgical": "powershell -ExecutionPolicy Bypass -File .\\scripts\\audit\\Invoke-SurgicalAudit.ps1",
+    "audit:surgical:static": "powershell -ExecutionPolicy Bypass -File .\\scripts\\audit\\Invoke-SurgicalAudit.ps1 -StaticOnly",
+    "audit:surgical:runtime": "powershell -ExecutionPolicy Bypass -File .\\scripts\\audit\\Invoke-SurgicalAudit.ps1 -RuntimeOnly",
+    "test:audit": "node scripts/audit/tests/analyzers.test.mjs",
     "check:encoding": "node scripts/check-text-encoding.mjs",
     "validate:phase1": "node scripts/validation-phase1.mjs",
     "validate:phase3": "node scripts/validation-phase3.mjs",

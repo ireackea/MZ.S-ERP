@@ -1,0 +1,23 @@
+[
+  {
+    "label": "root",
+    "ok": false,
+    "code": 1,
+    "parsed": {},
+    "stderr": ""
+  },
+  {
+    "label": "frontend",
+    "ok": false,
+    "code": 1,
+    "parsed": {},
+    "stderr": ""
+  },
+  {
+    "label": "backend",
+    "ok": false,
+    "code": 1,
+    "parsed": {},
+    "stderr": ""
+  }
+]

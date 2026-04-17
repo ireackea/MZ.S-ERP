@@ -1,0 +1,22 @@
+﻿services:
+  postgres:
+    ports:
+      - ""
+    environment:
+      POSTGRES_DB: feed_factory_db
+      POSTGRES_USER: feedfactory
+      POSTGRES_PASSWORD: AuditRuntimePass2026!
+  backend:
+    ports:
+      - ""
+    environment:
+      DATABASE_URL: postgresql://feedfactory:AuditRuntimePass2026!@postgres:5432/feed_factory_db
+      JWT_SECRET: audit-jwt-1535a6bef4cd4a4c843df7be562e82b0
+      RESET_TOKEN: audit-reset-e20a990e6be543edba1e471ae4759ca8
+      BACKUP_ENCRYPTION_SECRET: audit-backup-6c96e2ecda0e4975ab096e8f98ede339
+      METRICS_AUTH_TOKEN: cdb254f610b449d0800d4429735ea0f6
+      CORS_ORIGINS: http://127.0.0.1:34361
+      ALLOWED_ORIGINS: http://127.0.0.1:34361
+      AUTH_COOKIE_SECURE: "false"
+      ADMIN_PASSWORD: AuditSuperAdmin2026!
+      NODE_ENV: production

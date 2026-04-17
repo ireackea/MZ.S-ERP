@@ -1,0 +1,194 @@
+{
+  "generatedAt": "2026-04-17T18:08:03.343Z",
+  "totalFiles": 302,
+  "sourceFiles": 246,
+  "categories": {
+    "frontend": 117,
+    "backend": 85,
+    "controllers": 13,
+    "dtoAndValidation": 25,
+    "prisma": 1,
+    "configs": 13,
+    "tests": 11
+  },
+  "giantComponents": [
+    {
+      "path": "frontend/src/pages/OperationsView.tsx",
+      "lines": 4334
+    },
+    {
+      "path": "frontend/src/components/DailyOperations.tsx",
+      "lines": 4332
+    },
+    {
+      "path": "frontend/src/components/Statement.tsx",
+      "lines": 1877
+    },
+    {
+      "path": "frontend/src/pages/StocktakingView.tsx",
+      "lines": 1695
+    },
+    {
+      "path": "frontend/src/components/Stocktaking.tsx",
+      "lines": 1693
+    },
+    {
+      "path": "frontend/src/components/ItemManagement.tsx",
+      "lines": 1125
+    },
+    {
+      "path": "frontend/src/components/Settings.tsx",
+      "lines": 954
+    },
+    {
+      "path": "frontend/src/pages/Items.tsx",
+      "lines": 856
+    },
+    {
+      "path": "frontend/src/components/UnifiedIAM.tsx",
+      "lines": 796
+    },
+    {
+      "path": "frontend/src/App.tsx",
+      "lines": 750
+    },
+    {
+      "path": "frontend/src/pages/BackupCenterView.tsx",
+      "lines": 697
+    },
+    {
+      "path": "frontend/src/components/BackupCenter.tsx",
+      "lines": 695
+    },
+    {
+      "path": "frontend/src/pages/OpeningBalanceView.tsx",
+      "lines": 622
+    },
+    {
+      "path": "frontend/src/components/OpeningBalancePage.tsx",
+      "lines": 620
+    },
+    {
+      "path": "frontend/src/components/ItemForm.tsx",
+      "lines": 598
+    }
+  ],
+  "topLevelEntries": [
+    {
+      "name": ".dockerignore",
+      "type": "file"
+    },
+    {
+      "name": ".editorconfig",
+      "type": "file"
+    },
+    {
+      "name": ".env",
+      "type": "file"
+    },
+    {
+      "name": ".env.example",
+      "type": "file"
+    },
+    {
+      "name": ".gitattributes",
+      "type": "file"
+    },
+    {
+      "name": ".github",
+      "type": "directory"
+    },
+    {
+      "name": ".gitignore",
+      "type": "file"
+    },
+    {
+      "name": ".gitkeep",
+      "type": "file"
+    },
+    {
+      "name": ".qwen",
+      "type": "directory"
+    },
+    {
+      "name": "audit-reports",
+      "type": "directory"
+    },
+    {
+      "name": "backend",
+      "type": "directory"
+    },
+    {
+      "name": "docker-compose.prod.yml",
+      "type": "file"
+    },
+    {
+      "name": "docker-compose.yml",
+      "type": "file"
+    },
+    {
+      "name": "FINAL_SURGICAL_AUDIT_REPORT_2026-03-28.md",
+      "type": "file"
+    },
+    {
+      "name": "frontend",
+      "type": "directory"
+    },
+    {
+      "name": "MZS-ERP_FINAL_AUDIT_REPORT_2026-03-28.pdf",
+      "type": "file"
+    },
+    {
+      "name": "nginx.prod.conf",
+      "type": "file"
+    },
+    {
+      "name": "package-lock.json",
+      "type": "file"
+    },
+    {
+      "name": "package.json",
+      "type": "file"
+    },
+    {
+      "name": "production.log",
+      "type": "file"
+    },
+    {
+      "name": "README.md",
+      "type": "file"
+    },
+    {
+      "name": "scripts",
+      "type": "directory"
+    },
+    {
+      "name": "SECURITY_FIXES_REPORT_2026-03-28.md",
+      "type": "file"
+    },
+    {
+      "name": "START_PROD_ULTIMATE_v4 old.bat",
+      "type": "file"
+    },
+    {
+      "name": "START_PROD_ULTIMATE_v4.bat",
+      "type": "file"
+    },
+    {
+      "name": "START_PROD_ULTIMATE_v5.bat",
+      "type": "file"
+    },
+    {
+      "name": "SYSTEM_RUN_REPORT_2026-03-28.md",
+      "type": "file"
+    },
+    {
+      "name": "tests",
+      "type": "directory"
+    },
+    {
+      "name": "دليل-التشغيل.md",
+      "type": "file"
+    }
+  ]
+}

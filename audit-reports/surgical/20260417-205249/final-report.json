@@ -1,0 +1,47 @@
+{
+  "generatedAt": "2026-04-17T18:53:13.758Z",
+  "mode": "runtime",
+  "score": 75,
+  "counts": {
+    "critical": 1,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "info": 0
+  },
+  "verdict": {
+    "decision": "RED",
+    "exitCode": 2,
+    "summary": "Critical findings were detected."
+  },
+  "inventory": null,
+  "static": null,
+  "runtime": {
+    "checks": [],
+    "findings": [
+      {
+        "title": "Runtime surgical audit could not start",
+        "description": "Docker daemon is not running. Start Docker Desktop (or the engine) before running runtime surgical audit.",
+        "remediation": "Resolve the runtime prerequisite, then rerun the surgical audit in runtime/full mode.",
+        "evidence": "Docker daemon is not running. Start Docker Desktop (or the engine) before running runtime surgical audit.",
+        "severity": "critical",
+        "category": "runtime",
+        "ruleId": "runtime-prerequisite-failed"
+      }
+    ],
+    "generatedAt": "2026-04-17T20:52:49.8886733+02:00",
+    "stage": "runtime"
+  },
+  "findings": [
+    {
+      "title": "Runtime surgical audit could not start",
+      "description": "Docker daemon is not running. Start Docker Desktop (or the engine) before running runtime surgical audit.",
+      "remediation": "Resolve the runtime prerequisite, then rerun the surgical audit in runtime/full mode.",
+      "evidence": "Docker daemon is not running. Start Docker Desktop (or the engine) before running runtime surgical audit.",
+      "severity": "critical",
+      "category": "runtime",
+      "ruleId": "runtime-prerequisite-failed"
+    }
+  ],
+  "exitCode": 2
+}
