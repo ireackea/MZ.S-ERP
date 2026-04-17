@@ -169,7 +169,8 @@ export const clearStrictEmptyBootFlag = () => {
 };
 
 export const getItems = (): Item[] => {
-	const persistedItems = readPersistedInventorySnapshot().items;
+	const persistedSnapshot = readPersistedInventorySnapshot();
+	const persistedItems = persistedSnapshot?.items;
 	if (Array.isArray(persistedItems) && persistedItems.length > 0) {
 		return persistedItems;
 	}
@@ -187,7 +188,8 @@ export const getOrders = (): Order[] => readJson<Order[]>(ORDERS_KEY, []);
 export const saveOrders = (orders: Order[]) => writeJson(ORDERS_KEY, orders);
 
 export const getUsers = (): User[] => {
-	const persistedUsers = readPersistedInventorySnapshot().users;
+	const persistedSnapshot = readPersistedInventorySnapshot();
+	const persistedUsers = persistedSnapshot?.users;
 	if (Array.isArray(persistedUsers) && persistedUsers.length > 0) {
 		return persistedUsers;
 	}
@@ -201,7 +203,8 @@ export const getTags = (): Tag[] => readJson<Tag[]>(TAGS_KEY, []);
 export const saveTags = (tags: Tag[]) => writeJson(TAGS_KEY, tags);
 
 export const getUnits = (): string[] => {
-	const persistedUnits = readPersistedInventorySnapshot().units;
+	const persistedSnapshot = readPersistedInventorySnapshot();
+	const persistedUnits = persistedSnapshot?.units;
 	if (Array.isArray(persistedUnits) && persistedUnits.length > 0) {
 		return uniqueStrings(persistedUnits);
 	}
@@ -210,7 +213,8 @@ export const getUnits = (): string[] => {
 };
 
 export const getCategories = (): string[] => {
-	const persistedCategories = readPersistedInventorySnapshot().categories;
+	const persistedSnapshot = readPersistedInventorySnapshot();
+	const persistedCategories = persistedSnapshot?.categories;
 	if (Array.isArray(persistedCategories) && persistedCategories.length > 0) {
 		return uniqueStrings(persistedCategories);
 	}

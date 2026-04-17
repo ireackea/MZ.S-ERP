@@ -1,7 +1,6 @@
 // SECURITY FIX: 2026-03-28 - Added authentication check before permission validation
 import React, { ReactNode, useMemo } from 'react';
 import { usePermissions } from '@hooks/usePermissions';
-import { useSession } from '@hooks/useSession';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -33,7 +32,6 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   requireAuth = true,
 }) => {
   const { hasPermission, hasAll, hasAny, isAuthenticated } = usePermissions();
-  const { session } = useSession();
 
   const allowed = useMemo(() => {
     // SECURITY FIX: 2026-03-28 - Check authentication first

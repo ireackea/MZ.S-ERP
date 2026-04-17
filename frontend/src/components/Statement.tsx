@@ -420,7 +420,7 @@ const Statement: React.FC<StatementProps> = ({
       .filter((column) => column.frozen)
       .forEach((column) => {
         offsets[column.key] = offset;
-        offset += column.width;
+        offset += column.width ?? 0;
       });
     return offsets;
   }, [visibleColumns]);
@@ -639,7 +639,7 @@ const Statement: React.FC<StatementProps> = ({
     if (!targetColumn) return;
 
     setActiveResizeKey(columnKey);
-    const initialWidth = targetColumn.width;
+    const initialWidth = targetColumn.width ?? 120;
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const delta = moveEvent.clientX - initialX;
@@ -872,7 +872,7 @@ const Statement: React.FC<StatementProps> = ({
       }
 
       printColumns.forEach((column, index) => {
-        worksheet.getColumn(index + 1).width = Math.max(14, Math.floor(column.width / 10));
+        worksheet.getColumn(index + 1).width = Math.max(14, Math.floor((column.width ?? 120) / 10));
       });
 
       const buffer = await workbook.xlsx.writeBuffer();

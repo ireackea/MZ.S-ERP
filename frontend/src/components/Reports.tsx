@@ -355,7 +355,7 @@ const Reports: React.FC = () => {
             </label>
             <DatePicker
               selected={dateFrom}
-              onChange={(date) => setDateFrom(date)}
+              onChange={(date: Date | null) => setDateFrom(date)}
               dateFormat="yyyy-MM-dd"
               className="mt-2 w-full border border-slate-200 rounded-lg px-3 py-2 bg-white"
               placeholderText="YYYY-MM-DD"
@@ -368,7 +368,7 @@ const Reports: React.FC = () => {
             </label>
             <DatePicker
               selected={dateTo}
-              onChange={(date) => setDateTo(date)}
+              onChange={(date: Date | null) => setDateTo(date)}
               dateFormat="yyyy-MM-dd"
               className="mt-2 w-full border border-slate-200 rounded-lg px-3 py-2 bg-white"
               placeholderText="YYYY-MM-DD"

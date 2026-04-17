@@ -4,7 +4,8 @@
 // ENTERPRISE FIX: Exact Legacy UI Restoration - 2026-02-27
 
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render } from '@testing-library/react';
+import { screen } from '@testing-library/dom';
 import App from '../App';
 import React from 'react';
 

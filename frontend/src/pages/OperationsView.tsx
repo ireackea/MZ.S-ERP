@@ -1052,8 +1052,8 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
         }
 
         const newTransaction: Transaction = {
-            id: uuidv4(),
             ...normalizedForm as Transaction,
+            id: uuidv4(),
             quantity: Number(form.quantity),
             supplierNet: form.supplierNet ? Number(form.supplierNet) : 0,
             timestamp: Date.now()
@@ -2166,7 +2166,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
 
         return unloadingRules.find((rule) => {
             if (!rule.is_active) return false;
-            const name = rule.rule_name.toLowerCase();
+            const name = String(rule.rule_name || '').toLowerCase();
             return name === token || name.includes(token) || token.includes(name);
         });
     };
@@ -2372,7 +2372,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
         const offsets: Record<string, number> = {};
         visibleHistoryColumns.filter(column => column.frozen).forEach(column => {
             offsets[column.key] = offset;
-            offset += column.width;
+            offset += column.width ?? 0;
         });
         return offsets;
     }, [visibleHistoryColumns]);
@@ -2382,7 +2382,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
         const offsets: Record<string, number> = {};
         visibleBatchColumns.filter(column => column.frozen).forEach(column => {
             offsets[column.key] = offset;
-            offset += column.width;
+            offset += column.width ?? 0;
         });
         return offsets;
     }, [visibleBatchColumns]);

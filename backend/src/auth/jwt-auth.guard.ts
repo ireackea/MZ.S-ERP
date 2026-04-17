@@ -225,8 +225,8 @@ export class JwtAuthGuard implements CanActivate {
         maxAge: 24 * 60 * 60 * 1000,
       });
 
-      const user = await this.authService.verifyToken(refreshedToken);
-      request.user = user;
+      const verifiedUser = await this.authService.verifyToken(refreshedToken);
+      request.user = verifiedUser;
 
       await this.auditService.log({
         action: 'SESSION_EXTENDED',

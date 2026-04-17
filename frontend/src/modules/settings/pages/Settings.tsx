@@ -85,13 +85,13 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
       case 'reference-data':
         return <ReferenceDataSettings forceAccess={isPrivileged} />;
       case 'users':
-        return <UsersAndRoles forceAccess={isPrivileged} />;
+        return <UsersAndRoles />;
       case 'permissions':
         return <PermissionsMatrix forceAccess={isPrivileged} />;
       case 'backup':
-        return <BackupAndRestore currentUser={currentUser} forceAccess={isPrivileged} />;
+        return <BackupAndRestore currentUser={currentUser} />;
       case 'reset':
-        return <SystemReset forceAccess={isPrivileged} />;
+        return <SystemReset />;
       case 'audit':
         return <AuditLogs forceAccess={isPrivileged} />;
       case 'offline':

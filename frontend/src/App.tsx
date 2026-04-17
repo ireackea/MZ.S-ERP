@@ -186,10 +186,11 @@ const AppContent = () => {
             const sourceUser = matchedUser ?? (sessionUser as User);
             const role = (sourceUser?.role ?? '').toString();
             const isSuperAdminRole = role.toLowerCase() === 'superadmin' || role.toLowerCase() === 'admin';
+            const permissions = Array.isArray(sourceUser.permissions) ? sourceUser.permissions : [];
             const targetUser: User = {
               ...sourceUser,
-              permissions: sourceUser?.permissions?.length > 0
-                ? sourceUser.permissions
+              permissions: permissions.length > 0
+                ? permissions
                 : (isSuperAdminRole ? ['*'] : []),
             };
 
