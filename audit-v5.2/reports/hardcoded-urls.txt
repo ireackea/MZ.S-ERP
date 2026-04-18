@@ -1,0 +1,41 @@
+./tests/e2e/backup-dashboard.spec.ts:7:const frontendUrl = process.env.E2E_FRONTEND_URL || 'http://127.0.0.1:4173';
+./tests/e2e/backup-dashboard.spec.ts:8:const backendUrl = process.env.E2E_BASE_URL || 'http://127.0.0.1:3001';
+./tests/e2e/backup-dashboard.spec.ts:137:    domain: '127.0.0.1',
+./tests/e2e/settings-regression.spec.ts:5:const frontendUrl = process.env.E2E_FRONTEND_URL || 'http://127.0.0.1:4173';
+./tests/e2e/settings-regression.spec.ts:6:const backendUrl = process.env.E2E_BASE_URL || 'http://127.0.0.1:3001';
+./tests/e2e/settings-regression.spec.ts:100:    domain: '127.0.0.1',
+./tests/e2e/phase3-visual-proof.spec.ts:8:const frontendUrl = process.env.E2E_FRONTEND_URL || 'http://127.0.0.1:4173';
+./tests/e2e/phase3-visual-proof.spec.ts:9:const backendUrl = process.env.E2E_BASE_URL || 'http://127.0.0.1:3001';
+./tests/e2e/phase3-visual-proof.spec.ts:95:    domain: '127.0.0.1',
+./tests/e2e/full-system.spec.ts:8:const frontendUrl = process.env.E2E_FRONTEND_URL || 'http://127.0.0.1:4173';
+./tests/e2e/full-system.spec.ts:9:const backendUrl = process.env.E2E_BASE_URL || 'http://127.0.0.1:3001';
+./tests/e2e/full-system.spec.ts:146:    domain: '127.0.0.1',
+./tests/e2e/login.spec.ts:4:const baseUrl = process.env.E2E_BASE_URL || 'http://127.0.0.1:3001';
+./backend/src/users/users.service.ts:769:    const base = (process.env.APP_BASE_URL || 'http://localhost:5173').replace(/\/$/, '');
+./backend/src/auth/auth.controller.ts:35:      ipAddress: String(req.ip || req.socket?.remoteAddress || '0.0.0.0'),
+./backend/src/auth/auth.controller.ts:89:      ipAddress: String(req.ip || req.socket?.remoteAddress || '0.0.0.0'),
+./backend/src/auth/jwt-auth.guard.ts:309:        ipAddress: String(request.ip || request.socket?.remoteAddress || '0.0.0.0'),
+./backend/src/auth/auth.service.ts:129:    return String(clientMeta?.ipAddress || '0.0.0.0');
+./backend/src/realtime/realtime.gateway.ts:23:    'http://localhost:5173,http://localhost:5174,http://localhost:3000';
+./backend/src/realtime/realtime.gateway.ts:39:  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
+./backend/src/main.ts:50:    'http://localhost:4173,http://localhost:5173,http://localhost:5174,http://localhost:3000';
+./backend/src/main.ts:79:  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
+./backend/src/main.ts:177:    // If no token configured, only allow localhost in production
+./backend/src/main.ts:180:      if (!['127.0.0.1', '::1', 'localhost'].includes(clientIp)) {
+./_ARCHIVE_DUPLICATION_CLEANUP_2026-03-26/components/Stocktaking.tsx:851:                  src={`https://api.qrserver.com/v1/create-qr-code/?size=96x96&data=${encodeURIComponent(printConfig.reportUrl)}`}
+./_ARCHIVE_DUPLICATION_CLEANUP_2026-03-26/components/Stocktaking.tsx:1020:                      src={`https://api.qrserver.com/v1/create-qr-code/?size=96x96&data=${encodeURIComponent(printConfig.reportUrl)}`}
+./_ARCHIVE_DUPLICATION_CLEANUP_2026-03-26/components/DailyOperations.tsx:2749:                                        src={`https://api.qrserver.com/v1/create-qr-code/?size=96x96&data=${encodeURIComponent(printConfig.reportUrl)}`}
+./frontend/src/components/Stocktaking.tsx:851:                  src={`https://api.qrserver.com/v1/create-qr-code/?size=96x96&data=${encodeURIComponent(printConfig.reportUrl)}`}
+./frontend/src/components/Stocktaking.tsx:1020:                      src={`https://api.qrserver.com/v1/create-qr-code/?size=96x96&data=${encodeURIComponent(printConfig.reportUrl)}`}
+./frontend/src/components/DailyOperations.tsx:2749:                                        src={`https://api.qrserver.com/v1/create-qr-code/?size=96x96&data=${encodeURIComponent(printConfig.reportUrl)}`}
+./frontend/src/components/StockBalances.tsx:192:          @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap');
+./frontend/src/pages/StocktakingView.tsx:853:                  src={`https://api.qrserver.com/v1/create-qr-code/?size=96x96&data=${encodeURIComponent(printConfig.reportUrl)}`}
+./frontend/src/pages/StocktakingView.tsx:1022:                      src={`https://api.qrserver.com/v1/create-qr-code/?size=96x96&data=${encodeURIComponent(printConfig.reportUrl)}`}
+./frontend/src/pages/OperationsView.tsx:2751:                                        src={`https://api.qrserver.com/v1/create-qr-code/?size=96x96&data=${encodeURIComponent(printConfig.reportUrl)}`}
+./frontend/src/services/iamService.ts:308:    ipAddress: params.ipAddress ?? '127.0.0.1 (simulated)',
+./frontend/src/services/realtimeSync.ts:12:  return 'http://localhost:5173';
+./frontend/src/services/authController.ts:60:  return '127.0.0.1';
+./frontend/src/main.tsx:52:  await loadScript('https://browser.sentry-cdn.com/8.38.0/bundle.min.js');
+./frontend/vite.config.ts:7:const backendOrigin = process.env.VITE_BACKEND_ORIGIN || 'http://localhost:3001';
+./frontend/vite.config.ts:19:const allowedDevHosts = ['localhost', '127.0.0.1', '.app.github.dev', '.preview.github.dev'];
+./frontend/vite.config.ts:63:    host: '0.0.0.0',

@@ -1,0 +1,2 @@
+./backend/src/realtime/realtime.gateway.ts:93:    credentials: true,
+./backend/src/main.ts:278:    credentials: true,

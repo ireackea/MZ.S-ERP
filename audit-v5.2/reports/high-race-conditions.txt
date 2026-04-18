@@ -1,0 +1,30 @@
+./tests/e2e/backup-dashboard.spec.ts:62:    const response = await fetch(input, init);
+--
+--
+./tests/e2e/backup-dashboard.spec.ts:69:      await new Promise((resolve) => setTimeout(resolve, delayMs * (attempt + 1)));
+--
+--
+./tests/e2e/backup-dashboard.spec.ts:77:  const response = await fetchWithRetry(`${backendUrl}/api/auth/login`, {
+--
+--
+./tests/e2e/backup-dashboard.spec.ts:83:  const payload = await response.json();
+--
+--
+./tests/e2e/backup-dashboard.spec.ts:97:  const response = await fetchWithRetry(`${backendUrl}${pathname}`, {
+--
+--
+./tests/e2e/backup-dashboard.spec.ts:106:  const text = await response.text();
+--
+--
+./tests/e2e/backup-dashboard.spec.ts:112:  const page = await browser.newPage();
+./tests/e2e/backup-dashboard.spec.ts:113:  const client = await page.target().createCDPSession();
+./tests/e2e/backup-dashboard.spec.ts:114:  await client.send('Page.setDownloadBehavior', {
+--
+--
+./tests/e2e/backup-dashboard.spec.ts:122:  const page = await createManagedPage();
+--
+--
+./tests/e2e/backup-dashboard.spec.ts:134:  await page.setCookie({
+--
+--
+./tests/e2e/backup-dashboard.spec.ts:143:  await page.goto(frontendUrl, { waitUntil: 'networkidle2' });

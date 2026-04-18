@@ -1,0 +1,4 @@
+frontend/src/modules/settings/components/BackupAndRestore.tsx
+frontend/src/shared/store/realtimeSync.store.ts
+frontend/src/shared/store/theme.store.ts
+frontend/src/store/useInventoryStore.ts

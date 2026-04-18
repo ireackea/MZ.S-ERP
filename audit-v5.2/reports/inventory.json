@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-04-18T02:58:54+00:00",
+  "project": "MZ.S-ERP",
+  "audit_version": "v5.2",
+  "total_files": 409,
+  "source_files": 281,
+  "total_lines_of_code": 68481,
+  "file_types": {
+    "typescript": 138,
+    "typescript_jsx": 96,
+    "javascript": 2,
+    "prisma": 3,
+    "json": 42
+  },
+  "categories": {
+    "frontend": 109,
+    "backend": 77,
+    "prisma_schemas": 3,
+    "config": 11
+  }
+}
