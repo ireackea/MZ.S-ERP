@@ -1,0 +1,6 @@
+frontend/src/components/ItemForm.tsx:8:import { create } from 'zustand';
+frontend/src/store/useInventoryStore.ts:6:import { create } from 'zustand';
+frontend/src/shared/context/ThemeContext.tsx:53:    // persist to localStorage (already handled by zustand persist) and optionally sync
+frontend/src/shared/store/realtimeSync.store.ts:2:import { create } from 'zustand';
+frontend/src/shared/store/theme.store.ts:1:import create from 'zustand';
+frontend/src/shared/store/theme.store.ts:2:import { persist } from 'zustand/middleware';

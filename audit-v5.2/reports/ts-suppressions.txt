@@ -1,0 +1,50 @@
+./tests/e2e/backup-dashboard.spec.ts:46:  const raw = (response.headers as any).getSetCookie?.() as string[] | undefined;
+./tests/e2e/settings-regression.spec.ts:34:  const raw = (response.headers as any).getSetCookie?.() as string[] | undefined;
+./tests/e2e/phase3-visual-proof.spec.ts:29:  const raw = (response.headers as any).getSetCookie?.() as string[] | undefined;
+./tests/e2e/full-system.spec.ts:58:  const raw = (response.headers as any).getSetCookie?.() as string[] | undefined;
+./backend/src/reports/report.service.ts:169:    const customColumns = Array.isArray((data as any)?.columns) ? ((data as any).columns as any[]) : [];
+./backend/src/reports/report.service.ts:184:    if (Array.isArray((data as any)?.rows)) return ((data as any).rows as Array<Record<string, unknown>>).slice(0, 5000);
+./backend/src/reports/report.service.ts:185:    if (Array.isArray((data as any)?.items)) return ((data as any).items as Array<Record<string, unknown>>).slice(0, 5000);
+./backend/src/reports/report.service.ts:186:    if (Array.isArray((data as any)?.transactions)) {
+./backend/src/reports/report.service.ts:187:      return ((data as any).transactions as Array<Record<string, unknown>>).slice(0, 5000);
+./backend/src/reports/report.service.ts:189:    if (Array.isArray((data as any)?.recentActivity)) {
+./backend/src/reports/report.service.ts:190:      return ((data as any).recentActivity as Array<Record<string, unknown>>).slice(0, 5000);
+./backend/src/reports/report.service.ts:201:    const customSummary = Array.isArray((data as any)?.summary) ? ((data as any).summary as any[]) : [];
+./backend/src/reports/report.service.ts:213:        { label: 'Total Items', value: String((data as any)?.totalItems ?? '-') },
+./backend/src/reports/report.service.ts:214:        { label: 'Low Stock', value: String((data as any)?.lowStock ?? '-') },
+./backend/src/reports/report.service.ts:215:        { label: 'Today Transactions', value: String((data as any)?.todayTransactions ?? '-') },
+./backend/src/reports/report.service.ts:216:        { label: 'Total Revenue', value: String((data as any)?.totalRevenue ?? '-') },
+./backend/src/auth/auth.controller.ts:24:    return Boolean((request as any).secure) || forwardedProto === 'https';
+./backend/src/auth/jwt-auth.guard.ts:75:      const secureTransport = Boolean((request as any).secure) || forwardedProto === 'https';
+./backend/src/auth/jwt-auth.guard.ts:86:    return Boolean((request as any).secure) || forwardedProto === 'https';
+./backend/src/auth/jwt-auth.guard.ts:123:        userId: String((user as any)?.id || ''),
+./backend/src/auth/jwt-auth.guard.ts:124:        username: String((user as any)?.username || ''),
+./backend/src/auth/jwt-auth.guard.ts:125:        role: String((user as any)?.role || 'Viewer'),
+./backend/src/auth/auth.service.ts:445:    const jwtExpiresIn = (process.env.JWT_EXPIRES_IN || '24h') as any;
+./backend/src/transaction/transaction.service.ts:241:      } as any;
+./backend/src/transaction/transaction.service.ts:639:      } as any;
+./backend/src/item/item.service.ts:512:      const existingAttachments = (item.attachments as any[]) || [];
+./backend/src/backup/backup.controller.ts:34:    const user = (request as any)?.user;
+./backend/src/backup/backup.controller.ts:45:    const backupActor = (request as any)?.backupActor;
+./backend/src/backup/backup.service.ts:1251:      const statFs: any = await (fsPromises as any).statfs(this.backupDir);
+./_ARCHIVE_DUPLICATION_CLEANUP_2026-03-26/components/Settings.tsx:515:              onClick={() => setActiveTab(tab.id as any)}
+./_ARCHIVE_DUPLICATION_CLEANUP_2026-03-26/components/Stocktaking.tsx:573:      const html2pdf = (html2pdfModule as any).default;
+./_ARCHIVE_DUPLICATION_CLEANUP_2026-03-26/components/Stocktaking.tsx:1064:      const html2pdf = (html2pdfModule as any).default;
+./_ARCHIVE_PHASE6_FINAL_POLISH_2026-03-27/backend/item/item.service.ts:512:      const existingAttachments = (item.attachments as any[]) || [];
+./frontend/src/setupTests.ts:5:(globalThis as any).expect = expect;
+./frontend/src/App.tsx:169:            const normalizedSessionEmail = normalizeValue((sessionUser as any)?.email);
+./frontend/src/App.tsx:175:              const userEmail = normalizeValue((user as any)?.email);
+./frontend/src/components/Settings.tsx:515:              onClick={() => setActiveTab(tab.id as any)}
+./frontend/src/components/ItemForm.tsx:181:  const ratingValue = RATING_OPTIONS.includes((initialItem?.sustainabilityRating as any) || '')
+./frontend/src/components/ItemForm.tsx:182:    ? ((initialItem?.sustainabilityRating as any) || '')
+./frontend/src/components/Stocktaking.tsx:573:      const html2pdf = (html2pdfModule as any).default;
+./frontend/src/components/Stocktaking.tsx:1064:      const html2pdf = (html2pdfModule as any).default;
+./frontend/src/components/LoginV2.test.tsx:103:    (loginError as any).response = {
+./frontend/src/components/LoginV2.test.tsx:125:    (loginError as any).response = {
+./frontend/src/components/LoginV2.test.tsx:167:    (loginError as any).response = {
+./frontend/src/components/UnifiedIAM.tsx:435:                  onChange={(e) => setStatusFilter(e.target.value as any)}
+./frontend/src/components/LoginV2.tsx:49:  const status = (error as any)?.response?.status as number | undefined;
+./frontend/src/components/LoginV2.tsx:50:  const serverMessage = (error as any)?.response?.data?.message as string | undefined;
+./frontend/src/components/LoginV2.tsx:55:  const status = (error as any)?.response?.status as number | undefined;
+./frontend/src/components/Statement.tsx:1491:                        checked={Boolean((printConfig as any)[option.key])}
+./frontend/src/pages/StocktakingView.tsx:575:      const html2pdf = (html2pdfModule as any).default;

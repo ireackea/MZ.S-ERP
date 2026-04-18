@@ -1,0 +1,2 @@
+./backend/src/monitoring/monitoring.service.ts:36:      await this.prisma.$queryRawUnsafe('SELECT 1');
+./backend/src/backup/backup.service.ts:971:      await this.prisma.$executeRawUnsafe(statement).catch(() => undefined);
