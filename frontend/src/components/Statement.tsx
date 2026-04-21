@@ -32,6 +32,7 @@ import {
 import { getGridModuleDefinition } from '../services/gridModules';
 import UniversalColumnManager from './UniversalColumnManager';
 import { toast } from '@services/toastService';
+import { createExcelWorkbook } from '../utils/exceljs';
 
 interface StatementProps {
   items: Item[];
@@ -705,8 +706,7 @@ const Statement: React.FC<StatementProps> = ({
     if (!ensureRangeReady()) return;
 
     try {
-      const ExcelJS = await import('exceljs');
-      const workbook = new ExcelJS.Workbook();
+      const workbook = await createExcelWorkbook();
       const worksheet = workbook.addWorksheet('Statement');
       worksheet.views = [{ rightToLeft: true }];
 

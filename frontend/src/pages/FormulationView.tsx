@@ -5,6 +5,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Beaker, Edit2, Plus, Search, Trash2 } from 'lucide-react';
 import { toast } from '@services/toastService';
+import { usePermissions } from '@hooks/usePermissions';
 import FormulationForm from '../components/FormulationForm';
 import type { FormulationDraft } from '../components/FormulationForm';
 import type { Formula, Item } from '../types';
@@ -29,19 +30,24 @@ const Formulation: React.FC<FormulationProps> = ({
   onDeleteFormula,
 }) => {
   const storeItems = useInventoryStore((state) => state.items);
-  const loadAll = useInventoryStore((state) => state.loadAll);
+  const loadInventoryCore = useInventoryStore((state) => state.loadInventoryCore);
   const lastLoadedAt = useInventoryStore((state) => state.lastLoadedAt);
+  const { hasPermission } = usePermissions();
   const items = itemsProp && itemsProp.length > 0 ? itemsProp : storeItems;
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingFormula, setEditingFormula] = useState<Formula | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const canCreate = hasPermission('formulation.create') || hasPermission('formulation.*');
+  const canUpdate = hasPermission('formulation.update') || hasPermission('formulation.*');
+  const canDelete = hasPermission('formulation.delete') || hasPermission('formulation.*');
+
   useEffect(() => {
     if (!lastLoadedAt) {
-      void loadAll();
+      void loadInventoryCore({ force: true, staleMs: 0 });
     }
-  }, [lastLoadedAt, loadAll]);
+  }, [lastLoadedAt, loadInventoryCore]);
 
   const itemMap = useMemo(() => new Map(items.map((item) => [String(item.id), item])), [items]);
 
@@ -61,11 +67,13 @@ const Formulation: React.FC<FormulationProps> = ({
   const activeCount = formulas.filter((formula) => formula.isActive !== false).length;
 
   const openCreate = () => {
+    if (!canCreate) return;
     setEditingFormula(null);
     setIsModalOpen(true);
   };
 
   const openEdit = (formula: Formula) => {
+    if (!canUpdate) return;
     setEditingFormula(formula);
     setIsModalOpen(true);
   };
@@ -102,6 +110,7 @@ const Formulation: React.FC<FormulationProps> = ({
   };
 
   const handleDelete = async (formula: Formula) => {
+    if (!canDelete) return;
     const confirmed = window.confirm(`سيتم حذف التركيبة "${formula.name}". هل تريد المتابعة؟`);
     if (!confirmed) return;
     await onDeleteFormula(formula.id);
@@ -124,14 +133,16 @@ const Formulation: React.FC<FormulationProps> = ({
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={openCreate}
-              className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-slate-900 transition hover:bg-emerald-50"
-            >
-              <Plus className="h-4 w-4" />
-              إضافة تركيبة
-            </button>
+            {canCreate && (
+              <button
+                type="button"
+                onClick={openCreate}
+                className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-slate-900 transition hover:bg-emerald-50"
+              >
+                <Plus className="h-4 w-4" />
+                إضافة تركيبة
+              </button>
+            )}
           </div>
         </div>
 
@@ -241,42 +252,50 @@ const Formulation: React.FC<FormulationProps> = ({
                   </div>
                 )}
 
-                <div className="mt-5 flex flex-wrap justify-end gap-3 border-t border-slate-200 pt-5">
-                  <button
-                    type="button"
-                    onClick={() => openEdit(formula)}
-                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
-                  >
-                    <Edit2 className="h-4 w-4" />
-                    تعديل
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleDelete(formula)}
-                    className="inline-flex items-center gap-2 rounded-2xl border border-red-200 px-4 py-2.5 text-sm font-bold text-red-700 transition hover:bg-red-50"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    حذف
-                  </button>
-                </div>
+                {(canUpdate || canDelete) && (
+                  <div className="mt-5 flex flex-wrap justify-end gap-3 border-t border-slate-200 pt-5">
+                    {canUpdate && (
+                      <button
+                        type="button"
+                        onClick={() => openEdit(formula)}
+                        className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                        تعديل
+                      </button>
+                    )}
+                    {canDelete && (
+                      <button
+                        type="button"
+                        onClick={() => void handleDelete(formula)}
+                        className="inline-flex items-center gap-2 rounded-2xl border border-red-200 px-4 py-2.5 text-sm font-bold text-red-700 transition hover:bg-red-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        حذف
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
       )}
 
-      <FormulationForm
-        isOpen={isModalOpen}
-        mode={editingFormula ? 'edit' : 'create'}
-        items={items}
-        initialValue={editingFormula}
-        isSubmitting={isSubmitting}
-        onSubmit={handleSave}
-        onClose={() => {
-          setIsModalOpen(false);
-          setEditingFormula(null);
-        }}
-      />
+      {(canCreate || canUpdate) && (
+        <FormulationForm
+          isOpen={isModalOpen}
+          mode={editingFormula ? 'edit' : 'create'}
+          items={items}
+          initialValue={editingFormula}
+          isSubmitting={isSubmitting}
+          onSubmit={handleSave}
+          onClose={() => {
+            setIsModalOpen(false);
+            setEditingFormula(null);
+          }}
+        />
+      )}
     </div>
   );
 };

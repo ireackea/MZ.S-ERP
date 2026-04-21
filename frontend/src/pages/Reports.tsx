@@ -1,7 +1,7 @@
 // ENTERPRISE FIX: Phase 3 Duplication Cleanup - Archive Only - 2026-03-26
 // All legacy files archived in _ARCHIVE_DUPLICATION_CLEANUP_2026-03-26/
 // ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Download, FileText, Filter, RefreshCw } from 'lucide-react';
 import { toast } from '@services/toastService';
 import { useInventoryStore } from '../store/useInventoryStore';
@@ -13,23 +13,17 @@ const formatDate = (value: string) => String(value || '').slice(0, 10);
 const ReportsPage: React.FC = () => {
   const items = useInventoryStore((state) => state.items);
   const transactions = useInventoryStore((state) => state.transactions);
-  const loadAll = useInventoryStore((state) => state.loadAll);
+  const loadInventoryCore = useInventoryStore((state) => state.loadInventoryCore);
+  const loadTransactions = useInventoryStore((state) => state.loadTransactions);
   const exportRowsToExcel = useInventoryStore((state) => state.exportRowsToExcel);
   const exportPdfReport = useInventoryStore((state) => state.exportPdfReport);
   const reportConfig = useInventoryStore((state) => state.reportConfig);
   const loading = useInventoryStore((state) => state.loading || state.syncing);
-  const lastLoadedAt = useInventoryStore((state) => state.lastLoadedAt);
 
   const [reportType, setReportType] = useState<ReportType>('movements');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
-
-  useEffect(() => {
-    if (!lastLoadedAt) {
-      void loadAll();
-    }
-  }, [lastLoadedAt, loadAll]);
 
   const inventoryRows = useMemo(() => items.map((item) => ({
     itemId: String(item.id),
@@ -91,6 +85,11 @@ const ReportsPage: React.FC = () => {
     setReportType('movements');
   };
 
+  const refresh = async () => {
+    await loadInventoryCore({ force: true, staleMs: 0 });
+    await loadTransactions({ force: true, staleMs: 0 });
+  };
+
   const exportExcel = async () => {
     if (!activeRows.length) {
       toast.error('لا توجد بيانات لتصديرها.');
@@ -142,7 +141,7 @@ const ReportsPage: React.FC = () => {
             <p className="mt-2 text-sm text-slate-500">تقارير ناتجة من حالة Zustand فقط دون أي استعلامات محلية موازية أو fallback.</p>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => void loadAll()} disabled={loading} className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 px-4 py-3 text-sm font-bold text-slate-700"><RefreshCw size={16} className={loading ? 'animate-spin' : ''} />تحديث</button>
+            <button onClick={() => void refresh()} disabled={loading} className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 px-4 py-3 text-sm font-bold text-slate-700"><RefreshCw size={16} className={loading ? 'animate-spin' : ''} />تحديث</button>
             <button onClick={handleReset} className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 px-4 py-3 text-sm font-bold text-slate-700"><Filter size={16} />إعادة ضبط</button>
             <button onClick={() => void exportExcel()} className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 px-4 py-3 text-sm font-bold text-slate-700"><Download size={16} />Excel</button>
             <button onClick={() => void exportPdf()} className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-bold text-white"><FileText size={16} />PDF</button>

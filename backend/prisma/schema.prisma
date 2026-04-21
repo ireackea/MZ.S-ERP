@@ -12,7 +12,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model Role {
@@ -195,12 +194,51 @@ model Item {
   createdBy       String?
   updatedBy       String?
   openingBalances OpeningBalance[]
+  targetFormulas  Formulation[]    @relation("FormulationTargetItem")
+  formulaRows     FormulationItem[] @relation("FormulationIngredientItem")
   transactions    Transaction[]
 
   @@index([name])
   @@index([code])
   @@index([barcode])
   @@index([isArchived])
+}
+
+model Formulation {
+  id                 String            @id @default(cuid())
+  code               String            @unique
+  name               String
+  targetItemId       Int
+  expectedCostPerTon Decimal?
+  notes              String?
+  isActive           Boolean           @default(true)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  createdBy          String?
+  updatedBy          String?
+  targetItem         Item              @relation("FormulationTargetItem", fields: [targetItemId], references: [id], onDelete: Restrict)
+  items              FormulationItem[]
+
+  @@index([targetItemId])
+  @@index([name])
+  @@index([isActive])
+  @@map("formulations")
+}
+
+model FormulationItem {
+  id            String      @id @default(cuid())
+  formulationId String
+  itemId        Int
+  percentage    Decimal
+  weightPerTon  Decimal
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  formulation   Formulation @relation(fields: [formulationId], references: [id], onDelete: Cascade)
+  item          Item        @relation("FormulationIngredientItem", fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@unique([formulationId, itemId])
+  @@index([itemId])
+  @@map("formulation_items")
 }
 
 model OpeningBalance {

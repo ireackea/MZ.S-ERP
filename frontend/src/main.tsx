@@ -2,6 +2,11 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
+import '@fontsource/tajawal/300.css';
+import '@fontsource/tajawal/400.css';
+import '@fontsource/tajawal/500.css';
+import '@fontsource/tajawal/700.css';
+import '@fontsource/tajawal/800.css';
 import App from './App';
 import './i18n';
 import '../themes/classic/index.css';
@@ -74,10 +79,23 @@ if (!rootElement) {
   throw new Error('Could not find root element to mount to');
 }
 
-ReactDOM.createRoot(rootElement).render(
-  <React.StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
-  </React.StrictMode>,
-);
+const renderApplication = async () => {
+  if (import.meta.env.DEV) {
+    try {
+      const { enableWhyDidYouRender } = await import('./debug/whyDidYouRender');
+      await enableWhyDidYouRender();
+    } catch (error) {
+      console.warn('[debug] why-did-you-render was not initialized:', error);
+    }
+  }
+
+  ReactDOM.createRoot(rootElement).render(
+    <React.StrictMode>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </React.StrictMode>,
+  );
+};
+
+void renderApplication();

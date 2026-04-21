@@ -1,1 +1,98 @@
-[]
+[
+  {
+    "id": "74b12a41-9d6a-44e7-a423-558d4e6d0026",
+    "fileName": "full_2026-04-21T00-00-04-801Z_74b12a41.ffbkp",
+    "type": "full",
+    "trigger": "scheduled",
+    "createdAt": "2026-04-21T00:00:04.801Z",
+    "sizeBytes": 1078907,
+    "checksumSha256": "ffeef1b65cb0ac21bc7a84fb8e2b5e8c857d366bbfb984c405b9f8263575b4cb",
+    "integrity": "verified",
+    "passwordProtected": false,
+    "actor": {
+      "type": "system",
+      "mode": "scheduled",
+      "username": "scheduler"
+    },
+    "metadata": {
+      "users": 3,
+      "items": 0,
+      "openingBalances": 0,
+      "transactions": 0,
+      "configFiles": 0
+    },
+    "safetySnapshotForId": null
+  },
+  {
+    "id": "4d608e4f-d60d-4685-8199-9eadb54d45c4",
+    "fileName": "full_2026-04-20T00-00-01-522Z_4d608e4f.ffbkp",
+    "type": "full",
+    "trigger": "scheduled",
+    "createdAt": "2026-04-20T00:00:01.522Z",
+    "sizeBytes": 1078907,
+    "checksumSha256": "76f0a342686c48e351342497923778c59305be92e27a209ec0a5f546d74529e1",
+    "integrity": "verified",
+    "passwordProtected": false,
+    "actor": {
+      "type": "system",
+      "mode": "scheduled",
+      "username": "scheduler"
+    },
+    "metadata": {
+      "users": 3,
+      "items": 0,
+      "openingBalances": 0,
+      "transactions": 0,
+      "configFiles": 0
+    },
+    "safetySnapshotForId": null
+  },
+  {
+    "id": "77c8e1e4-5525-4cdc-bb61-c70ff6d0305b",
+    "fileName": "full_2026-04-19T00-00-05-141Z_77c8e1e4.ffbkp",
+    "type": "full",
+    "trigger": "scheduled",
+    "createdAt": "2026-04-19T00:00:05.140Z",
+    "sizeBytes": 1078907,
+    "checksumSha256": "fc0411379c2f9cdf9199723f93ae2cd8d8162b4bbab3ed62b46bf2a9a984cf91",
+    "integrity": "verified",
+    "passwordProtected": false,
+    "actor": {
+      "type": "system",
+      "mode": "scheduled",
+      "username": "scheduler"
+    },
+    "metadata": {
+      "users": 3,
+      "items": 0,
+      "openingBalances": 0,
+      "transactions": 0,
+      "configFiles": 0
+    },
+    "safetySnapshotForId": null
+  },
+  {
+    "id": "ff0025c2-f184-4901-845a-5fd1862edc77",
+    "fileName": "full_2026-04-18T00-00-29-315Z_ff0025c2.ffbkp",
+    "type": "full",
+    "trigger": "scheduled",
+    "createdAt": "2026-04-18T00:00:29.315Z",
+    "sizeBytes": 1078815,
+    "checksumSha256": "193548f932b65cc96ea15c8b7ebc96be05eaba2727edab87343482fd7638342d",
+    "integrity": "verified",
+    "passwordProtected": false,
+    "actor": {
+      "type": "system",
+      "mode": "scheduled",
+      "username": "scheduler"
+    },
+    "metadata": {
+      "users": 3,
+      "items": 0,
+      "openingBalances": 0,
+      "transactions": 0,
+      "configFiles": 0
+    },
+    "safetySnapshotForId": null
+  }
+]

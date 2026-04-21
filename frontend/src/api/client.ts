@@ -2,6 +2,7 @@
 // ENTERPRISE FIX: Vite Proxy for Backend API - 2026-02-26
 
 import axios from 'axios';
+import { markBootstrapRequest } from '@utils/bootstrapMetrics';
 
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '',
@@ -36,6 +37,8 @@ apiClient.interceptors.request.use((config) => {
   } else {
     delete headers.Authorization;
   }
+
+  markBootstrapRequest(String(config.method || 'GET').toUpperCase(), String(config.url || ''));
 
   config.headers = headers as any;
   return config;

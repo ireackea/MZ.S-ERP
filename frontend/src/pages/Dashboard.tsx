@@ -1,7 +1,7 @@
 // ENTERPRISE FIX: Phase 3 Duplication Cleanup - Archive Only - 2026-03-26
 // All legacy files archived in _ARCHIVE_DUPLICATION_CLEANUP_2026-03-26/
 // ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { AlertCircle, AlertTriangle, DollarSign, Package, Printer, RefreshCw, TrendingUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from '@services/toastService';
@@ -14,22 +14,19 @@ const DashboardPage: React.FC = () => {
   const items = useInventoryStore((state) => state.items);
   const transactions = useInventoryStore((state) => state.transactions);
   const users = useInventoryStore((state) => state.users);
-  const loadAll = useInventoryStore((state) => state.loadAll);
+  const loadInventoryCore = useInventoryStore((state) => state.loadInventoryCore);
+  const loadTransactions = useInventoryStore((state) => state.loadTransactions);
+  const loadUsersAndRoles = useInventoryStore((state) => state.loadUsersAndRoles);
   const exportPdfReport = useInventoryStore((state) => state.exportPdfReport);
   const loading = useInventoryStore((state) => state.loading || state.syncing);
-  const lastLoadedAt = useInventoryStore((state) => state.lastLoadedAt);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!lastLoadedAt) {
-      void refresh();
-    }
-  }, [lastLoadedAt]);
 
   const refresh = async () => {
     try {
       setError(null);
-      await loadAll();
+      await loadInventoryCore({ force: true, staleMs: 0 });
+      await loadTransactions({ force: true, staleMs: 0 });
+      await loadUsersAndRoles({ force: true, staleMs: 0 });
     } catch (err: any) {
       console.warn('[DashboardPage] Store sync failed:', err);
       setError(err?.message || 'تعذر مزامنة البيانات من الخادم.');

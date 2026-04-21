@@ -146,6 +146,41 @@ const STOCKTAKING_PRINT_TEMPLATES_STORAGE_KEY = 'stocktaking_print_templates';
 
 let xlsxLoader: Promise<typeof import('xlsx')> | null = null;
 
+const buildNormalizedPrintConfig = (
+  source: Partial<StocktakingPrintConfig> & { cellTextVerticalAlign?: 'top' | 'middle' | 'bottom' },
+  fallback: StocktakingPrintConfig = STOCKTAKING_PRINT_DEFAULT_CONFIG,
+): StocktakingPrintConfig => {
+  const legacyVerticalAlign = source.cellTextVerticalAlign;
+  const normalizedVerticalPosition = typeof source.cellTextVerticalPosition === 'number'
+    ? Math.min(100, Math.max(0, source.cellTextVerticalPosition))
+    : legacyVerticalAlign === 'top'
+      ? 0
+      : legacyVerticalAlign === 'bottom'
+        ? 100
+        : fallback.cellTextVerticalPosition;
+
+  return {
+    ...fallback,
+    ...source,
+    reportUrl: source.reportUrl || fallback.reportUrl,
+    cellTextVerticalPosition: normalizedVerticalPosition,
+    selectedCards: Array.isArray(source.selectedCards)
+      ? source.selectedCards.filter((key): key is ReportCardKey => REPORT_CARD_CONFIG.some((card) => card.key === key))
+      : fallback.selectedCards,
+  };
+};
+
+const normalizeStoredPrintTemplates = (templates: Array<Record<string, unknown>> | undefined): StocktakingPrintTemplate[] => {
+  if (!Array.isArray(templates) || templates.length === 0) {
+    return [];
+  }
+
+  return templates as unknown as StocktakingPrintTemplate[];
+};
+
+const serializePrintConfig = (config: StocktakingPrintConfig) => JSON.stringify(config);
+const serializePrintTemplates = (templates: StocktakingPrintTemplate[]) => JSON.stringify(templates);
+
 const loadXlsx = () => {
   if (!xlsxLoader) {
     xlsxLoader = import('xlsx');
@@ -204,8 +239,6 @@ const Stocktaking: React.FC<StocktakingProps> = ({
   const storedPrintTemplates = useInventoryStore((state) => state.stocktakingPrintTemplates);
   const setStoredPrintConfig = useInventoryStore((state) => state.setStocktakingPrintConfig);
   const setStoredPrintTemplates = useInventoryStore((state) => state.setStocktakingPrintTemplates);
-  const loadAll = useInventoryStore((state) => state.loadAll);
-  const lastLoadedAt = useInventoryStore((state) => state.lastLoadedAt);
   const items = itemsProp && itemsProp.length > 0 ? itemsProp : storeItems;
   const transactions = transactionsProp && transactionsProp.length > 0 ? transactionsProp : storeTransactions;
   const resolvedCompanyName = companyName || storeSystemSettings.companyName || '';
@@ -237,57 +270,67 @@ const Stocktaking: React.FC<StocktakingProps> = ({
 
   const session = useMemo(() => getOrCreateMonthlySession(monthKey), [monthKey, sessionVersion]);
   const { start, end } = useMemo(() => getMonthBounds(monthKey), [monthKey]);
+  const normalizedStoredPrintConfig = useMemo(
+    () => buildNormalizedPrintConfig((storedPrintConfig || {}) as Partial<StocktakingPrintConfig> & { cellTextVerticalAlign?: 'top' | 'middle' | 'bottom' }, STOCKTAKING_PRINT_DEFAULT_CONFIG),
+    [storedPrintConfig],
+  );
+  const normalizedStoredPrintTemplates = useMemo(
+    () => normalizeStoredPrintTemplates(storedPrintTemplates),
+    [storedPrintTemplates],
+  );
+  const normalizedStoredPrintConfigKey = useMemo(
+    () => serializePrintConfig(normalizedStoredPrintConfig),
+    [normalizedStoredPrintConfig],
+  );
+  const normalizedStoredPrintTemplatesKey = useMemo(
+    () => serializePrintTemplates(normalizedStoredPrintTemplates),
+    [normalizedStoredPrintTemplates],
+  );
+  const localPrintConfigKey = useMemo(() => serializePrintConfig(printConfig), [printConfig]);
+  const localPrintTemplatesKey = useMemo(() => serializePrintTemplates(printTemplates), [printTemplates]);
 
   useEffect(() => {
-    if (!lastLoadedAt) {
-      void loadAll();
+    setPrintConfig((prev) => {
+      if (serializePrintConfig(prev) === normalizedStoredPrintConfigKey) {
+        return prev;
+      }
+      return normalizedStoredPrintConfig;
+    });
+  }, [normalizedStoredPrintConfig, normalizedStoredPrintConfigKey]);
+
+  useEffect(() => {
+    setPrintTemplates((prev) => {
+      if (serializePrintTemplates(prev) === normalizedStoredPrintTemplatesKey) {
+        return prev;
+      }
+      return normalizedStoredPrintTemplates;
+    });
+  }, [normalizedStoredPrintTemplates, normalizedStoredPrintTemplatesKey]);
+
+  useEffect(() => {
+    if (localPrintConfigKey === normalizedStoredPrintConfigKey) {
+      return;
     }
-  }, [lastLoadedAt, loadAll]);
 
-  useEffect(() => {
-    const parsed = (storedPrintConfig || {}) as Partial<StocktakingPrintConfig> & { cellTextVerticalAlign?: 'top' | 'middle' | 'bottom' };
-    const legacyVerticalAlign = parsed.cellTextVerticalAlign;
-    const normalizedVerticalPosition = typeof parsed.cellTextVerticalPosition === 'number'
-      ? Math.min(100, Math.max(0, parsed.cellTextVerticalPosition))
-      : legacyVerticalAlign === 'top'
-        ? 0
-        : legacyVerticalAlign === 'bottom'
-          ? 100
-          : 50;
-
-    setPrintConfig((prev) => ({
-      ...prev,
-      ...parsed,
-      reportUrl: parsed.reportUrl || prev.reportUrl,
-      cellTextVerticalPosition: normalizedVerticalPosition,
-      selectedCards: Array.isArray(parsed.selectedCards)
-        ? parsed.selectedCards.filter((key): key is ReportCardKey => REPORT_CARD_CONFIG.some((card) => card.key === key))
-        : prev.selectedCards,
-    }));
-  }, [storedPrintConfig]);
-
-  useEffect(() => {
-    if (Array.isArray(storedPrintTemplates) && storedPrintTemplates.length > 0) {
-      setPrintTemplates(storedPrintTemplates as unknown as StocktakingPrintTemplate[]);
-    }
-  }, [storedPrintTemplates]);
-
-  useEffect(() => {
     setStoredPrintConfig(printConfig as unknown as Record<string, unknown>);
-  }, [printConfig, setStoredPrintConfig]);
+  }, [localPrintConfigKey, normalizedStoredPrintConfigKey, printConfig, setStoredPrintConfig]);
 
   useEffect(() => {
+    if (localPrintTemplatesKey === normalizedStoredPrintTemplatesKey) {
+      return;
+    }
+
     setStoredPrintTemplates(printTemplates as unknown as Array<Record<string, unknown>>);
-  }, [printTemplates, setStoredPrintTemplates]);
+  }, [localPrintTemplatesKey, normalizedStoredPrintTemplatesKey, printTemplates, setStoredPrintTemplates]);
 
   const zones = useMemo(() => {
-    const values = Array.from(new Set(items.map((item) => item.zone?.trim() || 'بدون منقة'))).sort();
+    const values = Array.from(new Set(items.map((item) => item.zone?.trim() || 'بدون منطقة'))).sort();
     return ['all', ...values];
   }, [items]);
 
   const zoneItems = useMemo(() => {
     if (zoneFilter === 'all') return items;
-    return items.filter((item) => (item.zone?.trim() || 'بدون منقة') === zoneFilter);
+    return items.filter((item) => (item.zone?.trim() || 'بدون منطقة') === zoneFilter);
   }, [items, zoneFilter]);
 
   const auditRows = useMemo(() => {
@@ -362,7 +405,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
 
   const getDraftUser = (itemId: string) => {
     if (draftUsers[itemId]) return draftUsers[itemId];
-    return currentUserName || 'النام';
+    return currentUserName || 'النظام';
   };
 
   const getDraftNote = (itemId: string) => {
@@ -406,9 +449,9 @@ const Stocktaking: React.FC<StocktakingProps> = ({
     const rows = zoneItems.map((item) => ({
       item_code: item.code || '',
       item_name: item.name,
-      zone: item.zone || 'بدون منقة',
+      zone: item.zone || 'بدون منطقة',
       actual_count: '',
-      user_name: currentUserName || 'النام',
+      user_name: currentUserName || 'النظام',
       notes: '',
     }));
 
@@ -423,7 +466,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
     const rows = operationsRows.map(({ item, itemRecord, conflict }) => ({
       item_code: item.code || '',
       item_name: item.name,
-      zone: item.zone || 'بدون منقة',
+      zone: item.zone || 'بدون منطقة',
       actual_count: itemRecord?.actualCount ?? '',
       conflict: conflict ? 'متضارب' : 'معتمد',
       entered_by: itemRecord?.entries.map((entry) => `${entry.userName}:${entry.value}`).join(' | ') || '',
@@ -451,7 +494,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
       const code = String(row.item_code || row['item code'] || '').trim();
       const name = String(row.item_name || row['item name'] || '').trim();
       const countRaw = String(row.actual_count || row['actual count'] || '').trim();
-      const userName = String(row.user_name || row['user name'] || currentUserName || 'النام').trim();
+      const userName = String(row.user_name || row['user name'] || currentUserName || 'النظام').trim();
       const notes = String(row.notes || '').trim();
 
       const parsedCount = Number(countRaw.replace(/,/g, ''));
@@ -523,7 +566,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
       return [{ id: `tpl-${Date.now()}`, name: normalizedName, config: printConfig, updatedAt: Date.now() }, ...prev].slice(0, 25);
     });
 
-    setPrintStatusMessage(`تم حفظ قالب الباعة بنجاح: ${normalizedName}`);
+    setPrintStatusMessage(`تم حفظ قالب الطباعة بنجاح: ${normalizedName}`);
   };
 
   const applyPrintTemplate = (templateId: string) => {
@@ -539,7 +582,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
     }));
     setSelectedTemplateId(template.id);
     setPrintTemplateName(template.name);
-    setPrintStatusMessage(`تم تبيق القالب: ${template.name}`);
+    setPrintStatusMessage(`تم تطبيق القالب: ${template.name}`);
   };
 
   const deleteSelectedPrintTemplate = () => {
@@ -639,7 +682,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
       Math.max(62, estimateTextMinWidth('الرصيد الدفتري'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
       Math.max(62, estimateTextMinWidth('الجرد الفعلي'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
       Math.max(62, estimateTextMinWidth('الفارق'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
-      Math.max(90, estimateTextMinWidth('ملاحات الجرد'), estimateTextMinWidth('م'.repeat(Math.min(maxNotesLen, 18)))),
+      Math.max(90, estimateTextMinWidth('ملاحظات الجرد'), estimateTextMinWidth('م'.repeat(Math.min(maxNotesLen, 18)))),
     ];
 
     const baseTotalWidth = baseColumnWidths.reduce((sum, value) => sum + value, 0);
@@ -770,7 +813,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                 <th className="text-center" style={headerCellStyle}>الدفتري</th>
                 <th className="text-center" style={headerCellStyle}>الفعلي</th>
                 <th className="text-center" style={headerCellStyle}>الفارق</th>
-                <th className="text-center" style={headerCellStyle}>ملاحات</th>
+                <th className="text-center" style={headerCellStyle}>ملاحظات</th>
               </tr>
             </thead>
             <tbody>
@@ -842,7 +885,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
 
             {printConfig.generalNote.trim() && (
               <div className="mt-4 pt-3 border-t border-slate-200 text-xs text-slate-600 whitespace-pre-wrap">
-                <div className="font-bold text-slate-700 mb-1">ملاحة عامة</div>
+                <div className="font-bold text-slate-700 mb-1">ملاحظة عامة</div>
                 <div>{printConfig.generalNote}</div>
               </div>
             )}
@@ -1011,7 +1054,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
 
                 {isLastPage && printConfig.generalNote.trim() && (
                   <div className="mt-4 pt-3 border-t border-slate-200 text-xs text-slate-600 whitespace-pre-wrap">
-                    <div className="font-bold text-slate-700 mb-1">ملاحة عامة</div>
+                    <div className="font-bold text-slate-700 mb-1">ملاحظة عامة</div>
                     <div>{printConfig.generalNote}</div>
                   </div>
                 )}
@@ -1083,7 +1126,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
       const base64 = dataUri.includes(',') ? dataUri.split(',')[1] : dataUri;
       const result = closeMonth({
         monthKey,
-        approvedBy: currentUserName || 'النام',
+        approvedBy: currentUserName || 'النظام',
         rows: auditRows,
         archivedPdfName: pdfName,
         archivedPdfMime: 'application/pdf',
@@ -1098,7 +1141,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
       setSessionVersion((prev) => prev + 1);
       setStatusMessage(`تم اعتماد إغلاق الجرد ${monthKey} وحفظ الرصيد الفعلي كأرصدة افتتاحية للشهر القادم.`);
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : 'حدث خأ أثناء إعداد أو إغلاق الجرد.');
+      setStatusMessage(error instanceof Error ? error.message : 'حدث خطأ أثناء إعداد أو إغلاق الجرد.');
     } finally {
       setIsClosing(false);
     }
@@ -1110,7 +1153,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
         <div className="flex flex-col xl:flex-row gap-3 xl:items-center xl:justify-between">
           <div>
             <h2 className="text-2xl font-bold text-slate-800">تقرير الجرد الشهري واعتماد الجرد الدفتري</h2>
-            <p className="text-sm text-slate-500">ملاحة حول الألوان: الإفتتاحي/الوارد + المنصرف/التالف</p>
+            <p className="text-sm text-slate-500">ملاحظة حول الألوان: الافتتاحي/الوارد + المنصرف/التالف</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -1126,10 +1169,10 @@ const Stocktaking: React.FC<StocktakingProps> = ({
               className="px-3 py-2 border border-slate-300 rounded-lg"
               value={zoneFilter}
               onChange={(event) => setZoneFilter(event.target.value)}
-              title="المنقة"
+              title="المنطقة"
             >
               {zones.map((zone) => (
-                <option key={zone} value={zone}>{zone === 'all' ? 'كل المناق' : zone}</option>
+                <option key={zone} value={zone}>{zone === 'all' ? 'كل المناطق' : zone}</option>
               ))}
             </select>
 
@@ -1138,7 +1181,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
               onClick={() => setBlindMode((prev) => !prev)}
               title="تفعيل/إلغاء وضع الجرد الأعمى"
             >
-              {blindMode ? <EyeOff size={16} /> : <Eye size={16} />} {blindMode ? 'وضع الجرد الأعمى: مفعل' : 'وضع الجرد الأعمى: معل'}
+              {blindMode ? <EyeOff size={16} /> : <Eye size={16} />} {blindMode ? 'وضع الجرد الأعمى: مفعل' : 'وضع الجرد الأعمى: معطل'}
             </button>
           </div>
         </div>
@@ -1148,7 +1191,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
             لوحة العمليات / الإدخال
           </button>
           <button className={`px-3 py-2 rounded-lg border font-bold ${pane === 'audit' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-300'}`} onClick={() => setPane('audit')}>
-            المراجعة / الباعة
+            المراجعة / الطباعة
           </button>
         </div>
       </div>
@@ -1187,12 +1230,12 @@ const Stocktaking: React.FC<StocktakingProps> = ({
               <thead className="bg-white border-b border-slate-200">
                 <tr>
                   <th className="p-3 text-right">اسم الصنف</th>
-                  <th className="p-3 text-right">المنقة</th>
+                  <th className="p-3 text-right">المنطقة</th>
                   <th className="p-3 text-right">اسم المستخدم الذي قام بالجرد</th>
                   <th className="p-3 text-right">العدد الفعلي</th>
                   {!blindMode && <th className="p-3 text-right">الرصيد الدفتري</th>}
                   {!blindMode && <th className="p-3 text-right">الفارق</th>}
-                  <th className="p-3 text-right">الملاحات</th>
+                  <th className="p-3 text-right">الملاحظات</th>
                   <th className="p-3 text-right">الحالة</th>
                   <th className="p-3 text-right">إجراءات</th>
                 </tr>
@@ -1203,7 +1246,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                   return (
                     <tr key={item.id} className={`border-b border-slate-100 ${conflict ? 'bg-red-50' : ''}`}>
                       <td className="p-3 font-bold text-slate-800">{item.name}</td>
-                      <td className="p-3 text-slate-600">{item.zone || 'بدون منقة'}</td>
+                      <td className="p-3 text-slate-600">{item.zone || 'بدون منطقة'}</td>
                       <td className="p-3">
                         <input
                           type="text"
@@ -1235,7 +1278,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                       <td className="p-3">
                         <input
                           type="text"
-                          title="ملاحات الصنف"
+                          title="ملاحظات الصنف"
                           value={getDraftNote(item.id)}
                           onChange={(event) => setDraftNotes((prev) => ({ ...prev, [item.id]: event.target.value }))}
                           className="w-52 p-2 border border-slate-300 rounded-lg"
@@ -1262,7 +1305,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                 })}
                 {operationsRows.length === 0 && (
                   <tr>
-                    <td colSpan={blindMode ? 7 : 9} className="p-6 text-center text-slate-500">لا توجد أصناف في هذا الناق.</td>
+                    <td colSpan={blindMode ? 7 : 9} className="p-6 text-center text-slate-500">لا توجد أصناف مطابقة للمرشحات الحالية.</td>
                   </tr>
                 )}
               </tbody>
@@ -1526,9 +1569,9 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">تباعد النص عن أراف العمود ({printConfig.columnSpacing}px)</label>
+                        <label className="block text-slate-500 mb-1 font-bold">تباعد النص عن أطراف العمود ({printConfig.columnSpacing}px)</label>
                         <input
-                          title="تباعد النص عن أراف العمود"
+                          title="تباعد النص عن أطراف العمود"
                           type="range"
                           min={0}
                           max={100}
@@ -1586,7 +1629,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                         </div>
                       </div>
                       <label className="flex items-center justify-between p-2 border border-slate-200 rounded-lg">
-                        <span>إهار التوقيعات</span>
+                        <span>إظهار التوقيعات</span>
                         <input type="checkbox" checked={printConfig.showSignatures} onChange={(e) => setPrintConfig((prev) => ({ ...prev, showSignatures: e.target.checked }))} />
                       </label>
 
@@ -1629,7 +1672,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                         <input title="العلامة المائية" type="text" className="w-full p-2 border border-slate-300 rounded-lg" placeholder="مثال: مسودة / سري" value={printConfig.watermarkText} onChange={(e) => setPrintConfig((prev) => ({ ...prev, watermarkText: e.target.value }))} />
                       </div>
                       <label className="flex items-center justify-between p-2 border border-slate-200 rounded-lg">
-                        <span>إهار رمز QR في التذييل</span>
+                        <span>إظهار رمز QR في التذييل</span>
                         <input type="checkbox" checked={printConfig.showQrCode} onChange={(e) => setPrintConfig((prev) => ({ ...prev, showQrCode: e.target.checked }))} />
                       </label>
                       <div>
@@ -1637,8 +1680,8 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                         <input title="رابط الوصول عبر الهاتف" type="text" className="w-full p-2 border border-slate-300 rounded-lg" value={printConfig.reportUrl} onChange={(e) => setPrintConfig((prev) => ({ ...prev, reportUrl: e.target.value }))} />
                       </div>
                       <div>
-                        <label className="block text-slate-500 mb-1 font-bold">ملاحة عامة</label>
-                        <textarea title="ملاحة عامة" className="w-full p-2 border border-slate-300 rounded-lg min-h-24" value={printConfig.generalNote} onChange={(e) => setPrintConfig((prev) => ({ ...prev, generalNote: e.target.value }))} />
+                        <label className="block text-slate-500 mb-1 font-bold">ملاحظة عامة</label>
+                        <textarea title="ملاحظة عامة" className="w-full p-2 border border-slate-300 rounded-lg min-h-24" value={printConfig.generalNote} onChange={(e) => setPrintConfig((prev) => ({ ...prev, generalNote: e.target.value }))} />
                       </div>
                     </>
                   )}

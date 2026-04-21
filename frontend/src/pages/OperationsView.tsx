@@ -345,8 +345,6 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
     const storeTransactions = useInventoryStore((state) => state.transactions);
     const setInventoryTransactions = useInventoryStore((state) => state.setTransactions);
     const updateStockFromTransaction = useInventoryStore((state) => state.updateStockFromTransaction);
-    const loadAll = useInventoryStore((state) => state.loadAll);
-    const lastLoadedAt = useInventoryStore((state) => state.lastLoadedAt);
     const storedOperationPrintConfig = useInventoryStore((state) => state.operationPrintConfig);
     const setOperationPrintConfig = useInventoryStore((state) => state.setOperationPrintConfig);
     const storedOperationPrintTemplates = useInventoryStore((state) => state.operationPrintTemplates);
@@ -369,6 +367,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
     const addTransactionsWithOfflineProof = async (rows: Transaction[]) => {
         const payload = {
             transactions: rows.map((row) => ({
+                id: row.id,
                 itemId: row.itemId,
                 date: row.date,
                 type: row.type,
@@ -401,26 +400,19 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
             })),
         };
 
-        const result = await executeWithSync('/transactions/bulk', 'POST', payload, async () => {
-            await appendTransactionsLocally(rows);
-        });
-
-        if (!(result as { offline?: boolean }).offline) {
+        try {
+            return await executeWithSync('/transactions/bulk', 'POST', payload, async () => {
+                await appendTransactionsLocally(rows);
+            });
+        } catch (error) {
             setInventoryTransactions(transactions);
-            onAddTransaction(rows);
+            rows.forEach((row) => updateStockFromTransaction(row, 'remove'));
+            throw error;
         }
-
-        return result;
     };
 
     // --- Constants & Config ---
     const ROWS_COUNT = 5;
-
-    useEffect(() => {
-        if (!lastLoadedAt) {
-            void loadAll();
-        }
-    }, [lastLoadedAt, loadAll]);
 
     const getEmptyForm = (): Partial<Transaction> => ({
         date: new Date().toISOString().split('T')[0],
@@ -1808,6 +1800,11 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
     };
 
     const quickPrintCurrentFilter = async () => {
+        if (!canExport) {
+            toast.error('لا تملك صلاحية تصدير العمليات.');
+            return;
+        }
+
         if (operationRowsForPrint.length === 0) {
             toast.error('لا توجد بيانات مابقة للتصدير إلى Excel.');
             return;
@@ -2792,9 +2789,9 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                         </button>
                         <button
                             onClick={quickPrintCurrentFilter}
-                            disabled={isQuickExportingExcel || operationRowsForPrint.length === 0}
+                            disabled={!canExport || isQuickExportingExcel || operationRowsForPrint.length === 0}
                             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="تصدير Excel بناءً على الفلاتر الحالية"
+                            title={canExport ? 'تصدير Excel بناءً على الفلاتر الحالية' : 'لا تملك صلاحية التصدير'}
                         >
                             {isQuickExportingExcel ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />} تصدير Excel
                         </button>
@@ -3887,7 +3884,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
 
                                 <div className="px-4 py-3 bg-white border-t border-slate-200 flex items-center justify-end gap-2">
                                     <button onClick={() => setShowPrintStudio(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50">إغلاق</button>
-                                    <button onClick={quickPrintCurrentFilter} disabled={isQuickExportingExcel || operationRowsForPrint.length === 0} className="px-4 py-2 border border-indigo-300 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold hover:bg-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed">{isQuickExportingExcel ? 'جاري التصدير...' : 'تصدير Excel'}</button>
+                                    <button onClick={quickPrintCurrentFilter} disabled={!canExport || isQuickExportingExcel || operationRowsForPrint.length === 0} className="px-4 py-2 border border-indigo-300 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold hover:bg-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed">{isQuickExportingExcel ? 'جاري التصدير...' : 'تصدير Excel'}</button>
                                     <button onClick={buildPdfFromPreview} disabled={isPrintingPdf} className="px-5 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 disabled:opacity-50">
                                         {isPrintingPdf ? 'جاري التصدير...' : 'باعة/تصدير للملف الكتروني (PDF)'}
                                     </button>

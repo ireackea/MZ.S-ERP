@@ -2,6 +2,8 @@
 import { defineConfig, type PluginOption } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import autoprefixer from 'autoprefixer';
+import tailwindcss from 'tailwindcss';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const backendOrigin = process.env.VITE_BACKEND_ORIGIN || 'http://localhost:3001';
@@ -33,6 +35,15 @@ try {
 
 export default defineConfig(({ mode }) => ({
   plugins: [reactPlugin()],
+
+  css: {
+    postcss: {
+      plugins: [
+        tailwindcss({ config: path.resolve(__dirname, 'tailwind.config.cjs') }),
+        autoprefixer(),
+      ],
+    },
+  },
 
   define: {
     __APP_MONITORING__: JSON.stringify(monitoringConfig),

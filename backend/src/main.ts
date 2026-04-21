@@ -24,7 +24,6 @@ function loadBackendEnv() {
 
   for (const envPath of candidates) {
     if (fs.existsSync(envPath)) {
-      const isBackendEnv = envPath.endsWith(path.join('backend', '.env'));
       const raw = fs.readFileSync(envPath, 'utf8');
       raw
         .split(/\r?\n/)
@@ -34,7 +33,7 @@ function loadBackendEnv() {
           const idx = line.indexOf('=');
           const key = line.slice(0, idx).trim();
           const value = line.slice(idx + 1).trim().replace(/^['"]|['"]$/g, '');
-          if (key && (isBackendEnv || process.env[key] === undefined)) {
+          if (key && process.env[key] === undefined) {
             process.env[key] = value;
           }
         });
@@ -210,7 +209,6 @@ async function bootstrap() {
 
   // ENTERPRISE FIX: Phase 0 - Fatal Errors Fixed - 2026-03-02
   app.use(cookieParser());
-  app.use(globalRateLimiter);
 
   app.use((req: Request, res: Response, next: NextFunction) => {
     const start = Date.now();
@@ -279,6 +277,8 @@ async function bootstrap() {
     allowedHeaders: ['Authorization', 'Content-Type'],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
+
+  app.use(globalRateLimiter);
 
   app.useGlobalPipes(
     new ValidationPipe({

@@ -2,7 +2,7 @@
 // ENTERPRISE FIX: Exact Legacy UI Restoration - 2026-02-27
 // ENTERPRISE FIX: Server-First Sync + Optimistic UI - 2026-02-28
 import apiClient from '@api/client';
-import ExcelJS from 'exceljs';
+import { createExcelWorkbook } from '../utils/exceljs';
 
 export interface ItemDto {
   id: number;
@@ -244,8 +244,12 @@ export interface ExcelImportResult {
 }
 
 export const bulkImportFromExcel = async (items: ExcelImportRow[]): Promise<ExcelImportResult> => {
-  const response = await apiClient.post('/items/import-excel', { items });
-  return response.data as ExcelImportResult;
+  try {
+    const response = await apiClient.post('/items/import-excel', { items });
+    return response.data as ExcelImportResult;
+  } catch (error) {
+    throw handleApiError(error);
+  }
 };
 
 // Phase 5: Upload Attachment
@@ -268,7 +272,7 @@ export const uploadItemAttachment = async (
 
 // Phase 5: Parse Excel File
 export const parseExcelFile = async (file: File): Promise<ExcelImportRow[]> => {
-  const workbook = new ExcelJS.Workbook();
+  const workbook = await createExcelWorkbook();
   const arrayBuffer = await file.arrayBuffer();
   await workbook.xlsx.load(arrayBuffer);
 
@@ -279,12 +283,13 @@ export const parseExcelFile = async (file: File): Promise<ExcelImportRow[]> => {
 
   const items: ExcelImportRow[] = [];
   const headers: string[] = [];
+  const normalizeHeader = (header: string) => header.replace(/[\s_-]+/g, '').toLowerCase();
 
   worksheet.eachRow((row, rowNumber) => {
     if (rowNumber === 1) {
       // Parse headers
       row.eachCell((cell) => {
-        headers.push(String(cell.value || '').trim().toLowerCase());
+        headers.push(normalizeHeader(String(cell.value || '').trim()));
       });
       return;
     }
@@ -312,7 +317,13 @@ export const parseExcelFile = async (file: File): Promise<ExcelImportRow[]> => {
         item.orderLimit = Number(value) || undefined;
       } else if (header === 'currentstock' || header === 'stock' || header === 'الكمية') {
         item.currentStock = Number(value) || 0;
-      } else if (header === 'description' || header === 'الوصف') {
+      } else if (
+        header === 'description'
+        || header === 'الوصف'
+        || header === 'englishname'
+        || header === 'english'
+        || header === 'الاسمالانجليزي'
+      ) {
         item.description = String(value || '').trim();
       }
     });

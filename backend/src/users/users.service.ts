@@ -110,33 +110,12 @@ export class UsersService {
       limit,
     };
 
-    await this.auditService.log({
-      action: 'PERMISSION_CHECK',
-      actorId: 'system',
-      actorUsername: 'system',
-      actorRole: 'system',
-      targetResource: 'users.list',
-      status: 'success',
-      message: `Listed users page=${page} limit=${limit}`,
-      metadata: { total },
-    });
-
     return response;
   }
 
   async listRoles() {
     const roles = await this.prisma.role.findMany({
       orderBy: [{ createdAt: 'asc' }],
-    });
-    await this.auditService.log({
-      action: 'PERMISSION_CHECK',
-      actorId: 'system',
-      actorUsername: 'system',
-      actorRole: 'system',
-      targetResource: 'roles.list',
-      status: 'success',
-      message: `Listed roles count=${roles.length}`,
-      metadata: { count: roles.length },
     });
     return roles.map((role) => this.toRoleDto(role));
   }

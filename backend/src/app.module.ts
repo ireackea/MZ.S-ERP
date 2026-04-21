@@ -2,6 +2,7 @@
 // ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Legacy Migration Phase 5 - Final Stabilization & Production - 2026-02-27
 import { Module } from '@nestjs/common';
+import { AppBootstrapModule } from './app-bootstrap/app-bootstrap.module';
 import { AuthModule } from './auth/auth.module';
 import { ThemeModule } from './theme/theme.module';
 import { BackupModule } from './backup/backup.module';
@@ -13,10 +14,12 @@ import { ReportsModule } from './reports/report.module';
 import { TransactionModule } from './transaction/transaction.module';
 import { UsersModule } from './users/users.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { FormulationModule } from './formulation/formulation.module';
 import { RealtimeModule } from './realtime/realtime.module';
 
 @Module({
   imports: [
+    AppBootstrapModule,
     RealtimeModule,
     AuthModule,
     ThemeModule,
@@ -28,6 +31,7 @@ import { RealtimeModule } from './realtime/realtime.module';
     ReportsModule,
     TransactionModule,
     UsersModule,
+    FormulationModule,
     DashboardModule, // ENTERPRISE FIX: Dashboard module registration
   ],
 })

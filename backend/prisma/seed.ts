@@ -17,6 +17,7 @@ const defaultRoles = [
       'backup.*',
       'items.*',
       'transactions.*',
+      'formulation.*',
       'opening-balances.*',
       'theme.*',
       'monitoring.logs.write',
@@ -26,7 +27,7 @@ const defaultRoles = [
   {
     name: 'Manager',
     description: 'Transactions management with read access to reports and inventories',
-    permissions: ['transactions.*', 'reports.view', 'items.view', 'opening-balances.view', 'backup.view'],
+    permissions: ['transactions.*', 'reports.view', 'items.view', 'formulation.view', 'opening-balances.view', 'backup.view'],
     color: '#10b981',
   },
   {
@@ -38,7 +39,7 @@ const defaultRoles = [
   {
     name: 'Viewer',
     description: 'Read-only access',
-    permissions: ['items.view', 'transactions.view', 'reports.view', 'opening-balances.view', 'backup.view'],
+    permissions: ['items.view', 'transactions.view', 'reports.view', 'formulation.view', 'opening-balances.view', 'backup.view'],
     color: '#6b7280',
   },
 ] as const;

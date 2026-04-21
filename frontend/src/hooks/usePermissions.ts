@@ -135,9 +135,9 @@ export const usePermissions = () => {
       hasAny,
       hasAll,
       can,
-      isAuthenticated: Boolean(session?.token),
+      isAuthenticated: Boolean(session?.isAuthenticated),
     }),
-    [normalizedPermissions, hasPermission, hasAny, hasAll, can, session?.token],
+    [normalizedPermissions, hasPermission, hasAny, hasAll, can, session?.isAuthenticated],
   );
 };
 

@@ -2,9 +2,10 @@
 // All legacy files archived in _ARCHIVE_DUPLICATION_CLEANUP_2026-03-26/
 // ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
 // ENTERPRISE FIX: Phase 6.6 - Global 100% Cleanup & Absolute Verification - 2026-03-13
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import DailyOperations from './OperationsView';
 import { useSession } from '@hooks/useSession';
+import { usePermissions } from '@hooks/usePermissions';
 import {
   bulkCreateTransactions,
   deleteTransactionsInApi,
@@ -12,17 +13,22 @@ import {
 } from '../services/transactionsService';
 import { useInventoryStore } from '../store/useInventoryStore';
 import { toast } from '@services/toastService';
+import { logUserActivity } from '../services/iamService';
 import type { Partner, Transaction } from '../types';
 
 const OperationsPage: React.FC = () => {
   const { data: session } = useSession();
+  const { hasPermission } = usePermissions();
   const items = useInventoryStore((state) => state.items);
   const transactions = useInventoryStore((state) => state.transactions);
   const settings = useInventoryStore((state) => state.systemSettings);
   const unloadingRules = useInventoryStore((state) => state.unloadingRules);
-  const loadAll = useInventoryStore((state) => state.loadAll);
   const setInventoryTransactions = useInventoryStore((state) => state.setTransactions);
   const updateStockFromTransaction = useInventoryStore((state) => state.updateStockFromTransaction);
+  const actorId = String(session?.user?.id || 'system');
+  const actorName = String(session?.user?.name || session?.user?.username || 'system');
+  const canImport = hasPermission('inventory.create.inbound') || hasPermission('inventory.create.outbound');
+  const canExport = hasPermission('inventory.export.stock') || hasPermission('reports.export.general');
 
   const partners = useMemo<Partner[]>(() => {
     const uniqueNames = Array.from(
@@ -40,10 +46,6 @@ const OperationsPage: React.FC = () => {
       phone: '',
     }));
   }, [transactions]);
-
-  useEffect(() => {
-    void loadAll();
-  }, [loadAll]);
 
   const visibleTransactions = useMemo(
     () => [...transactions].sort((left, right) => Number(right.timestamp || 0) - Number(left.timestamp || 0)),
@@ -91,6 +93,28 @@ const OperationsPage: React.FC = () => {
     }
   };
 
+  const handleExportActivity = (rowCount: number) => {
+    if (!session?.user) return;
+
+    logUserActivity({
+      userId: actorId,
+      userName: actorName,
+      event: 'data_export',
+      details: `تصدير بيانات من العمليات - ${rowCount} سجل`,
+    });
+  };
+
+  const handleImportActivity = (rowCount: number) => {
+    if (!session?.user) return;
+
+    logUserActivity({
+      userId: actorId,
+      userName: actorName,
+      event: 'data_import',
+      details: `استيراد بيانات إلى العمليات - ${rowCount} سجل`,
+    });
+  };
+
   return (
     <DailyOperations
       items={items}
@@ -102,6 +126,10 @@ const OperationsPage: React.FC = () => {
       onUpdateTransaction={(row) => void handleUpdateTransaction(row)}
       onDeleteTransactions={(ids) => void handleDeleteTransactions(ids)}
       currentUserId={String(session?.user?.id || '')}
+      canExport={canExport}
+      canImport={canImport}
+      onExport={handleExportActivity}
+      onImport={handleImportActivity}
     />
   );
 };

@@ -52,7 +52,7 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
   const openingBalanceRows = useInventoryStore((state) => state.openingBalanceRows);
   const openingBalancesLoading = useInventoryStore((state) => state.openingBalancesLoading);
   const openingBalancesError = useInventoryStore((state) => state.openingBalancesError);
-  const loadAll = useInventoryStore((state) => state.loadAll);
+  const loadInventoryCore = useInventoryStore((state) => state.loadInventoryCore);
   const loadOpeningBalances = useInventoryStore((state) => state.loadOpeningBalances);
   const setOpeningBalanceRows = useInventoryStore((state) => state.setOpeningBalanceRows);
 
@@ -195,10 +195,6 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
   }, [columnConfig]);
 
   useEffect(() => {
-    void loadAll();
-  }, [loadAll]);
-
-  useEffect(() => {
     void loadOpeningBalances(year);
   }, [loadOpeningBalances, year]);
 
@@ -230,7 +226,7 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
   const handleSyncItems = async () => {
     setSyncingItems(true);
     try {
-      await loadAll();
+      await loadInventoryCore({ force: true, staleMs: 0 });
       showToast('تم تحديث قائمة الأصناف بنجاح.', 'success');
     } catch (error: any) {
       showToast(error?.message || 'تعذر تحديث الأصناف من المتجر.', 'error');

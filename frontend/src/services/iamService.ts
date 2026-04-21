@@ -26,6 +26,10 @@ const permissionCatalog: PermissionDefinition[] = [
   { id: 'transactions.create', module: 'inventory', resource: 'transactions', action: 'create', label: 'إنشاء الحركات (عام)' },
   { id: 'transactions.update', module: 'inventory', resource: 'transactions', action: 'update', label: 'تعديل الحركات (عام)' },
   { id: 'transactions.delete', module: 'inventory', resource: 'transactions', action: 'delete', label: 'حذف الحركات (عام)' },
+  { id: 'formulation.view', module: 'production', resource: 'formulation', action: 'view', label: 'عرض التركيبات' },
+  { id: 'formulation.create', module: 'production', resource: 'formulation', action: 'create', label: 'إنشاء تركيبة' },
+  { id: 'formulation.update', module: 'production', resource: 'formulation', action: 'update', label: 'تعديل تركيبة' },
+  { id: 'formulation.delete', module: 'production', resource: 'formulation', action: 'delete', label: 'حذف تركيبة' },
   { id: 'settings.view', module: 'settings', resource: 'system', action: 'view', label: 'عرض الإعدادات (عام)' },
 
   { id: 'inventory.view.items', module: 'inventory', resource: 'items', action: 'view', label: 'عرض الأصناف' },
@@ -85,6 +89,7 @@ const rolePermissionTemplates: Record<string, string[]> = {
     'items.update',
     'transactions.view',
     'transactions.create',
+    'formulation.view',
     'settings.view',
 
     'inventory.view.items',
@@ -106,6 +111,7 @@ const rolePermissionTemplates: Record<string, string[]> = {
   ],
   general_supervisor: [
     'inventory.view.stock',
+    'formulation.view',
     'reports.view.general',
     'reports.export.general',
     'sales.view.orders',
@@ -114,6 +120,7 @@ const rolePermissionTemplates: Record<string, string[]> = {
   ],
   special_supervisor: [
     'inventory.view.stock',
+    'formulation.view',
     'sales.view.orders',
     'sales.create.orders',
     'sales.update.orders',
@@ -128,6 +135,10 @@ const rolePermissionTemplates: Record<string, string[]> = {
     'inventory.view.stock',
     'inventory.create.inbound',
     'inventory.create.outbound',
+    'formulation.view',
+    'formulation.create',
+    'formulation.update',
+    'formulation.delete',
     'reports.view.general',
     'reports.export.general',
     'sales.view.orders',

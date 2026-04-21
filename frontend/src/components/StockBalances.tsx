@@ -60,9 +60,7 @@ const StockBalances: React.FC<StockBalancesProps> = ({ settings, transactions })
   const loadingOpeningBalances = useInventoryStore((state) => state.openingBalancesLoading);
   const openingBalancesError = useInventoryStore((state) => state.openingBalancesError);
   const balances = useInventoryStore((state) => state.balances);
-  const loadAll = useInventoryStore((state) => state.loadAll);
   const itemsLoading = useInventoryStore((state) => state.loading || state.syncing);
-  const lastLoadedAt = useInventoryStore((state) => state.lastLoadedAt);
   const activeTransactions = transactions && transactions.length > 0 ? transactions : storeTransactions;
 
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -83,12 +81,6 @@ const StockBalances: React.FC<StockBalancesProps> = ({ settings, transactions })
     openingQuantities,
     transactions: activeTransactions,
   });
-
-  useEffect(() => {
-    if (!lastLoadedAt) {
-      void loadAll();
-    }
-  }, [lastLoadedAt, loadAll]);
 
   useEffect(() => {
     setManualCategoryOrder((prev) => {

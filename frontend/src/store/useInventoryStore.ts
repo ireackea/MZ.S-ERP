@@ -49,6 +49,7 @@ type GridDisplayPolicy = { forceUnified: boolean };
 type GridPreferenceMap = Record<string, GridColumnPreference[]>;
 type GridDisplayPolicyMap = Record<string, GridDisplayPolicy>;
 type SyncTarget = 'all' | 'items' | 'transactions' | 'openingBalances' | 'users' | 'formulas';
+type LoaderOptions = { force?: boolean; staleMs?: number };
 type ExportSheet = {
   name: string;
   rows: unknown[][];
@@ -92,11 +93,18 @@ type Store = {
   syncing: boolean;
   error: string | null;
   lastLoadedAt: number | null;
+  inventoryCoreLoadedAt: number | null;
+  transactionsLoadedAt: number | null;
+  usersAndRolesLoadedAt: number | null;
+  formulasLoadedAt: number | null;
   soft: SoftMap;
   sortMode: ItemSortMode;
   manualOrder: string[];
   load: () => Promise<void>;
   loadAll: () => Promise<void>;
+  loadInventoryCore: (options?: LoaderOptions) => Promise<void>;
+  loadTransactions: (options?: LoaderOptions) => Promise<void>;
+  loadUsersAndRoles: (options?: LoaderOptions) => Promise<void>;
   loadOpeningBalances: (financialYear?: number) => Promise<void>;
   loadFormulas: () => Promise<void>;
   syncFromServer: (target?: SyncTarget) => Promise<void>;
@@ -482,6 +490,15 @@ const normalizePdfPayload = (payload: unknown, fileName: string) => {
   };
 };
 
+const DEFAULT_LOADER_STALE_MS = 30 * 1000;
+
+const shouldReload = (loadedAt: number | null, options?: LoaderOptions) => {
+  if (options?.force) return true;
+  if (!loadedAt) return true;
+  const staleMs = Math.max(0, Number(options?.staleMs ?? DEFAULT_LOADER_STALE_MS));
+  return Date.now() - loadedAt >= staleMs;
+};
+
 let xlsxLoader: Promise<typeof import('xlsx')> | null = null;
 let html2PdfLoader: Promise<any> | null = null;
 
@@ -531,6 +548,10 @@ export const useInventoryStore = create<Store>()(
       syncing: false,
       error: null,
       lastLoadedAt: null,
+      inventoryCoreLoadedAt: null,
+      transactionsLoadedAt: null,
+      usersAndRolesLoadedAt: null,
+      formulasLoadedAt: null,
       soft: {},
       sortMode: initialSort.mode,
       manualOrder: initialSort.manualOrder,
@@ -573,6 +594,81 @@ export const useInventoryStore = create<Store>()(
         }
       },
 
+      loadInventoryCore: async (options) => {
+        const current = get();
+        if (!shouldReload(current.inventoryCoreLoadedAt, options)) {
+          return;
+        }
+
+        set({ syncing: true, error: null });
+        try {
+          const nextItems = await syncItemsFromServer();
+          const normalized = normalizeCollections(nextItems, get().sortMode, get().manualOrder, get().categories, get().units);
+          const loadedAt = Date.now();
+
+          set({
+            items: normalized.items,
+            balances: normalized.balances,
+            categories: normalized.categories,
+            units: normalized.units,
+            manualOrder: normalized.manualOrder,
+            syncing: false,
+            inventoryCoreLoadedAt: loadedAt,
+            lastLoadedAt: loadedAt,
+          });
+        } catch (error: any) {
+          set({ syncing: false, error: error?.message || 'تعذر تحميل بيانات الأصناف من الخادم.' });
+          throw error;
+        }
+      },
+
+      loadTransactions: async (options) => {
+        const current = get();
+        if (!shouldReload(current.transactionsLoadedAt, options)) {
+          return;
+        }
+
+        set({ syncing: true, error: null });
+        try {
+          const transactions = await syncTransactionsFromServer();
+          const loadedAt = Date.now();
+
+          set({
+            transactions,
+            syncing: false,
+            transactionsLoadedAt: loadedAt,
+            lastLoadedAt: loadedAt,
+          });
+        } catch (error: any) {
+          set({ syncing: false, error: error?.message || 'تعذر تحميل الحركات من الخادم.' });
+          throw error;
+        }
+      },
+
+      loadUsersAndRoles: async (options) => {
+        const current = get();
+        if (!shouldReload(current.usersAndRolesLoadedAt, options)) {
+          return;
+        }
+
+        set({ syncing: true, error: null });
+        try {
+          const [users, roles] = await Promise.all([syncUsersFromServer(), syncRolesFromServer()]);
+          const loadedAt = Date.now();
+
+          set({
+            users,
+            roles,
+            syncing: false,
+            usersAndRolesLoadedAt: loadedAt,
+            lastLoadedAt: loadedAt,
+          });
+        } catch (error: any) {
+          set({ syncing: false, error: error?.message || 'تعذر تحميل المستخدمين والأدوار من الخادم.' });
+          throw error;
+        }
+      },
+
       loadOpeningBalances: async (financialYear = currentFinancialYear()) => {
         set({ openingBalancesLoading: true, openingBalancesError: null });
 
@@ -602,7 +698,7 @@ export const useInventoryStore = create<Store>()(
       loadFormulas: async () => {
         try {
           const formulas = await syncFormulasFromServer();
-          set({ formulas: [...formulas] });
+          set({ formulas: [...formulas], formulasLoadedAt: Date.now(), lastLoadedAt: Date.now() });
         } catch (error: any) {
           set({ error: error?.message || 'تعذر تحميل التركيبات من الخادم.' });
           throw error;
@@ -682,6 +778,12 @@ export const useInventoryStore = create<Store>()(
           syncing: false,
           error: failures.length > 0 ? 'تعذر تحميل بعض البيانات من الخادم.' : null,
           lastLoadedAt: Date.now(),
+          inventoryCoreLoadedAt: shouldLoadItems && itemsResult.status === 'fulfilled' ? Date.now() : current.inventoryCoreLoadedAt,
+          transactionsLoadedAt: shouldLoadTransactions && transactionsResult.status === 'fulfilled' ? Date.now() : current.transactionsLoadedAt,
+          usersAndRolesLoadedAt: (shouldLoadUsers || shouldLoadRoles) && usersResult.status === 'fulfilled' && rolesResult.status === 'fulfilled'
+            ? Date.now()
+            : current.usersAndRolesLoadedAt,
+          formulasLoadedAt: shouldLoadFormulas && formulasResult.status === 'fulfilled' ? Date.now() : current.formulasLoadedAt,
         });
       },
 

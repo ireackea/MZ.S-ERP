@@ -41,6 +41,7 @@ const DEFAULT_ROLES: Array<{
         'backup.*',
         'items.*',
         'transactions.*',
+        'formulation.*',
         'opening-balances.*',
         'theme.*',
         'monitoring.logs.write',
@@ -50,7 +51,7 @@ const DEFAULT_ROLES: Array<{
     {
       name: 'Manager',
       description: 'إدارة العمليات اليومية ومراجعة التقارير والبيانات التشغيلية.',
-      permissions: ['transactions.*', 'reports.view', 'items.view', 'opening-balances.view', 'backup.view'],
+      permissions: ['transactions.*', 'reports.view', 'items.view', 'formulation.view', 'opening-balances.view', 'backup.view'],
       color: '#10b981',
     },
     {
@@ -62,7 +63,7 @@ const DEFAULT_ROLES: Array<{
     {
       name: 'Viewer',
       description: 'عرض البيانات والتقارير دون صلاحيات تعديل.',
-      permissions: ['items.view', 'transactions.view', 'reports.view', 'opening-balances.view', 'backup.view'],
+      permissions: ['items.view', 'transactions.view', 'reports.view', 'formulation.view', 'opening-balances.view', 'backup.view'],
       color: '#6b7280',
     },
   ];

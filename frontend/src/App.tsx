@@ -8,7 +8,7 @@
 // ENTERPRISE FIX: Phase 0 – التنظيف الأساسي والأمان الحرج - 2026-03-13
 // ENTERPRISE FIX: Phase 0.2 – Full Runtime Docker Proof - 2026-03-13
 // ENTERPRISE FIX: Phase 0 - التنظيف الأساسي والتحضير - 2026-03-13
-import React, { Suspense, lazy, useState, useEffect, useRef } from 'react';
+import React, { Profiler, Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { toast } from '@services/toastService';
@@ -21,8 +21,9 @@ import { clearLegacyInventoryBootstrapState, useInventoryStore } from './store/u
 import { Transaction, Partner, Order, User, Tag, SystemSettings, OperationAppearance, ReportColumnConfig, UnloadingRule, Formula, AuditLog } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { ensureAuthCredentialsSeeded, logout, provisionInitialAdmin } from './services/authController';
-import { clearAllAuthData } from '@services/authService';
+import { clearAllAuthData, setAuthUser } from '@services/authService';
 import { filterByDataScope, getIamConfig, hasPermission, logUserActivity, normalizeUsers, upsertCurrentSession } from './services/iamService';
+import { recordBootstrapRenderCommit } from '@utils/bootstrapMetrics';
 import {
   bulkCreateTransactions,
   deleteTransactionsInApi,
@@ -37,6 +38,7 @@ import {
   clearStrictEmptyBootFlag,
 } from './services/storage';
 
+import { useAppBootstrap } from './hooks/useAppBootstrap';
 import { useOfflineSync } from './hooks/useOfflineSync';
 // ENTERPRISE FIX: Phase 1 - Dual Mode Implementation - 2026-03-02
 const StockBalances = lazy(() => import('./components/StockBalances'));
@@ -93,6 +95,26 @@ const mapBackendAuditEntity = (entry: {
   return 'USER';
 };
 
+const toAuthSessionUser = (user: User) => ({
+  id: user.id,
+  username: String(user.username || user.email || user.name || user.id),
+  role: String(user.role || user.roleId || 'User'),
+  permissions: Array.isArray(user.permissions) ? user.permissions : [],
+  name: String(user.name || user.username || user.email || user.id),
+});
+
+const toAuthSessionComparisonKey = (user: User | undefined) => JSON.stringify({
+  id: user?.id || '',
+  username: String(user?.username || user?.email || user?.name || user?.id || ''),
+  role: String(user?.role || user?.roleId || 'User'),
+  permissions: Array.isArray(user?.permissions) ? [...user.permissions].sort() : [],
+  name: String(user?.name || user?.username || user?.email || user?.id || ''),
+});
+
+const handleAppRender: React.ProfilerOnRenderCallback = (_id, _phase, actualDuration, baseDuration) => {
+  recordBootstrapRenderCommit(actualDuration, baseDuration);
+};
+
 // ENTERPRISE FIX: Phase 1 - Dual Mode Implementation - 2026-03-02
 const AppContent = () => {
   const { isOffline, isSyncing } = useOfflineSync();
@@ -108,8 +130,6 @@ const AppContent = () => {
   const updateStockFromTransaction = useInventoryStore((state) => state.updateStockFromTransaction);
   const setInventoryTransactions = useInventoryStore((state) => state.setTransactions);
   const setInventoryUsers = useInventoryStore((state) => state.setUsers);
-  const setInventoryRoles = useInventoryStore((state) => state.setRoles);
-  const setReferenceData = useInventoryStore((state) => state.setReferenceData);
   const systemSettings = useInventoryStore((state) => state.systemSettings);
   const unloadingRules = useInventoryStore((state) => state.unloadingRules);
   const reportConfig = useInventoryStore((state) => state.reportConfig);
@@ -142,124 +162,52 @@ const AppContent = () => {
   const [setupPasswordConfirm, setSetupPasswordConfirm] = useState('');
   const [setupLoading, setSetupLoading] = useState(false);
   const [setupMessage, setSetupMessage] = useState('');
+  const permissionGuardDebugEnabled = import.meta.env.DEV && String(import.meta.env.VITE_DEBUG_PERMISSION_GUARD || '').trim() === 'true';
+  const currentUserId = currentUser?.id;
+  const canReadAuditLogs = Boolean(currentUser && hasPermission(currentUser, 'users.audit'));
 
-  // ENTERPRISE FIX: Auth initialization with try/catch
-  // ENTERPRISE FIX: Server-First Sync + Optimistic UI - 2026-02-28
+  const debugPermissionGuard = (...args: unknown[]) => {
+    if (permissionGuardDebugEnabled) {
+      console.log(...args);
+    }
+  };
+
   useEffect(() => {
-    const initializeAuth = async () => {
-      try {
-        console.log('[App.tsx] Starting auth initialization...');
+    setPartners(getPartners());
+    setOrders(getOrders());
+    void ensureAuthCredentialsSeeded(useInventoryStore.getState().users);
+    setTags(getTags());
+    setAppearance(getAppearanceSettings());
+    setAuditLogs([]);
+    clearLegacyInventoryBootstrapState();
+  }, []);
 
-        // Load only non-inventory local UI data here. Inventory data is server-first via Zustand.
-        setPartners(getPartners());
-        setOrders(getOrders());
-        void ensureAuthCredentialsSeeded(users);
-        setTags(getTags());
-        setAppearance(getAppearanceSettings());
-        setAuditLogs([]);
-
-        try {
-          const response = await apiClient.get('/auth/me');
-          const sessionUser = response.data as Partial<User> | undefined;
-
-          if (sessionUser?.id) {
-            const normalizeValue = (value?: string | null) => (value ?? '').trim().toLowerCase();
-            const normalizedSessionId = normalizeValue(sessionUser.id);
-            const normalizedSessionUsername = normalizeValue(sessionUser.username);
-            const normalizedSessionEmail = normalizeValue((sessionUser as any)?.email);
-            const normalizedSessionName = normalizeValue(sessionUser.name);
-
-            const matchedUser = users.find((user) => {
-              const userId = normalizeValue(user?.id);
-              const userUsername = normalizeValue(user?.username);
-              const userEmail = normalizeValue((user as any)?.email);
-              const userName = normalizeValue(user?.name);
-
-              if (normalizedSessionId && userId && userId === normalizedSessionId) return true;
-              if (normalizedSessionUsername && userUsername && userUsername === normalizedSessionUsername) return true;
-              if (normalizedSessionEmail && userEmail && userEmail === normalizedSessionEmail) return true;
-              if (normalizedSessionName && userName && userName === normalizedSessionName) return true;
-
-              return false;
-            });
-
-            const sourceUser = matchedUser ?? (sessionUser as User);
-            const role = (sourceUser?.role ?? '').toString();
-            const isSuperAdminRole = role.toLowerCase() === 'superadmin' || role.toLowerCase() === 'admin';
-            const permissions = Array.isArray(sourceUser.permissions) ? sourceUser.permissions : [];
-            const targetUser: User = {
-              ...sourceUser,
-              permissions: permissions.length > 0
-                ? permissions
-                : (isSuperAdminRole ? ['*'] : []),
-            };
-
-            console.log('[App.tsx] Restored authenticated session from server:', targetUser.username);
-            setCurrentUser(targetUser);
-            upsertCurrentSession(targetUser);
-          }
-        } catch (sessionError: any) {
-          if (sessionError?.response?.status !== 401) {
-            console.error('[App.tsx] Server session bootstrap failed:', sessionError);
-          }
-        }
-
-        // Mark auth as ready AFTER all checks are complete
-        setAuthReady(true);
-        console.log('[App.tsx] Auth initialization complete, authReady = true');
-
-        clearLegacyInventoryBootstrapState();
-        console.log('[App.tsx] Legacy inventory bootstrap state cleared');
-
-      } catch (error) {
-        console.error('[App.tsx] Auth initialization failed:', error);
-        setAuthReady(true);
-      }
-    };
-
-    initializeAuth();
-  }, [setInventoryRoles, setReferenceData, users]);
+  useAppBootstrap({
+    currentUser,
+    authReady,
+    setCurrentUser,
+    setAuthReady,
+    setInventoryRouteReady,
+  });
 
   useEffect(() => {
     if (users.length > 0 && currentUser) {
-      const freshUser = users.find(u => u.id === currentUser.id);
-      if (freshUser) setCurrentUser(freshUser);
+      const freshUser = users.find((user) => user.id === currentUser.id);
+      if (freshUser && toAuthSessionComparisonKey(freshUser) !== toAuthSessionComparisonKey(currentUser)) {
+        setCurrentUser(freshUser);
+        setAuthUser(toAuthSessionUser(freshUser));
+      }
     }
   }, [users, currentUser]);
 
   useEffect(() => {
-    if (!authReady) return;
-
-    if (!currentUser) {
-      clearAllAuthData();
-      setInventoryRouteReady(false);
-      return;
-    }
-
-    let active = true;
+    if (!authReady || currentUser) return;
+    clearAllAuthData();
     setInventoryRouteReady(false);
-
-    const syncInventoryAfterLogin = async () => {
-      try {
-        await useInventoryStore.getState().loadAll();
-      } catch (error) {
-        console.error('[App] Failed to reload inventory store after login:', error);
-      } finally {
-        if (active) {
-          setInventoryRouteReady(true);
-        }
-      }
-    };
-
-    void syncInventoryAfterLogin();
-
-    return () => {
-      active = false;
-    };
-  }, [authReady, currentUser?.id]);
+  }, [authReady, currentUser]);
 
   useEffect(() => {
-    if (!authReady || !currentUser || !hasPermission(currentUser, 'users.audit')) {
+    if (!authReady || !currentUserId || !canReadAuditLogs) {
       setAuditLogs([]);
       return;
     }
@@ -291,7 +239,7 @@ const AppContent = () => {
     return () => {
       active = false;
     };
-  }, [authReady, currentUser]);
+  }, [authReady, currentUserId, canReadAuditLogs]);
 
   // Persist data
   useEffect(() => { if (!authReady) return; savePartners(partners); }, [partners, authReady]);
@@ -457,14 +405,13 @@ const AppContent = () => {
   // ENTERPRISE FIX: Permission Guard Fixed - 2026-02-26
   const handleAuthenticated = (user: any, redirectTo: string) => {
     console.log('[App] LOGIN SUCCESS:', { username: user?.username, role: user?.role, id: user?.id, redirectTo, permissions: user?.permissions });
-    clearAllAuthData();
 
     const targetUser: User = {
       id: user?.id || `user-${user?.username || 'unknown'}`,
       username: user?.username || 'user',
       role: user?.role || 'User',
       roleId: user?.roleId || 'user',
-      permissions: user?.permissions && user?.permissions?.length > 0 ? user.permissions : (user?.role === 'SuperAdmin' || user?.role === 'admin' ? ['*'] : ['*']),
+      permissions: user?.permissions && user?.permissions?.length > 0 ? user.permissions : (user?.role === 'SuperAdmin' || user?.role === 'admin' ? ['*'] : []),
       name: user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.username,
       email: user?.email || '',
       firstName: user?.firstName || '',
@@ -479,8 +426,9 @@ const AppContent = () => {
     };
 
     console.log('[Permissions] Setting currentUser.permissions:', targetUser.permissions);
-  setInventoryRouteReady(false);
+    setInventoryRouteReady(false);
     setCurrentUser(targetUser);
+    setAuthUser(toAuthSessionUser(targetUser));
     upsertCurrentSession(targetUser);
     logUserActivity?.({ userId: targetUser.id, userName: targetUser.name, event: 'login_success', details: `${targetUser.role} - ${redirectTo}` });
     console.log('currentUser SET', targetUser.username, targetUser.role);
@@ -546,6 +494,7 @@ const AppContent = () => {
         clearStrictEmptyBootFlag();
         setInventoryUsers(normalizeUsers([...users, result.user]));
         setCurrentUser(result.user);
+        setAuthUser(toAuthSessionUser(result.user));
         upsertCurrentSession(result.user);
         logUserActivity({ userId: result.user.id, userName: result.user.name, event: 'login_success', details: 'تم إنشاء حساب المدير بنجاح' });
       } finally {
@@ -604,17 +553,17 @@ const AppContent = () => {
     }
 
     if (currentUser?.role === 'SuperAdmin' || currentUser?.role === 'admin') {
-      console.log(`[Permission Guard] SuperAdmin access granted to ${routeId}`);
+      debugPermissionGuard(`[Permission Guard] SuperAdmin access granted to ${routeId}`);
       return element;
     }
 
     if (currentUser?.permissions?.includes('*')) {
-      console.log(`[Permission Guard] Wildcard permission granted to ${routeId}`);
+      debugPermissionGuard(`[Permission Guard] Wildcard permission granted to ${routeId}`);
       return element;
     }
 
     const permissions = currentUser?.permissions || [];
-    console.log(`[Permission Guard] Checking ${routeId} with permissions:`, permissions);
+    debugPermissionGuard(`[Permission Guard] Checking ${routeId} with permissions:`, permissions);
 
     return (
       <ProtectedRoute
@@ -739,12 +688,25 @@ const AppContent = () => {
 };
 
 const App: React.FC = () => {
+  const content = import.meta.env.DEV ? (
+    <Profiler id="AppShell" onRender={handleAppRender}>
+      <AppContent />
+    </Profiler>
+  ) : (
+    <AppContent />
+  );
+
   return (
     <ErrorBoundary>
-      <AppContent />
+      {content}
       <Toaster position="top-left" richColors closeButton />
     </ErrorBoundary>
   );
 };
+
+if (import.meta.env.DEV) {
+  (AppContent as typeof AppContent & { whyDidYouRender?: boolean }).whyDidYouRender = true;
+  (App as typeof App & { whyDidYouRender?: boolean }).whyDidYouRender = true;
+}
 
 export default App;

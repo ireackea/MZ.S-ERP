@@ -2,6 +2,16 @@
 # // ENTERPRISE FIX: Final One-Click Production Launch v3 - 2026-02-27
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: feed_factory_db
+      POSTGRES_USER: feedfactory
+      POSTGRES_PASSWORD: SecurePassword2026!
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
   backend:
     build:
       context: .
@@ -11,7 +21,7 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PORT:-3001}
-      DATABASE_URL: ${DATABASE_URL:-file:./prisma/dev.db}
+      DATABASE_URL: postgresql://feedfactory:SecurePassword2026!@postgres:5432/feed_factory_db
       PM2_INSTANCES: ${PM2_INSTANCES:-max}
     restart: unless-stopped
     volumes:
@@ -35,7 +45,7 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: Dockerfile.frontend
+      dockerfile: frontend/Dockerfile.frontend
       args:
         VITE_API_URL: ${VITE_API_URL:-/api}
     restart: unless-stopped
@@ -110,6 +120,7 @@ services:
       start_period: 15s
 
 volumes:
+  postgres_data:
   prisma-data:
   backups-data:
   uploads-data:

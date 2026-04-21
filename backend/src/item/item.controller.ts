@@ -5,45 +5,13 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { BulkSyncDto } from './dto/sync-items.dto';
+import { BulkImportDto } from './dto/bulk-import.dto';
 import { ItemService } from './item.service';
 import { DeleteItemsDto } from './dto/delete-items.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RbacGuard } from '../auth/rbac.guard';
-
-export class BulkImportDto {
-  items!: Array<{
-    name: string;
-    code?: string;
-    barcode?: string;
-    category?: string;
-    unit?: string;
-    minLimit?: number;
-    maxLimit?: number;
-    orderLimit?: number;
-    currentStock?: number;
-    description?: string;
-  }>;
-}
-
-export class ArchiveItemsDto {
-  publicIds!: string[];
-  userId?: string;
-  actorUsername?: string;
-}
-
-export class RestoreItemsDto {
-  publicIds!: string[];
-  userId?: string;
-  actorUsername?: string;
-}
-
-export class DeleteItemsPermanentDto {
-  publicIds!: string[];
-  userId?: string;
-  actorUsername?: string;
-}
 
 @UseGuards(JwtAuthGuard, RbacGuard)
 @Controller('items')
@@ -67,7 +35,7 @@ export class ItemController {
 
   @Permissions('items.archive')
   @Post('archive')
-  async archive(@Body() dto: ArchiveItemsDto, @Req() req: any) {
+  async archive(@Body() dto: DeleteItemsDto, @Req() req: any) {
     const userId = req.user?.sub || req.user?.id;
     const actorUsername = req.user?.username;
     return this.itemService.archiveItems(dto.publicIds, userId, actorUsername);
@@ -75,7 +43,7 @@ export class ItemController {
 
   @Permissions('items.restore')
   @Post('restore')
-  async restore(@Body() dto: RestoreItemsDto, @Req() req: any) {
+  async restore(@Body() dto: DeleteItemsDto, @Req() req: any) {
     const userId = req.user?.sub || req.user?.id;
     const actorUsername = req.user?.username;
     return this.itemService.restoreItems(dto.publicIds, userId, actorUsername);
@@ -84,7 +52,7 @@ export class ItemController {
   @Permissions('items.delete')
   @Roles('Admin', 'SuperAdmin')
   @Post('delete-permanent')
-  async deletePermanent(@Body() dto: DeleteItemsPermanentDto, @Req() req: any) {
+  async deletePermanent(@Body() dto: DeleteItemsDto, @Req() req: any) {
     const userId = req.user?.sub || req.user?.id;
     const actorUsername = req.user?.username;
     return this.itemService.deletePermanently(dto.publicIds, userId, actorUsername);
