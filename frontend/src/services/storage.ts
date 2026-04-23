@@ -18,6 +18,7 @@ import type {
 	User,
 	UserGridPreference,
 } from '../types';
+import { canonicalizeOperationType } from '../utils/operationTypes';
 
 const INVENTORY_STORE_KEY = 'ff_inventory_store_v1';
 const TRANSACTIONS_KEY = 'feed_factory_transactions';
@@ -30,17 +31,16 @@ const CATEGORIES_KEY = 'feed_factory_categories';
 const SETTINGS_KEY = 'feed_factory_settings';
 const APPEARANCE_KEY = 'feed_factory_appearance';
 const REPORT_CONFIG_KEY = 'feed_factory_report_config';
+const AUDIT_LOGS_KEY = 'feed_factory_audit_logs';
 const OPENING_BALANCE_REPORT_CONFIG_KEY = 'feed_factory_opening_balance_report_config';
 const ITEM_SORT_SETTINGS_KEY = 'feed_factory_item_sort_settings';
-const UNLOADING_RULES_KEY = 'feed_factory_unloading_rules';
 const FORMULAS_KEY = 'feed_factory_formulas';
 const STOCK_CHECKS_KEY = 'feed_factory_stock_checks';
-const AUDIT_LOGS_KEY = 'feed_factory_audit_logs';
 const USER_GRID_PREFERENCES_KEY = 'feed_factory_user_grid_preferences';
 const GRID_DISPLAY_POLICIES_KEY = 'feed_factory_grid_display_policies';
 const STRICT_EMPTY_BOOT_KEY = 'feed_factory_strict_empty_boot';
 
-type GridDisplayPolicy = {
+export type GridDisplayPolicy = {
 	forceUnified: boolean;
 };
 
@@ -91,8 +91,9 @@ const defaultSettings = (): SystemSettings => ({
 const defaultAppearance = (): OperationAppearance[] => ([
 	{ type: 'وارد', color: '#10b981', fontSize: 'medium' },
 	{ type: 'صادر', color: '#ef4444', fontSize: 'medium' },
-	{ type: 'إنتاج', color: '#3b82f6', fontSize: 'medium' },
+	{ type: 'انتاج', color: '#3b82f6', fontSize: 'medium' },
 	{ type: 'هالك', color: '#f59e0b', fontSize: 'medium' },
+	{ type: 'مرتجع', color: '#0ea5e9', fontSize: 'medium' },
 ]);
 
 const defaultReportConfig = (): ReportColumnConfig[] => ([
@@ -225,8 +226,18 @@ export const getCategories = (): string[] => {
 export const getSettings = (): SystemSettings => readJson<SystemSettings>(SETTINGS_KEY, defaultSettings());
 export const saveSettings = (settings: SystemSettings) => writeJson(SETTINGS_KEY, settings);
 
-export const getAppearanceSettings = (): OperationAppearance[] => readJson<OperationAppearance[]>(APPEARANCE_KEY, defaultAppearance());
-export const saveAppearanceSettings = (settings: OperationAppearance[]) => writeJson(APPEARANCE_KEY, settings);
+export const getAppearanceSettings = (): OperationAppearance[] => {
+	const defaults = defaultAppearance();
+	const merged = new Map(defaults.map((setting) => [canonicalizeOperationType(setting.type), { ...setting, type: canonicalizeOperationType(setting.type) }]));
+	readJson<OperationAppearance[]>(APPEARANCE_KEY, defaults)
+		.map((setting) => ({ ...setting, type: canonicalizeOperationType(setting.type) }))
+		.forEach((setting) => merged.set(setting.type, setting));
+	return defaults.map((setting) => merged.get(canonicalizeOperationType(setting.type)) || setting);
+};
+export const saveAppearanceSettings = (settings: OperationAppearance[]) => writeJson(
+	APPEARANCE_KEY,
+	settings.map((setting) => ({ ...setting, type: canonicalizeOperationType(setting.type) })),
+);
 
 export const getReportConfig = (): ReportColumnConfig[] => readJson<ReportColumnConfig[]>(REPORT_CONFIG_KEY, defaultReportConfig());
 export const saveReportConfig = (config: ReportColumnConfig[]) => writeJson(REPORT_CONFIG_KEY, config);
@@ -255,19 +266,6 @@ export const getItemSortSettings = (): ItemSortSettings => {
 };
 
 export const saveItemSortSettings = (settings: ItemSortSettings) => writeJson(ITEM_SORT_SETTINGS_KEY, settings);
-
-export const getUnloadingRules = (): UnloadingRule[] => {
-	const rules = readJson<UnloadingRule[]>(UNLOADING_RULES_KEY, []);
-	return rules.map((rule) => ({
-		...rule,
-		rule_name: rule.rule_name ?? rule.name ?? '',
-		allowed_duration_minutes: Number(rule.allowed_duration_minutes ?? rule.durationMinutes ?? 0),
-		penalty_rate_per_minute: Number(rule.penalty_rate_per_minute ?? rule.delayPenaltyPerMinute ?? 0),
-		is_active: rule.is_active ?? true,
-	}));
-};
-
-export const saveUnloadingRules = (rules: UnloadingRule[]) => writeJson(UNLOADING_RULES_KEY, rules);
 
 export const getStockChecks = (): StockCheck[] => readJson<StockCheck[]>(STOCK_CHECKS_KEY, []);
 export const saveStockChecks = (checks: StockCheck[]) => writeJson(STOCK_CHECKS_KEY, checks);

@@ -28,7 +28,7 @@
     "backend:dev": "npm run start:dev --workspace=backend",
     "backend:build": "npm run build --workspace=backend",
     "backend:start": "npm run start:prod --workspace=backend",
-    "start:prod": "concurrently -n \"BACKEND,FRONTEND\" -c \"bgBlue,bgGreen\" \"npm run backend:start\" \"npm run preview --workspace=frontend -- --host 0.0.0.0 --port 4173\"",
+    "start:prod": "node scripts/run-parallel.mjs \"[{\\\"label\\\":\\\"BACKEND\\\",\\\"command\\\":\\\"npm run backend:start\\\"},{\\\"label\\\":\\\"FRONTEND\\\",\\\"command\\\":\\\"npm run preview --workspace=frontend -- --host 0.0.0.0 --port 4173\\\"}]\"",
     "start:prod-full": "npm run prisma:migrate:prod && npm run build:full && npm run start:prod",
     "prisma:generate": "cd backend && npx prisma generate --config prisma.config.ts",
     "prisma:migrate:dev": "cd backend && npx prisma migrate dev --config prisma.config.ts",
@@ -43,7 +43,7 @@
     "verify:absolute:proof": "npm run build:full && npm run monitor:check && npm run test:e2e:login",
     "deploy:prod": "docker compose up -d --build && npm run health-check && npm run monitor:check",
     "test": "npm run test --workspace=frontend",
-    "dev:full": "concurrently -n \"BACKEND,FRONTEND\" -c \"bgBlue,bgGreen\" \"npm run backend:dev\" \"npm run frontend:dev\"",
+    "dev:full": "node scripts/run-parallel.mjs \"[{\\\"label\\\":\\\"BACKEND\\\",\\\"command\\\":\\\"npm run backend:dev\\\"},{\\\"label\\\":\\\"FRONTEND\\\",\\\"command\\\":\\\"npm run frontend:dev\\\"}]\"",
     "start:backend": "npm run backend:dev",
     "start:frontend": "npm run frontend:dev",
     "db:sync": "npm run prisma:generate && npm run prisma:migrate:dev"

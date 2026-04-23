@@ -258,6 +258,23 @@ model OpeningBalance {
   @@index([financialYear])
 }
 
+model UnloadingRule {
+  id                     String   @id @default(cuid())
+  ruleName               String   @unique
+  allowedDurationMinutes Int
+  penaltyRatePerMinute   Decimal
+  isActive               Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  createdBy              String?
+  updatedBy              String?
+  transactions           Transaction[]
+
+  @@index([ruleName])
+  @@index([isActive])
+  @@map("unloading_rules")
+}
+
 model Transaction {
   id                 Int      @id @default(autoincrement())
   publicId           String   @unique
@@ -294,10 +311,12 @@ model Transaction {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  item          Item           @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  unloadingRule UnloadingRule? @relation(fields: [unloadingRuleId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@index([date])
   @@index([itemId])
   @@index([type])
+  @@index([unloadingRuleId])
   @@index([warehouseInvoice])
 }

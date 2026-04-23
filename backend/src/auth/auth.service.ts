@@ -37,6 +37,7 @@ const DEFAULT_ROLES: Array<{
       description: 'صلاحيات إدارية موسعة لإدارة المستخدمين والتقارير والنسخ الاحتياطي.',
       permissions: [
         'users.*',
+        'settings.*',
         'reports.*',
         'backup.*',
         'items.*',

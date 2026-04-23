@@ -4,7 +4,7 @@
 // ENTERPRISE FIX: Legacy Migration Phase 5 - Final Stabilization & Production - 2026-02-27
 import { Injectable, Logger } from '@nestjs/common';
 
-export type RealtimeScope = 'dashboard' | 'items' | 'operations' | 'transactions' | 'formulation' | 'stocktaking' | 'offline_sync' | 'audit';
+export type RealtimeScope = 'dashboard' | 'items' | 'operations' | 'transactions' | 'formulation' | 'stocktaking' | 'settings' | 'offline_sync' | 'audit';
 
 export type RealtimeSyncEvent = {
   scopes: RealtimeScope[];

@@ -5,6 +5,7 @@
 // Arabic text encoding verified and corrected
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { OPERATION_TYPES } from '../constants';
 import {
   Search,
   SlidersHorizontal,
@@ -22,6 +23,7 @@ import {
   BadgeDollarSign,
   X,
 } from 'lucide-react';
+import { canonicalizeOperationType } from '../utils/operationTypes';
 import { GridColumnPreference, Item, SystemSettings, Transaction, UnloadingRule } from '../types';
 import {
   getGridDisplayPolicy,
@@ -460,7 +462,7 @@ const Statement: React.FC<StatementProps> = ({
         if (!haystack.includes(global)) return false;
       }
 
-      if (typeFilter !== 'all' && row.type !== typeFilter) return false;
+      if (typeFilter !== 'all' && canonicalizeOperationType(row.type) !== typeFilter) return false;
       if (partnerFilter && !row.supplierOrReceiver.toLowerCase().includes(partnerFilter.toLowerCase())) return false;
       if (dateFrom && row.date < dateFrom) return false;
       if (dateTo && row.date > dateTo) return false;
@@ -468,7 +470,10 @@ const Statement: React.FC<StatementProps> = ({
       for (const [key, value] of Object.entries(columnFilters)) {
         const normalizedFilter = String(value || '').trim().toLowerCase();
         if (!normalizedFilter) continue;
-        const cellValue = String((row as Record<string, unknown>)[key] ?? '').toLowerCase();
+        const rawCellValue = (row as Record<string, unknown>)[key] ?? '';
+        const cellValue = key === 'type'
+          ? canonicalizeOperationType(rawCellValue).toLowerCase()
+          : String(rawCellValue).toLowerCase();
         if (!cellValue.includes(normalizedFilter)) return false;
       }
 
@@ -1294,10 +1299,9 @@ const Statement: React.FC<StatementProps> = ({
 
           <select title="تصفية حسب نوع العملية" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm">
             <option value="all">كل العمليات</option>
-            <option value="وارد">وارد</option>
-            <option value="صادر">صادر</option>
-            <option value="مرتجع">مرتجع</option>
-            <option value="تالف">تالف</option>
+            {OPERATION_TYPES.map((type) => (
+              <option key={type} value={type}>{type}</option>
+            ))}
           </select>
 
           <input
@@ -1733,10 +1737,9 @@ const Statement: React.FC<StatementProps> = ({
                             className="w-full px-2 py-1 text-xs border border-slate-200 rounded"
                           >
                             <option value="">الكل</option>
-                            <option value="وارد">وارد</option>
-                            <option value="صادر">صادر</option>
-                            <option value="مرتجع">مرتجع</option>
-                            <option value="تالف">تالف</option>
+                            {OPERATION_TYPES.map((type) => (
+                              <option key={type} value={type}>{type}</option>
+                            ))}
                           </select>
                         </th>
                       );

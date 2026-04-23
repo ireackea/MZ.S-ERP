@@ -16,6 +16,7 @@ import { UsersModule } from './users/users.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { FormulationModule } from './formulation/formulation.module';
 import { RealtimeModule } from './realtime/realtime.module';
+import { UnloadingRuleModule } from './unloading-rule/unloading-rule.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { RealtimeModule } from './realtime/realtime.module';
     TransactionModule,
     UsersModule,
     FormulationModule,
+    UnloadingRuleModule,
     DashboardModule, // ENTERPRISE FIX: Dashboard module registration
   ],
 })

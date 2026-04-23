@@ -661,6 +661,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
     const numberColumns = [
       ...allVisibleRows.map((row) => formatNumber(row.openingBalance)),
       ...allVisibleRows.map((row) => formatNumber(row.totalInbound)),
+      ...allVisibleRows.map((row) => formatNumber(row.totalReturns)),
       ...allVisibleRows.map((row) => formatNumber(row.totalProduction)),
       ...allVisibleRows.map((row) => formatNumber(row.totalOutbound)),
       ...allVisibleRows.map((row) => formatNumber(row.totalWaste)),
@@ -670,15 +671,16 @@ const Stocktaking: React.FC<StocktakingProps> = ({
     ];
     const maxNumberLen = numberColumns.reduce((max, value) => Math.max(max, String(value || '').length), 3);
 
-    const baseColumnWidths = [56, 230, 96, 96, 96, 96, 96, 102, 102, 96, 190];
+    const baseColumnWidths = [56, 230, 96, 96, 96, 96, 96, 96, 102, 102, 96, 190];
     const minColumnWidths = [
       Math.max(34, estimateTextMinWidth('م'.repeat(maxIndexDigits))),
       Math.max(88, estimateTextMinWidth('اسم الصنف'), estimateTextMinWidth('م'.repeat(Math.min(maxItemNameLen, 24)))),
       Math.max(58, estimateTextMinWidth('الإفتتاحي'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
       Math.max(58, estimateTextMinWidth('الوارد'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
+      Math.max(58, estimateTextMinWidth('المرتجع'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
       Math.max(58, estimateTextMinWidth('الإنتاج'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
       Math.max(58, estimateTextMinWidth('المنصرف'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
-      Math.max(58, estimateTextMinWidth('التالف'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
+      Math.max(58, estimateTextMinWidth('الهالك'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
       Math.max(62, estimateTextMinWidth('الرصيد الدفتري'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
       Math.max(62, estimateTextMinWidth('الجرد الفعلي'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
       Math.max(62, estimateTextMinWidth('الفارق'), estimateTextMinWidth('0'.repeat(maxNumberLen))),
@@ -807,9 +809,10 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                 <th className="text-center" style={headerCellStyle}>الصنف</th>
                 <th className="text-center" style={headerCellStyle}>الإفتتاحي</th>
                 <th className="text-center" style={headerCellStyle}>الوارد</th>
+                <th className="text-center" style={headerCellStyle}>المرتجع</th>
                 <th className="text-center" style={headerCellStyle}>الإنتاج</th>
                 <th className="text-center" style={headerCellStyle}>المنصرف</th>
-                <th className="text-center" style={headerCellStyle}>التالف</th>
+                <th className="text-center" style={headerCellStyle}>الهالك</th>
                 <th className="text-center" style={headerCellStyle}>الدفتري</th>
                 <th className="text-center" style={headerCellStyle}>الفعلي</th>
                 <th className="text-center" style={headerCellStyle}>الفارق</th>
@@ -828,6 +831,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
                     <td className="font-bold text-center" style={bodyCellStyle}>{row.itemName}</td>
                     <td className="text-center" style={bodyCellStyle}>{formatNumber(row.openingBalance)}</td>
                     <td className="text-center" style={bodyCellStyle}>{formatNumber(row.totalInbound)}</td>
+                    <td className="text-center" style={bodyCellStyle}>{formatNumber(row.totalReturns)}</td>
                     <td className="text-center" style={bodyCellStyle}>{formatNumber(row.totalProduction)}</td>
                     <td className="text-center" style={bodyCellStyle}>{formatNumber(row.totalOutbound)}</td>
                     <td className="text-center" style={bodyCellStyle}>{formatNumber(row.totalWaste)}</td>
@@ -1153,7 +1157,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
         <div className="flex flex-col xl:flex-row gap-3 xl:items-center xl:justify-between">
           <div>
             <h2 className="text-2xl font-bold text-slate-800">تقرير الجرد الشهري واعتماد الجرد الدفتري</h2>
-            <p className="text-sm text-slate-500">ملاحظة حول الألوان: الافتتاحي/الوارد + المنصرف/التالف</p>
+            <p className="text-sm text-slate-500">ملاحظة حول الألوان: الافتتاحي/الوارد/المرتجع + المنصرف/الهالك</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">

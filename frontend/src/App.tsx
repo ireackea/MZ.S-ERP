@@ -9,7 +9,7 @@
 // ENTERPRISE FIX: Phase 0.2 – Full Runtime Docker Proof - 2026-03-13
 // ENTERPRISE FIX: Phase 0 - التنظيف الأساسي والتحضير - 2026-03-13
 import React, { Profiler, Suspense, lazy, useEffect, useRef, useState } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { toast } from '@services/toastService';
 import apiClient from '@api/client';
@@ -18,12 +18,14 @@ import ErrorBoundary from './components/ErrorBoundary';
 import EnterpriseLoading from './components/EnterpriseLoading';
 import ProtectedRoute from './components/ProtectedRoute';
 import { clearLegacyInventoryBootstrapState, useInventoryStore } from './store/useInventoryStore';
-import { Transaction, Partner, Order, User, Tag, SystemSettings, OperationAppearance, ReportColumnConfig, UnloadingRule, Formula, AuditLog } from './types';
+import { Transaction, Partner, Order, User, Tag, SystemSettings, OperationAppearance, ReportColumnConfig, Formula, AuditLog } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { ensureAuthCredentialsSeeded, logout, provisionInitialAdmin } from './services/authController';
 import { clearAllAuthData, setAuthUser } from '@services/authService';
 import { filterByDataScope, getIamConfig, hasPermission, logUserActivity, normalizeUsers, upsertCurrentSession } from './services/iamService';
+import { isInboundOperationType, isOutboundOperationType } from './utils/operationTypes';
 import { recordBootstrapRenderCommit } from '@utils/bootstrapMetrics';
+import { useRealtimeSyncStore, type RealtimeScope } from '@/shared/store/realtimeSync.store';
 import {
   bulkCreateTransactions,
   deleteTransactionsInApi,
@@ -117,6 +119,7 @@ const handleAppRender: React.ProfilerOnRenderCallback = (_id, _phase, actualDura
 
 // ENTERPRISE FIX: Phase 1 - Dual Mode Implementation - 2026-03-02
 const AppContent = () => {
+  const location = useLocation();
   const { isOffline, isSyncing } = useOfflineSync();
   const items = useInventoryStore((state) => state.items);
   const transactions = useInventoryStore((state) => state.transactions);
@@ -130,13 +133,16 @@ const AppContent = () => {
   const updateStockFromTransaction = useInventoryStore((state) => state.updateStockFromTransaction);
   const setInventoryTransactions = useInventoryStore((state) => state.setTransactions);
   const setInventoryUsers = useInventoryStore((state) => state.setUsers);
+  const loadInventoryCore = useInventoryStore((state) => state.loadInventoryCore);
+  const loadTransactions = useInventoryStore((state) => state.loadTransactions);
+  const loadFormulas = useInventoryStore((state) => state.loadFormulas);
+  const loadUnloadingRules = useInventoryStore((state) => state.loadUnloadingRules);
   const systemSettings = useInventoryStore((state) => state.systemSettings);
   const unloadingRules = useInventoryStore((state) => state.unloadingRules);
   const reportConfig = useInventoryStore((state) => state.reportConfig);
   const openingBalanceReportConfig = useInventoryStore((state) => state.openingBalanceReportConfig);
   const formulas = useInventoryStore((state) => state.formulas);
   const setSystemSettings = useInventoryStore((state) => state.setSystemSettings);
-  const setUnloadingRules = useInventoryStore((state) => state.setUnloadingRules);
   const setReportConfig = useInventoryStore((state) => state.setReportConfig);
   const setOpeningBalanceReportConfig = useInventoryStore((state) => state.setOpeningBalanceReportConfig);
   const setFormulas = useInventoryStore((state) => state.setFormulas);
@@ -165,6 +171,9 @@ const AppContent = () => {
   const permissionGuardDebugEnabled = import.meta.env.DEV && String(import.meta.env.VITE_DEBUG_PERMISSION_GUARD || '').trim() === 'true';
   const currentUserId = currentUser?.id;
   const canReadAuditLogs = Boolean(currentUser && hasPermission(currentUser, 'users.audit'));
+  const realtimeScopes = useRealtimeSyncStore((state) => state.scopes);
+  const lastProcessedRealtimeScopesRef = useRef(realtimeScopes);
+  const realtimeSyncInitializedRef = useRef(false);
 
   const debugPermissionGuard = (...args: unknown[]) => {
     if (permissionGuardDebugEnabled) {
@@ -205,6 +214,74 @@ const AppContent = () => {
     clearAllAuthData();
     setInventoryRouteReady(false);
   }, [authReady, currentUser]);
+
+  useEffect(() => {
+    if (!authReady || !currentUserId || !inventoryRouteReady) {
+      lastProcessedRealtimeScopesRef.current = realtimeScopes;
+      realtimeSyncInitializedRef.current = false;
+      return;
+    }
+
+    const previousScopes = lastProcessedRealtimeScopesRef.current;
+    lastProcessedRealtimeScopesRef.current = realtimeScopes;
+
+    if (!realtimeSyncInitializedRef.current) {
+      realtimeSyncInitializedRef.current = true;
+      return;
+    }
+
+    const changedScopes = (Object.keys(realtimeScopes) as RealtimeScope[]).filter(
+      (scope) => realtimeScopes[scope] > previousScopes[scope],
+    );
+
+    if (changedScopes.length === 0) {
+      return;
+    }
+
+    const shouldReloadInventoryCore = changedScopes.includes('items') || changedScopes.includes('transactions');
+    const shouldReloadTransactions = changedScopes.includes('transactions');
+    const shouldReloadFormulas = changedScopes.includes('formulation');
+    const shouldReloadUnloadingRules = changedScopes.includes('settings');
+
+    const reloadTasks: Array<Promise<unknown>> = [];
+
+    if (shouldReloadInventoryCore) {
+      reloadTasks.push(loadInventoryCore({ force: true, staleMs: 0 }));
+    }
+
+    if (shouldReloadTransactions) {
+      reloadTasks.push(loadTransactions({ force: true, staleMs: 0 }));
+    }
+
+    if (shouldReloadFormulas) {
+      reloadTasks.push(loadFormulas());
+    }
+
+    if (shouldReloadUnloadingRules) {
+      reloadTasks.push(loadUnloadingRules({ force: true, staleMs: 0 }));
+    }
+
+    if (reloadTasks.length === 0) {
+      return;
+    }
+
+    void Promise.allSettled(reloadTasks).then((results) => {
+      results.forEach((result) => {
+        if (result.status === 'rejected') {
+          console.error('[App] Realtime sync refresh failed:', result.reason);
+        }
+      });
+    });
+  }, [
+    authReady,
+    currentUserId,
+    inventoryRouteReady,
+    loadFormulas,
+    loadInventoryCore,
+    loadTransactions,
+    loadUnloadingRules,
+    realtimeScopes,
+  ]);
 
   useEffect(() => {
     if (!authReady || !currentUserId || !canReadAuditLogs) {
@@ -267,8 +344,8 @@ const AppContent = () => {
   };
 
   const handleAddTransactions = async (newTransactions: Transaction[]) => {
-    const hasInbound = newTransactions.some(t => t.type === 'وارد');
-    const hasOutbound = newTransactions.some(t => t.type === 'صادر');
+    const hasInbound = newTransactions.some(t => isInboundOperationType(t.type));
+    const hasOutbound = newTransactions.some(t => isOutboundOperationType(t.type));
 
     if (hasInbound && denyPermission('inventory.create.inbound', 'إضافة حركة واردة')) return;
     if (hasOutbound && denyPermission('inventory.create.outbound', 'إضافة حركة صادرة')) return;
@@ -594,9 +671,6 @@ const AppContent = () => {
   const handleUpdateSettings = (s: SystemSettings) => setSystemSettings(s);
   const handleUpdateAppearance = (a: OperationAppearance[]) => setAppearance(a);
   const handleUpdateReportConfig = (c: ReportColumnConfig[]) => setReportConfig(c);
-  const handleAddUnloadingRule = (r: UnloadingRule) => setUnloadingRules([...unloadingRules, r]);
-  const handleUpdateUnloadingRule = (rule: UnloadingRule) => setUnloadingRules(unloadingRules.map(r => r.id === rule.id ? rule : r));
-  const handleDeleteUnloadingRule = (id: string) => setUnloadingRules(unloadingRules.filter(r => r.id !== id));
   const handleAddFormula = (f: Formula) => { setFormulas([...formulas, f]); logAction('CREATE', 'FORMULA', f.name); };
   const handleUpdateFormula = (f: Formula) => { setFormulas(formulas.map(fo => fo.id === f.id ? f : fo)); logAction('UPDATE', 'FORMULA', f.name); };
   const handleDeleteFormula = (id: string) => { setFormulas(formulas.filter(f => f.id !== id)); logAction('DELETE', 'FORMULA', id); };
@@ -620,7 +694,7 @@ const AppContent = () => {
     <>
       <OfflineBanner />
       <Layout currentUser={currentUser} onLogout={handleLogout}>
-      <Routes>
+      <Routes key={location.pathname}>
         <Route path="/" element={renderProtectedRoute('inventory.view.stock', 'dashboard', withLazyFallback(<DashboardPage />))} />
         <Route path="/dashboard" element={renderProtectedRoute('inventory.view.stock', 'dashboard', withLazyFallback(<DashboardPage />))} />
         <Route path="/balances" element={renderProtectedRoute('inventory.view.stock', 'balances', withLazyFallback(<StockBalances settings={systemSettings} />))} />

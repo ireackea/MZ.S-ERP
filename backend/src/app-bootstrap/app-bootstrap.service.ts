@@ -5,6 +5,21 @@ import { PrismaService } from '../prisma.service';
 export class AppBootstrapService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private hasPermission(permissions: string[], permission: string) {
+    if (permissions.includes('*') || permissions.includes(permission)) {
+      return true;
+    }
+
+    return permissions.some((granted) => {
+      if (!granted.endsWith('.*')) {
+        return false;
+      }
+
+      const prefix = granted.slice(0, -2);
+      return permission === prefix || permission.startsWith(`${prefix}.`);
+    });
+  }
+
   private parsePermissions(raw: string | null | undefined): string[] {
     if (!raw) return [];
     try {
@@ -39,8 +54,11 @@ export class AppBootstrapService {
     }
 
     const permissions = this.parsePermissions(user.role?.permissions);
+    const includeInactiveUnloadingRules =
+      this.hasPermission(permissions, 'settings.view.general') ||
+      this.hasPermission(permissions, 'settings.update.system');
 
-    const [categoryRows, unitRows, itemsCount, transactionsCount, openingBalancesCount] = await Promise.all([
+    const [categoryRows, unitRows, unloadingRuleRows, itemsCount, transactionsCount, openingBalancesCount] = await Promise.all([
       this.prisma.item.findMany({
         where: { isArchived: false },
         distinct: ['category'],
@@ -52,6 +70,10 @@ export class AppBootstrapService {
         distinct: ['unit'],
         select: { unit: true },
         orderBy: { unit: 'asc' },
+      }),
+      this.prisma.unloadingRule.findMany({
+        where: includeInactiveUnloadingRules ? undefined : { isActive: true },
+        orderBy: [{ isActive: 'desc' }, { ruleName: 'asc' }, { createdAt: 'asc' }],
       }),
       this.prisma.item.count({ where: { isArchived: false } }),
       this.prisma.transaction.count(),
@@ -81,6 +103,13 @@ export class AppBootstrapService {
         categories: this.normalizeDistinctValues(categoryRows.map((row) => ({ value: row.category }))),
         units: this.normalizeDistinctValues(unitRows.map((row) => ({ value: row.unit }))),
       },
+      unloadingRules: unloadingRuleRows.map((row) => ({
+        id: row.id,
+        rule_name: row.ruleName,
+        allowed_duration_minutes: row.allowedDurationMinutes,
+        penalty_rate_per_minute: row.penaltyRatePerMinute.toNumber(),
+        is_active: row.isActive,
+      })),
       startupFlags: {
         hasItems: itemsCount > 0,
         hasTransactions: transactionsCount > 0,

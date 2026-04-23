@@ -64,7 +64,7 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
 
     const results: StockCardResult[] = [];
     selectedItemIds.forEach(id => {
-      const result = generateStockCard(id, startDate, endDate, transactions);
+      const result = generateStockCard(id, startDate, endDate, transactions, items);
       if (result) results.push(result);
     });
 
@@ -72,6 +72,10 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
   };
 
   const handlePrint = () => {
+    if (reportData.length === 0) {
+      toast.error('قم بإنشاء تقرير بطاقة الصنف أولاً قبل الطباعة.');
+      return;
+    }
     window.print();
   };
 
@@ -97,8 +101,8 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
             ['اسم الصنف:', card.item.name, 'كود الصنف:', card.item.code || '-'],
             ['من تاريخ:', startDate, 'إلى:', endDate],
             [],
-            ['التاريخ', 'رقم الفاتورة', 'المورد/المستلم', 'وارد (شراء)', 'إنتاج (إضافة)', 'منصرف (بيع)', 'هالك (تالف)', 'الرصيد'],
-            ['', '', 'رصيد افتتاحي', '', '', '', '', card.openingBalance]
+            ['التاريخ', 'رقم الفاتورة', 'المورد/المستلم', 'وارد (شراء)', 'مرتجع', 'إنتاج (إضافة)', 'منصرف (بيع)', 'هالك (تالف)', 'الرصيد'],
+            ['', '', 'رصيد افتتاحي', '', '', '', '', '', card.openingBalance]
           ];
 
           card.rows.forEach(row => {
@@ -107,6 +111,7 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
               row.warehouseInvoice,
               row.notes || row.supplierOrReceiver,
               row.importQty || '',
+              row.returnQty || '',
               row.prodQty || '',
               row.exportQty || '',
               row.wasteQty || '',
@@ -117,6 +122,7 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
           wsData.push([
             'الإجماليات', '', '',
             card.totalImport,
+            card.totalReturn,
             card.totalProduction,
             card.totalExport,
             card.totalWaste,
@@ -126,7 +132,7 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
           return {
             name: card.item.name.substring(0, 30),
             rows: wsData,
-            columns: [{ wch: 12 }, { wch: 15 }, { wch: 30 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }],
+            columns: [{ wch: 12 }, { wch: 15 }, { wch: 30 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }],
           };
         }),
       });
@@ -275,7 +281,7 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
             <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
               <FileText className="text-blue-600" /> بطاقة صنف مفصلة (Extended Stock Card)
             </h2>
-            <p className="text-slate-500 text-sm mt-1">تقرير تفصيلي يعرض الوارد، المنصرف، الإنتاج، والهالك لكل صنف.</p>
+            <p className="text-slate-500 text-sm mt-1">تقرير تفصيلي يعرض الوارد، المرتجع، المنصرف، الإنتاج، والهالك لكل صنف.</p>
           </div>
           <div className="flex gap-2">
             <button onClick={() => void handleExportExcel()} disabled={!canExport || isExportingExcel || reportData.length === 0} className="flex items-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed" title={canExport ? 'تصدير Excel' : 'لا تملك صلاحية التصدير لهذه الصفحة'}>
@@ -284,7 +290,7 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
             <button onClick={() => void handleExportPdf()} disabled={!canExport || isExportingPdf || reportData.length === 0} className="flex items-center gap-2 px-4 py-2 border border-red-200 text-red-700 rounded-lg hover:bg-red-50 transition text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed" title={canExport ? 'تصدير PDF' : 'لا تملك صلاحية التصدير لهذه الصفحة'}>
               {isExportingPdf ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />} PDF
             </button>
-            <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 transition text-sm font-bold shadow-lg">
+            <button onClick={handlePrint} disabled={reportData.length === 0} className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 transition text-sm font-bold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
               <Printer size={16} /> طباعة التقرير
             </button>
           </div>
@@ -426,7 +432,7 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
                 </div>
 
                 {/* Row 2: Totals Summary (Detailed) */}
-                <div className="grid grid-cols-2 md:grid-cols-6 gap-4 items-center">
+                <div className="grid grid-cols-2 md:grid-cols-7 gap-4 items-center">
                   <div className="text-center bg-white border rounded p-2 print:border-black">
                     <span className="block text-[10px] text-slate-500 print:text-black">رصيد افتتاحي</span>
                     <span className="block font-bold text-base text-slate-700 print:text-black dir-ltr">{fmt(card.openingBalance)}</span>
@@ -436,6 +442,10 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
                   <div className="text-center bg-green-50 border border-green-100 rounded p-2 print:bg-transparent print:border-black">
                     <span className="block text-[10px] text-green-700 print:text-black font-bold">إجمالي الوارد</span>
                     <span className="block font-bold text-base text-green-800 print:text-black dir-ltr">{fmt(card.totalImport)}</span>
+                  </div>
+                  <div className="text-center bg-sky-50 border border-sky-100 rounded p-2 print:bg-transparent print:border-black">
+                    <span className="block text-[10px] text-sky-700 print:text-black font-bold">إجمالي المرتجع</span>
+                    <span className="block font-bold text-base text-sky-800 print:text-black dir-ltr">{fmt(card.totalReturn)}</span>
                   </div>
                   <div className="text-center bg-blue-50 border border-blue-100 rounded p-2 print:bg-transparent print:border-black">
                     <span className="block text-[10px] text-blue-700 print:text-black font-bold">إجمالي الإنتاج</span>
@@ -470,6 +480,7 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
                       <th className="p-2">المورد / المستلم</th>
                       {/* Additions */}
                       <th className="p-2 bg-green-50 print:bg-transparent text-center min-w-[70px]">وارد</th>
+                      <th className="p-2 bg-sky-50 print:bg-transparent text-center min-w-[70px]">مرتجع</th>
                       <th className="p-2 bg-blue-50 print:bg-transparent text-center min-w-[70px]">إنتاج</th>
                       {/* Deductions */}
                       <th className="p-2 bg-red-50 print:bg-transparent text-center min-w-[70px]">منصرف</th>
@@ -482,6 +493,7 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
                     {/* Opening Balance Row */}
                     <tr className="bg-slate-50 print:bg-transparent font-bold">
                       <td colSpan={4} className="p-2 text-center">رصيد قبل بداية الفترة (Opening Balance)</td>
+                      <td className="p-2 text-center">-</td>
                       <td className="p-2 text-center">-</td>
                       <td className="p-2 text-center">-</td>
                       <td className="p-2 text-center">-</td>
@@ -502,6 +514,9 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
                         {/* Import */}
                         <td className="p-2 text-center text-green-700 print:text-black font-medium dir-ltr bg-green-50/20 print:bg-transparent">
                           {row.importQty > 0 ? fmt(row.importQty) : '-'}
+                        </td>
+                        <td className="p-2 text-center text-sky-700 print:text-black font-medium dir-ltr bg-sky-50/20 print:bg-transparent">
+                          {row.returnQty > 0 ? fmt(row.returnQty) : '-'}
                         </td>
                         {/* Production */}
                         <td className="p-2 text-center text-blue-700 print:text-black font-medium dir-ltr bg-blue-50/20 print:bg-transparent">
@@ -525,7 +540,7 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
                     ))}
                     {card.rows.length === 0 && (
                       <tr>
-                        <td colSpan={9} className="p-4 text-center text-slate-400 italic">لا توجد حركات سجلت في هذه الفترة</td>
+                        <td colSpan={10} className="p-4 text-center text-slate-400 italic">لا توجد حركات سجلت في هذه الفترة</td>
                       </tr>
                     )}
                   </tbody>
@@ -533,6 +548,7 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
                     <tr>
                       <td colSpan={4} className="p-2 text-center">الإجماليات (Totals)</td>
                       <td className="p-2 text-center dir-ltr text-green-800 print:text-black">{fmt(card.totalImport)}</td>
+                      <td className="p-2 text-center dir-ltr text-sky-800 print:text-black">{fmt(card.totalReturn)}</td>
                       <td className="p-2 text-center dir-ltr text-blue-800 print:text-black">{fmt(card.totalProduction)}</td>
                       <td className="p-2 text-center dir-ltr text-red-800 print:text-black">{fmt(card.totalExport)}</td>
                       <td className="p-2 text-center dir-ltr text-amber-800 print:text-black">{fmt(card.totalWaste)}</td>

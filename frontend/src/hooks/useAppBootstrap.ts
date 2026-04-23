@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { clearAllAuthData, setAuthUser } from '@services/authService';
 import { upsertCurrentSession } from '@services/iamService';
-import { getAppBootstrap, type AppBootstrapSession } from '@services/appBootstrapService';
+import { getAppBootstrap, type AppBootstrapPayload, type AppBootstrapSession } from '@services/appBootstrapService';
+import { migrateLegacyUnloadingRules } from '@services/unloadingRulesService';
 import { completeBootstrapMetrics, startBootstrapMetrics } from '@utils/bootstrapMetrics';
 import type { User } from '../types';
 import { useInventoryStore } from '../store/useInventoryStore';
@@ -12,6 +13,91 @@ type UseAppBootstrapOptions = {
   setCurrentUser: (user: User | undefined) => void;
   setAuthReady: (ready: boolean) => void;
   setInventoryRouteReady: (ready: boolean) => void;
+};
+
+type RestoredSessionResult =
+  | {
+      outcome: 'success';
+      payload: AppBootstrapSessionResultPayload;
+    }
+  | {
+      outcome: 'anonymous';
+    }
+  | {
+      outcome: 'failed';
+      error: unknown;
+    };
+
+type AppBootstrapSessionResultPayload = AppBootstrapSessionPayload & {
+  unloadingRules: AppBootstrapPayload['unloadingRules'];
+};
+
+type AppBootstrapSessionPayload = Omit<AppBootstrapPayload, 'unloadingRules'>;
+
+type AuthenticatedShellResult = {
+  outcome: 'success' | 'failed';
+  userId: string;
+  error?: unknown;
+};
+
+let restoreSessionPromise: Promise<RestoredSessionResult> | null = null;
+let restoreSessionResult: RestoredSessionResult | null = null;
+let authenticatedShellPromise: Promise<AuthenticatedShellResult> | null = null;
+let authenticatedShellCompletedUserId: string | null = null;
+let authenticatedShellInFlightUserId: string | null = null;
+
+const restoreSessionOnce = async (): Promise<RestoredSessionResult> => {
+  if (restoreSessionResult) {
+    return restoreSessionResult;
+  }
+
+  if (!restoreSessionPromise) {
+    restoreSessionPromise = (async () => {
+      try {
+        const payload = await getAppBootstrap();
+        let bootstrappedRules = payload.unloadingRules || [];
+
+        if (bootstrappedRules.length === 0) {
+          try {
+            bootstrappedRules = await migrateLegacyUnloadingRules();
+          } catch (migrationError) {
+            console.warn('[useAppBootstrap] Legacy unloading-rules migration failed:', migrationError);
+          }
+        }
+
+        const result: RestoredSessionResult = {
+          outcome: 'success',
+          payload: {
+            ...payload,
+            unloadingRules: bootstrappedRules,
+          },
+        };
+        restoreSessionResult = result;
+        return result;
+      } catch (error: any) {
+        if (error?.response?.status === 401) {
+          const result: RestoredSessionResult = { outcome: 'anonymous' };
+          restoreSessionResult = result;
+          return result;
+        }
+
+        return {
+          outcome: 'failed',
+          error,
+        };
+      } finally {
+        restoreSessionPromise = null;
+      }
+    })();
+  }
+
+  return restoreSessionPromise;
+};
+
+const resetAuthenticatedShellState = () => {
+  authenticatedShellPromise = null;
+  authenticatedShellCompletedUserId = null;
+  authenticatedShellInFlightUserId = null;
 };
 
 const toUser = (session: AppBootstrapSession): User => ({
@@ -49,17 +135,13 @@ export const useAppBootstrap = ({
   setInventoryRouteReady,
 }: UseAppBootstrapOptions) => {
   const setReferenceData = useInventoryStore((state) => state.setReferenceData);
+  const setUnloadingRules = useInventoryStore((state) => state.setUnloadingRules);
   const loadInventoryCore = useInventoryStore((state) => state.loadInventoryCore);
   const loadTransactions = useInventoryStore((state) => state.loadTransactions);
   const loadUsersAndRoles = useInventoryStore((state) => state.loadUsersAndRoles);
-  const restoreStartedRef = useRef(false);
-  const bootstrappedUserIdRef = useRef<string | null>(null);
   const currentUserId = currentUser?.id ?? null;
 
   useEffect(() => {
-    if (restoreStartedRef.current) return;
-    restoreStartedRef.current = true;
-
     let active = true;
 
     const restoreSession = async () => {
@@ -67,10 +149,30 @@ export const useAppBootstrap = ({
       startBootstrapMetrics('session-restore', routePath);
 
       try {
-        const payload = await getAppBootstrap();
+        const result = await restoreSessionOnce();
         if (!active) return;
 
+        if (result.outcome === 'anonymous') {
+          clearAllAuthData();
+          setCurrentUser(undefined);
+          setAuthReady(true);
+          completeBootstrapMetrics({ outcome: 'anonymous' });
+          return;
+        }
+
+        if (result.outcome === 'failed') {
+          console.error('[useAppBootstrap] Session restore failed:', result.error);
+          setAuthReady(true);
+          completeBootstrapMetrics({
+            outcome: 'failed',
+            error: result.error instanceof Error ? result.error.message : String(result.error),
+          });
+          return;
+        }
+
+        const { payload } = result;
         setReferenceData(payload.referenceData);
+        setUnloadingRules(payload.unloadingRules);
 
         const restoredUser = toUser({
           ...payload.session,
@@ -81,16 +183,8 @@ export const useAppBootstrap = ({
         setAuthUser(toAuthSessionUser(restoredUser));
         upsertCurrentSession(restoredUser);
         setAuthReady(true);
-      } catch (error: any) {
+      } catch (error) {
         if (!active) return;
-
-        if (error?.response?.status === 401) {
-          clearAllAuthData();
-          setCurrentUser(undefined);
-          setAuthReady(true);
-          completeBootstrapMetrics({ outcome: 'anonymous' });
-          return;
-        }
 
         console.error('[useAppBootstrap] Session restore failed:', error);
         setAuthReady(true);
@@ -105,54 +199,76 @@ export const useAppBootstrap = ({
 
     return () => {
       active = false;
-      restoreStartedRef.current = false;
     };
-  }, [setAuthReady, setCurrentUser, setReferenceData]);
+  }, [setAuthReady, setCurrentUser, setReferenceData, setUnloadingRules]);
 
   useEffect(() => {
     if (!authReady) return;
 
     if (!currentUserId) {
-      bootstrappedUserIdRef.current = null;
+      resetAuthenticatedShellState();
       setInventoryRouteReady(false);
       return;
     }
 
-    if (bootstrappedUserIdRef.current === currentUserId) {
-      return;
-    }
-
-    bootstrappedUserIdRef.current = currentUserId;
     let active = true;
     setInventoryRouteReady(false);
 
-    const bootstrapAuthenticatedShell = async () => {
-      const routePath = typeof window !== 'undefined' ? window.location.pathname : '/';
-      startBootstrapMetrics('authenticated-shell', routePath);
-
-      let errorMessage: string | null = null;
-
-      try {
-        await loadInventoryCore({ force: true, staleMs: 0 });
-        await loadTransactions({ force: true, staleMs: 0 });
-        await loadUsersAndRoles({ force: true, staleMs: 0 });
-        completeBootstrapMetrics({ outcome: 'success' });
-      } catch (error) {
-        errorMessage = error instanceof Error ? error.message : String(error);
-        console.error('[useAppBootstrap] Authenticated bootstrap failed:', error);
-        completeBootstrapMetrics({ outcome: 'failed', error: errorMessage });
-      } finally {
-        if (active) {
-          setInventoryRouteReady(true);
-        }
+    const bootstrapAuthenticatedShell = async (): Promise<AuthenticatedShellResult> => {
+      if (authenticatedShellCompletedUserId === currentUserId) {
+        return {
+          outcome: 'success',
+          userId: currentUserId,
+        };
       }
+
+      if (!authenticatedShellPromise || authenticatedShellInFlightUserId !== currentUserId) {
+        authenticatedShellInFlightUserId = currentUserId;
+
+        const routePath = typeof window !== 'undefined' ? window.location.pathname : '/';
+        startBootstrapMetrics('authenticated-shell', routePath);
+
+        authenticatedShellPromise = (async () => {
+          try {
+            await loadInventoryCore({ force: true, staleMs: 0 });
+            await loadTransactions({ force: true, staleMs: 0 });
+            await loadUsersAndRoles({ force: true, staleMs: 0 });
+
+            authenticatedShellCompletedUserId = currentUserId;
+            completeBootstrapMetrics({ outcome: 'success' });
+            return {
+              outcome: 'success',
+              userId: currentUserId,
+            } satisfies AuthenticatedShellResult;
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error('[useAppBootstrap] Authenticated bootstrap failed:', error);
+            completeBootstrapMetrics({ outcome: 'failed', error: errorMessage });
+            return {
+              outcome: 'failed',
+              userId: currentUserId,
+              error,
+            } satisfies AuthenticatedShellResult;
+          } finally {
+            authenticatedShellPromise = null;
+            authenticatedShellInFlightUserId = null;
+          }
+        })();
+      }
+
+      return authenticatedShellPromise;
     };
 
-    void bootstrapAuthenticatedShell();
+    void bootstrapAuthenticatedShell().then((result) => {
+      if (!active || result.userId !== currentUserId) {
+        return;
+      }
+
+      setInventoryRouteReady(true);
+    });
 
     return () => {
       active = false;
-      bootstrappedUserIdRef.current = null;
     };
   }, [authReady, currentUserId, loadInventoryCore, loadTransactions, loadUsersAndRoles, setInventoryRouteReady]);
 };

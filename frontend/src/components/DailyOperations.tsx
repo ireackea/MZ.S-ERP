@@ -22,6 +22,14 @@ import Fuse from 'fuse.js';
 import { toast } from '@services/toastService';
 import { useInventoryStore } from '../store/useInventoryStore';
 import { useOfflineSync } from '../hooks/useOfflineSync';
+import {
+    canonicalizeOperationType,
+    isInboundOperationType,
+    isOutboundOperationType,
+    isProductionOperationType,
+    isReturnOperationType,
+    isWasteOperationType,
+} from '../utils/operationTypes';
 
 interface DailyOperationsProps {
     items?: Item[];
@@ -172,17 +180,17 @@ const OPERATION_PRINT_COLUMNS: { key: keyof OperationPrintableRow; label: string
     { key: 'itemName', label: 'اسم الصنف' },
     { key: 'supplierOrReceiver', label: 'المورد/العميل' },
     { key: 'quantity', label: 'كمية الدخول' },
-    { key: 'supplierNet', label: 'كمية المورد' },
+    { key: 'supplierNet', label: 'صافي المورد' },
     { key: 'difference', label: 'الفرق' },
     { key: 'packageCount', label: 'العدد (عبوات)' },
-    { key: 'weightSlip', label: 'بوليصة الوزن' },
+    { key: 'weightSlip', label: 'رقم نموذج الوزن' },
     { key: 'truckNumber', label: 'رقم الشاحنة' },
-    { key: 'trailerNumber', label: 'رقم المقورة' },
+    { key: 'trailerNumber', label: 'رقم الجرار/المقطورة' },
     { key: 'driverName', label: 'اسم السائق' },
     { key: 'entryTime', label: 'وقت الدخول' },
     { key: 'exitTime', label: 'وقت الخروج' },
     { key: 'delayPenalty', label: 'غرامة التأخير' },
-    { key: 'notes', label: 'ملاحات' },
+    { key: 'notes', label: 'الملاحضات' },
 ];
 
 const OPERATION_PRINT_DEFAULT_CONFIG: OperationPrintConfig = {
@@ -222,15 +230,15 @@ const SYSTEM_FIELDS: { key: string; label: string; required: boolean }[] = [
     { key: 'partnerName', label: 'اسم المورد/العميل', required: true },
 
     // Weights
-    { key: 'quantity', label: 'الكمية الفعلية (الكمية)', required: true },
-    { key: 'supplierNet', label: 'كمية المورد', required: false },
+    { key: 'quantity', label: 'صافي السهل', required: true },
+    { key: 'supplierNet', label: 'صافي المورد', required: false },
     { key: 'packageCount', label: 'عدد العبوات', required: false },
-    { key: 'weightSlip', label: 'رقم بوليصة الوزن', required: false },
+    { key: 'weightSlip', label: 'رقم نموذج الوزن', required: false },
 
     // Logistics
     { key: 'supplierInvoice', label: 'رقم فاتورة المورد', required: false },
     { key: 'truckNumber', label: 'رقم الشاحنة', required: false },
-    { key: 'trailerNumber', label: 'رقم المقورة/الحاوية', required: false },
+    { key: 'trailerNumber', label: 'رقم الجرار/المقطورة', required: false },
     { key: 'driverName', label: 'اسم السائق', required: false },
 
     // Time
@@ -239,7 +247,7 @@ const SYSTEM_FIELDS: { key: string; label: string; required: boolean }[] = [
     { key: 'unloadingRuleName', label: 'اسم قاعدة التفريغ', required: false },
 
     // Other
-    { key: 'notes', label: 'ملاحات', required: false },
+    { key: 'notes', label: 'الملاحضات', required: false },
 ];
 
 const getImportSearchTerms = (field: { key: string; label: string }) => {
@@ -251,18 +259,34 @@ const getImportSearchTerms = (field: { key: string; label: string }) => {
         field.key === 'type' ? 'وارد' : '',
         field.key === 'packageCount' ? 'عبوات' : '',
         field.key === 'packageCount' ? 'عدد' : '',
+        field.key === 'weightSlip' ? 'رقم نموذج الوزن' : '',
+        field.key === 'weightSlip' ? 'رقم نموذج' : '',
+        field.key === 'weightSlip' ? 'رقم بوليصة الوزن' : '',
         field.key === 'weightSlip' ? 'بوليصة' : '',
         field.key === 'weightSlip' ? 'وزن' : '',
         field.key === 'supplierInvoice' ? 'فاتورة مورد' : '',
+        field.key === 'trailerNumber' ? 'رقم الجرار/المقطورة' : '',
+        field.key === 'trailerNumber' ? 'الجرار' : '',
+        field.key === 'trailerNumber' ? 'المقطورة' : '',
+        field.key === 'trailerNumber' ? 'رقم المقورة/الحاوية' : '',
         field.key === 'trailerNumber' ? 'المقورة' : '',
         field.key === 'trailerNumber' ? 'الحاوية' : '',
+        field.key === 'notes' ? 'الملاحضات' : '',
+        field.key === 'notes' ? 'ملاحات' : '',
+        field.key === 'notes' ? 'الملاحظات' : '',
         field.key === 'unloadingRuleName' ? 'قاعدة' : '',
         field.key === 'unloadingRuleName' ? 'تفريغ' : '',
         field.key === 'itemName' ? 'صنف' : '',
+        field.key === 'quantity' ? 'صافي السهل' : '',
+        field.key === 'quantity' ? 'صافي السهل (الكمية)' : '',
+        field.key === 'quantity' ? 'الكمية الفعلية (الكمية)' : '',
         field.key === 'quantity' ? 'كمية' : '',
         field.key === 'quantity' ? 'كمية فعلية' : '',
-        field.key === 'partnerName' ? 'عميل' : '',
-        field.key === 'partnerName' ? 'مورد' : '',
+        field.key === 'supplierNet' ? 'صافي المورد' : '',
+        field.key === 'supplierNet' ? 'كمية المورد' : '',
+        field.key === 'partnerName' ? 'المورد/العميل' : '',
+        field.key === 'partnerName' ? 'اسم المورد' : '',
+        field.key === 'partnerName' ? 'اسم العميل' : '',
     ]
         .filter(Boolean)
         .map((s) => String(s).toLowerCase());
@@ -606,6 +630,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
     const [columnMapping, setColumnMapping] = useState<Record<string, string>>({}); // SystemField -> ExcelHeader
     const [importPreview, setImportPreview] = useState<{ valid: Transaction[], invalid: { row: any, errors: string[] }[] }>({ valid: [], invalid: [] });
     const [normalizedImportPreview, setNormalizedImportPreview] = useState<ImportPreviewRow[]>([]);
+    const [showAllImportInvalidRows, setShowAllImportInvalidRows] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const seenAutoPrintColumnsRef = useRef<Set<string>>(new Set(OPERATION_PRINT_COLUMNS.map((column) => String(column.key))));
 
@@ -736,7 +761,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
      * @returns true if valid, false otherwise (and alerts user).
      */
     const validateStockAvailability = (itemId: string, type: string, qty: number, excludeTxId?: string): boolean => {
-        if (type !== 'صرف' && type !== 'تالف') return true;
+        if (!isOutboundOperationType(type)) return true;
 
         const item = items.find(i => i.id === itemId);
         if (!item) return true;
@@ -748,10 +773,10 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
         if (excludeTxId) {
             const originalTx = transactions.find(t => t.id === excludeTxId);
             if (originalTx && originalTx.itemId === itemId) {
-                if (originalTx.type === 'صرف' || originalTx.type === 'تالف') {
+                if (isOutboundOperationType(originalTx.type)) {
                     // It was deducted, so add it back to see what's available
                     availableStock += originalTx.quantity;
-                } else if (originalTx.type === 'وارد' || originalTx.type === 'مرتجع') {
+                } else if (isInboundOperationType(originalTx.type)) {
                     // It was added, so subtract it. If we are changing from 'Import' to 'Export',
                     // we can't use the imported amount as part of the available stock for the export.
                     availableStock -= originalTx.quantity;
@@ -762,7 +787,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
         // Allow small floating point margin errors
         const epsilon = 0.0001;
         if (qty > availableStock + epsilon) {
-            toast.error(`خأ: الكمية لا تكفي!\n\nالصنف: ${item.name}\nالكمية المتاحة: ${availableStock.toLocaleString('en-US', { maximumFractionDigits: 3 })} ${item.unit}\nالكمية الملوبة: ${qty} ${item.unit}`);
+            toast.error(`خطأ: الكمية لا تكفي!\n\nالصنف: ${item.name}\nالكمية المتاحة: ${availableStock.toLocaleString('en-US', { maximumFractionDigits: 3 })} ${item.unit}\nالكمية المطلوبة: ${qty} ${item.unit}`);
             return false;
         }
         return true;
@@ -774,11 +799,12 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
         setInvoiceHeader(prev => {
             const newData = { ...prev, [field]: value };
 
-            // Auto-fill Partner for Production/Waste to prevent validation errors
+            // Auto-fill Partner for operation types that usually use a system-side default partner name
             if (field === 'type') {
-                if (value === 'مرتجع') newData.supplierOrReceiver = 'مورد المرتجع';
-                else if (value === 'تالف') newData.supplierOrReceiver = 'تالف داخلي';
-                else if (prev.type === 'مرتجع' || prev.type === 'تالف') newData.supplierOrReceiver = ''; // Clear only if it was auto-filled
+                if (isReturnOperationType(value)) newData.supplierOrReceiver = 'مورد المرتجع';
+                else if (isProductionOperationType(value)) newData.supplierOrReceiver = 'انتاج داخلي';
+                else if (isWasteOperationType(value)) newData.supplierOrReceiver = 'هالك داخلي';
+                else if (isReturnOperationType(prev.type) || isProductionOperationType(prev.type) || isWasteOperationType(prev.type)) newData.supplierOrReceiver = ''; // Clear only if it was auto-filled
             }
 
             if (field === 'unloadingRuleId') {
@@ -887,7 +913,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
         }
 
         // 3. Check Stock Availability (Aggregated)
-        if (invoiceHeader.type === 'صرف' || invoiceHeader.type === 'تالف') {
+        if (isOutboundOperationType(invoiceHeader.type)) {
             const itemAggregates: Record<string, number> = {};
             validItems.forEach(item => {
                 const current = itemAggregates[item.itemId] || 0;
@@ -946,7 +972,9 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
             supplierInvoice: '',
             weightSlip: '',
             notes: '',
-            supplierOrReceiver: prev.type === 'تصنيع' ? 'إنتاج داخلي' : (prev.type === 'تالف' ? 'تالف داخلي' : '') // Keep default if type stays
+            supplierOrReceiver: isReturnOperationType(prev.type)
+                ? 'مورد المرتجع'
+                : (isProductionOperationType(prev.type) ? 'انتاج داخلي' : (isWasteOperationType(prev.type) ? 'هالك داخلي' : '')) // Keep default if type stays
         }));
         setInvoiceItems([{ id: uuidv4(), itemId: '' }]);
         toast.success('تم حفظ بيانات الفاتورة بنجاح');
@@ -960,10 +988,12 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
     }, [invoiceItems]);
 
     const getPartnerLabel = (type: string) => {
-        if (type === 'وارد') return 'المورد';
-        if (type === 'صرف') return 'العميل';
-        if (type === 'مرتجع') return 'جهة الترجيع';
-        if (type === 'تالف') return 'بيعة التالف / ملاحات';
+        const canonicalType = canonicalizeOperationType(type);
+        if (canonicalType === 'وارد') return 'المورد';
+        if (canonicalType === 'صادر') return 'العميل';
+        if (canonicalType === 'مرتجع') return 'جهة المرتجع';
+        if (canonicalType === 'انتاج') return 'جهة الانتاج';
+        if (canonicalType === 'هالك') return 'بيعة الهالك / ملاحات';
         return 'العميل / المورد';
     };
 
@@ -1006,8 +1036,9 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
 
         // Auto-fill Logic for Batch Mode
         if (field === 'type') {
-            if (value === 'تصنيع') form.supplierOrReceiver = 'إنتاج داخلي';
-            else if (value === 'تالف') form.supplierOrReceiver = 'تالف داخلي';
+            if (isReturnOperationType(value)) form.supplierOrReceiver = 'مورد المرتجع';
+            else if (isProductionOperationType(value)) form.supplierOrReceiver = 'انتاج داخلي';
+            else if (isWasteOperationType(value)) form.supplierOrReceiver = 'هالك داخلي';
         }
 
         form = processRowLogic(form);
@@ -1030,7 +1061,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
         if (!form.supplierOrReceiver) return toast.error('المورد/العميل ملوب');
 
         if (!isInvoiceUnique(form.warehouseInvoice, form.type)) {
-            return toast.error(`خأ: فاتورة المخزن "${form.warehouseInvoice}" مستخدمة لنفس العملية ${form.type}`);
+            return toast.error(`خطأ: فاتورة المخزن "${form.warehouseInvoice}" مستخدمة لنفس العملية ${form.type}`);
         }
 
         const rowDateValidation = validateTimeContext(form, `تاريخ السر ${index + 1}`);
@@ -1485,7 +1516,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                 notes: transaction.notes || '',
                 dateInvoice: `${dateLabel} | #${warehouseInvoice || '-'}`,
                 item: item?.name || 'غير معروف',
-                weights: `الكمية: ${formatNumber(quantity)} | المورد: ${formatNumber(supplierNet)} | الفرق: ${formatNumber(difference)}`,
+                weights: `الكمية: ${formatNumber(quantity)} | صافي المورد: ${formatNumber(supplierNet)} | الفرق: ${formatNumber(difference)}`,
                 logistics: `${partner || '-'}${supplierInvoice ? ` | فاتورة المورد: ${supplierInvoice}` : ''}${truckNumber ? ` | رقم الشاحنة: ${truckNumber}` : ''}${trailerNumber ? ` (${trailerNumber})` : ''}${driverName ? ` | اسم السائق: ${driverName}` : ''}`,
                 timeFine: `وقت الدخول: ${entryTime || '-'} | وقت الخروج: ${exitTime || '-'} | غرامة التأخير: ${formatCurrencyLYD(delayPenalty)}`,
             };
@@ -1503,9 +1534,9 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                 uniqueInvoices.add(row.warehouseInvoice);
             }
 
-            if (row.type === 'وارد' || row.type === 'مرتجع') {
+            if (isInboundOperationType(row.type)) {
                 acc.netBalance += row.quantity;
-            } else if (row.type === 'صرف' || row.type === 'تالف') {
+            } else if (isOutboundOperationType(row.type)) {
                 acc.netBalance -= row.quantity;
             }
 
@@ -1799,7 +1830,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
             setPrintStatusMessage('تم تصدير ملف PDF بنجاح.');
         } catch {
             setPrintStatusMessage('فشل تصدير ملف PDF.');
-            toast.error('حدث خأ أثناء تصدير PDF. حاول مجدداً.');
+            toast.error('حدث خطأ أثناء تصدير PDF. حاول مجدداً.');
         } finally {
             setIsPrintingPdf(false);
         }
@@ -1823,8 +1854,8 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
             const totalColumns = Math.max(1, selectedColumns.length);
             const summaryCards = [
                 { label: 'إجمالي كمية الدخول', value: formatNumber(operationSummary.totalNetWeight) },
-                { label: 'إجمالي كمية المورد', value: formatNumber(operationSummary.totalSupplierNet) },
-                { label: 'الفرق بين كمية الدخول وكمية المورد', value: formatNumber(operationSummary.totalNetWeight - operationSummary.totalSupplierNet) },
+                { label: 'إجمالي صافي المورد', value: formatNumber(operationSummary.totalSupplierNet) },
+                { label: 'الفرق بين كمية الدخول وصافي المورد', value: formatNumber(operationSummary.totalNetWeight - operationSummary.totalSupplierNet) },
                 { label: 'عدد الفواتير', value: String(operationSummary.invoiceCount) },
                 { label: 'إجمالي غرامات التأخير', value: formatCurrencyLYD(operationSummary.totalDelayPenalty) },
             ];
@@ -1886,7 +1917,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
             toast.success('تم تصدير ملف Excel للتقرير الحالي بنجاح.');
         } catch (error) {
             setPrintStatusMessage('فشل تصدير ملف Excel.');
-            toast.error(resolveExportErrorMessage(error, 'حدث خأ أثناء تصدير Excel. حاول مجدداً.'));
+            toast.error(resolveExportErrorMessage(error, 'حدث خطأ أثناء تصدير Excel. حاول مجدداً.'));
         } finally {
             setIsQuickExportingExcel(false);
         }
@@ -1916,22 +1947,22 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                 'كود الصنف': item?.code || '',
                 'اسم الصنف': item?.name || 'غير معروف',
                 'كمية الدخول': t.quantity,
-                'كمية المورد': t.supplierNet || 0,
+                'صافي المورد': t.supplierNet || 0,
                 'الفرق': t.difference || 0,
                 'عدد العبوات': t.packageCount || 0,
-                'بوليصة الوزن': t.weightSlip || '',
+                'رقم نموذج الوزن': t.weightSlip || '',
                 'الوحدة': item?.unit || '',
                 'المورد/العميل': t.supplierOrReceiver,
                 'فاتورة المورد': t.supplierInvoice || '',
                 'رقم الشاحنة': t.truckNumber || '',
-                'رقم المقورة': t.trailerNumber || '',
+                'رقم الجرار/المقطورة': t.trailerNumber || '',
                 'اسم السائق': t.driverName || '',
                 'وقت الدخول': t.entryTime || '',
                 'وقت الخروج': t.exitTime || '',
                 'قاعدة التفريغ': unloadingRule?.rule_name || '',
                 'مدة البقاء (دقيقة)': t.delayDuration || 0,
                 'غرامة التأخير': t.delayPenalty || 0,
-                'ملاحات': t.notes || ''
+                'الملاحضات': t.notes || ''
             };
         });
 
@@ -1961,6 +1992,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
 
         setImportPreview({ valid: [], invalid: [] });
         setNormalizedImportPreview([]);
+        setShowAllImportInvalidRows(false);
 
         const reader = new FileReader();
         reader.onload = async (evt) => {
@@ -2019,8 +2051,8 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
     const normalizeCellText = (raw: unknown) => {
         if (raw === null || raw === undefined) return '';
         return String(raw)
-            .replace(/[ظ -ظ]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
-            .replace(/[ظ -ظ]/g, '.')
+            .replace(/[\u0660-\u0669]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
+            .replace(/[\u066B]/g, '.')
             .replace(/[٬]/g, ',')
             .trim();
     };
@@ -2133,17 +2165,8 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
         const value = normalizeCellText(raw);
         if (!value) return undefined;
 
-        if (OPERATION_TYPES.includes(value as OperationType)) {
-            return value as OperationType;
-        }
-
-        const v = value.toLowerCase();
-        if (['1', 'in', 'import', 'وارد', 'مشتريات', 'شراء'].some(s => v.includes(s))) return 'وارد';
-        if (['2', 'out', 'export', 'صرف', 'مبيعات', 'بيع'].some(s => v.includes(s))) return 'صرف';
-        if (['3', 'prod', 'production', 'تصنيع', 'إنتاج'].some(s => v.includes(s))) return 'تصنيع';
-        if (['4', 'waste', 'damaged', 'تالف', 'هالك'].some(s => v.includes(s))) return 'تالف';
-
-        return undefined;
+        const canonicalType = canonicalizeOperationType(value);
+        return OPERATION_TYPES.includes(canonicalType as OperationType) ? canonicalType as OperationType : undefined;
     };
 
     const findItemByImportedValue = (raw: unknown) => {
@@ -2193,14 +2216,24 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
             const type = normalizeOperationType(rawType);
             const invoice = normalizeCellText(getValue('warehouseInvoice'));
             const importedItemToken = normalizeCellText(getValue('itemName'));
-            let partnerName = normalizeCellText(getValue('partnerName'));
-            const quantity = parseFlexibleNumber(getValue('quantity'));
+            const directPartnerName = ['اسم المورد/العميل', 'المورد/العميل', 'اسم المورد', 'اسم العميل']
+                .map((header) => normalizeCellText(rowObj[header]))
+                .find(Boolean);
+            let partnerName = directPartnerName || normalizeCellText(getValue('partnerName'));
+            const directQuantityValue = ['صافي السهل', 'صافي السهل (الكمية)', 'الكمية الفعلية (الكمية)', 'الكمية']
+                .map((header) => rowObj[header])
+                .find((value) => parseFlexibleNumber(value) !== undefined);
+            const quantity = parseFlexibleNumber(directQuantityValue ?? getValue('quantity'));
+            const directWeightSlipValue = ['رقم نموذج الوزن', 'رقم بوليصة الوزن', 'بوليصة الوزن']
+                .map((header) => normalizeCellText(rowObj[header]))
+                .find(Boolean);
             const entryDateTime = parseFlexibleTime(getValue('entryTime'));
             const exitDateTimeRaw = parseFlexibleTime(getValue('exitTime'));
             const unloadingRuleName = normalizeCellText(getValue('unloadingRuleName'));
 
-            if (!partnerName && type === 'تصنيع') partnerName = 'إنتاج داخلي';
-            if (!partnerName && type === 'تالف') partnerName = 'تالف داخلي';
+            if (!partnerName && isReturnOperationType(type)) partnerName = 'مورد المرتجع';
+            if (!partnerName && isProductionOperationType(type)) partnerName = 'انتاج داخلي';
+            if (!partnerName && isWasteOperationType(type)) partnerName = 'هالك داخلي';
 
             // Check Required
             if (!date) errors.push('التاريخ غير موجود');
@@ -2208,7 +2241,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
             if (!invoice) errors.push('رقم الفاتورة غير موجود');
             if (!importedItemToken) errors.push('اسم الصنف غير موجود');
             if (!partnerName) errors.push('المورد/العميل غير موجود');
-            if (quantity === undefined || Number.isNaN(quantity)) errors.push('الكمية غير صحيحة');
+            if (quantity === undefined || Number.isNaN(quantity)) errors.push('صافي السهل غير صحيح');
 
             let unloadingRuleId = '';
             if (unloadingRuleName) {
@@ -2239,7 +2272,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
             let itemId = '';
             if (importedItemToken) {
                 const item = findItemByImportedValue(importedItemToken);
-                if (!item) errors.push(`اسم الصنف غير موجود بالنام: ${importedItemToken}`);
+                if (!item) errors.push(`اسم الصنف غير موجود بالنظام: ${importedItemToken}`);
                 else itemId = item.id;
             }
 
@@ -2271,9 +2304,11 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
 
                     // New Fields
                     packageCount: parseFlexibleNumber(getValue('packageCount')) || undefined,
-                    weightSlip: normalizeCellText(getValue('weightSlip')),
+                    weightSlip: directWeightSlipValue || normalizeCellText(getValue('weightSlip')),
                     supplierInvoice: normalizeCellText(getValue('supplierInvoice')),
-                    trailerNumber: normalizeCellText(getValue('trailerNumber')),
+                    trailerNumber: ['رقم الجرار/المقطورة', 'رقم المقورة/الحاوية', 'رقم المقورة']
+                        .map((header) => normalizeCellText(rowObj[header]))
+                        .find(Boolean) || normalizeCellText(getValue('trailerNumber')),
                     unloadingRuleId,
                     unloadingDuration: parseFlexibleNumber(getValue('unloadingDuration')) || settings.defaultUnloadingDuration || 60,
 
@@ -2281,7 +2316,9 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                     driverName: normalizeCellText(getValue('driverName')),
                     entryTime: entryDateTime,
                     exitTime: exitDateTimeRaw,
-                    notes: normalizeCellText(getValue('notes')),
+                    notes: ['الملاحضات', 'ملاحات', 'الملاحظات']
+                        .map((header) => normalizeCellText(rowObj[header]))
+                        .find(Boolean) || normalizeCellText(getValue('notes')),
                     timestamp: Date.now()
                 };
 
@@ -2309,6 +2346,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
 
         setImportPreview({ valid: validRows, invalid: invalidRows });
         setNormalizedImportPreview(normalizedRows);
+        setShowAllImportInvalidRows(false);
         setImportStep('preview');
     };
 
@@ -2324,6 +2362,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
         setExcelData([]);
         setImportPreview({ valid: [], invalid: [] });
         setNormalizedImportPreview([]);
+        setShowAllImportInvalidRows(false);
     };
 
     // --- UI Helpers ---
@@ -2336,11 +2375,12 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
     const getSuggestions = (val: string) => partners.filter(p => p.name.toLowerCase().includes(val.toLowerCase()));
 
     const getRowColor = (type?: OperationType) => {
-        switch (type) {
+        switch (canonicalizeOperationType(type)) {
             case 'وارد': return 'border-l-4 border-l-emerald-500 bg-emerald-50/10';
             case 'صادر': return 'border-l-4 border-l-red-500 bg-red-50/10';
-            case 'مرتجع': return 'border-l-4 border-l-blue-500 bg-blue-50/10';
-            case 'تالف': return 'border-l-4 border-l-yellow-500 bg-yellow-50/10';
+            case 'مرتجع': return 'border-l-4 border-l-sky-500 bg-sky-50/10';
+            case 'انتاج': return 'border-l-4 border-l-blue-500 bg-blue-50/10';
+            case 'هالك': return 'border-l-4 border-l-yellow-500 bg-yellow-50/10';
             default: return 'border-l-4 border-l-slate-200';
         }
     };
@@ -2613,11 +2653,11 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                             <div className="font-bold text-slate-800 dir-ltr text-left">{formatNumber(operationSummary.totalNetWeight)}</div>
                         </div>
                         <div className="border border-slate-200 rounded-lg p-2">
-                            <div className="text-[11px] text-slate-500">إجمالي كمية المورد</div>
+                            <div className="text-[11px] text-slate-500">إجمالي صافي المورد</div>
                             <div className="font-bold text-slate-800 dir-ltr text-left">{formatNumber(operationSummary.totalSupplierNet)}</div>
                         </div>
                         <div className="border border-slate-200 rounded-lg p-2">
-                            <div className="text-[11px] text-slate-500">الفرق بين كمية الدخول وكمية المورد</div>
+                            <div className="text-[11px] text-slate-500">الفرق بين كمية الدخول وصافي المورد</div>
                             <div className="font-bold text-slate-800 dir-ltr text-left">{formatNumber(operationSummary.totalNetWeight - operationSummary.totalSupplierNet)}</div>
                         </div>
                         <div className="border border-slate-200 rounded-lg p-2">
@@ -2773,8 +2813,8 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                 </div>
                 <div className="flex gap-3">
                     <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
-                        <button onClick={handleSmartExport} disabled={!canExport || isSmartExportingExcel || transactions.length === 0} className="flex items-center gap-2 px-4 py-2 bg-white text-slate-700 rounded-lg hover:text-emerald-600 hover:shadow-sm transition font-medium text-xs disabled:opacity-50 disabled:cursor-not-allowed" title={canExport ? 'تصدير Excel' : 'لا تملك صلاحية التصدير'}>
-                            {isSmartExportingExcel ? <Loader2 size={16} className="animate-spin" /> : <FileUp size={16} />} تصدير Excel
+                        <button onClick={handleSmartExport} disabled={!canExport || isSmartExportingExcel || transactions.length === 0} className="flex items-center gap-2 px-4 py-2 bg-white text-slate-700 rounded-lg hover:text-emerald-600 hover:shadow-sm transition font-medium text-xs disabled:opacity-50 disabled:cursor-not-allowed" title={canExport ? 'تصدير Excel الذكي' : 'لا تملك صلاحية التصدير'}>
+                            {isSmartExportingExcel ? <Loader2 size={16} className="animate-spin" /> : <FileUp size={16} />} تصدير ذكي
                         </button>
                         <div className="w-[1px] h-6 bg-slate-300"></div>
                         <button onClick={() => { if (canImport) setIsImportOpen(true); else toast.error('لا تملك صلاحية استيراد الملفات.'); }} disabled={!canImport} className="flex items-center gap-2 px-4 py-2 bg-white text-slate-700 rounded-lg hover:text-blue-600 hover:shadow-sm transition font-medium text-xs disabled:opacity-50 disabled:cursor-not-allowed" title={canImport ? 'استيراد إكسل' : 'لا تملك صلاحية استيراد الملفات'}>
@@ -2784,17 +2824,17 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                         <button
                             onClick={() => setShowPrintStudio(true)}
                             className="flex items-center gap-2 px-4 py-2 bg-white text-slate-700 rounded-lg hover:text-indigo-600 hover:shadow-sm transition font-medium text-xs"
-                            title="فتح استوديو الباعة"
+                            title="فتح استوديو الطباعة"
                         >
-                            <Printer size={16} /> استوديو الباعة
+                            <Printer size={16} /> استوديو الطباعة
                         </button>
                         <button
                             onClick={quickPrintCurrentFilter}
-                            disabled={isQuickExportingExcel || operationRowsForPrint.length === 0}
+                            disabled={!canExport || isQuickExportingExcel || operationRowsForPrint.length === 0}
                             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="تصدير Excel بناءً على الفلاتر الحالية"
+                            title={canExport ? 'تصدير العرض الحالي إلى Excel' : 'لا تملك صلاحية التصدير'}
                         >
-                            {isQuickExportingExcel ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />} تصدير Excel
+                            {isQuickExportingExcel ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />} تصدير العرض
                         </button>
                     </div>
                     <div className="bg-emerald-50 text-emerald-700 px-4 py-2 rounded-xl text-sm font-bold border border-emerald-100 flex items-center">
@@ -2899,7 +2939,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                         value={invoiceHeader.supplierInvoice || ''} onChange={e => handleInvoiceHeaderChange('supplierInvoice', e.target.value)} />
                                 </div>
                                 <div>
-                                    <label className="text-xs font-bold text-slate-500 block mb-1">بوليصة الوزن (اختياري)</label>
+                                    <label className="text-xs font-bold text-slate-500 block mb-1">رقم نموذج الوزن (اختياري)</label>
                                     <input type="text" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
                                         placeholder="رقم البوليصة"
                                         value={invoiceHeader.weightSlip || ''} onChange={e => handleInvoiceHeaderChange('weightSlip', e.target.value)} />
@@ -2912,7 +2952,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                             <div className="grid grid-cols-2 gap-2">
                                 <input type="text" placeholder="رقم الشاحنة" className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none"
                                     value={invoiceHeader.truckNumber || ''} onChange={e => handleInvoiceHeaderChange('truckNumber', e.target.value)} />
-                                <input type="text" placeholder="رقم المقورة" className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none"
+                                <input type="text" placeholder="رقم الجرار/المقطورة" className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none"
                                     value={invoiceHeader.trailerNumber || ''} onChange={e => handleInvoiceHeaderChange('trailerNumber', e.target.value)} />
                                 <input type="text" placeholder="اسم السائق" className="col-span-2 p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none"
                                     value={invoiceHeader.driverName || ''} onChange={e => handleInvoiceHeaderChange('driverName', e.target.value)} />
@@ -2969,7 +3009,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                 <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 grid grid-cols-12 gap-2 text-xs font-bold text-slate-500 text-center">
                                     <div className="col-span-4 text-right">الصنف</div>
                                     <div className="col-span-2">الكمية</div>
-                                    <div className="col-span-2">كمية المورد</div>
+                                    <div className="col-span-2">صافي المورد</div>
                                     <div className="col-span-1">الفرق</div>
                                     <div className="col-span-2">العدد</div>
                                     <div className="col-span-1">حذف</div>
@@ -3439,7 +3479,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                                         </div>
                                                         <div className="flex items-center gap-3 text-slate-600">
                                                             <span>الكمية: {formatNumber(groupSummary.totalQuantity)}</span>
-                                                            <span>كمية المورد: {formatNumber(groupSummary.totalSupplierNet)}</span>
+                                                            <span>صافي المورد: {formatNumber(groupSummary.totalSupplierNet)}</span>
                                                             <span>غرامة التأخير: {formatCurrencyLYD(groupSummary.totalDelayPenalty)}</span>
                                                             <button
                                                                 onClick={() => setCollapsedInvoiceGroups((prev) => {
@@ -3514,9 +3554,9 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                                             <td key={column.key} className="p-3 align-top" style={getColumnStyle(column)}>
                                                                 <div className="flex flex-col gap-1 text-[11px]">
                                                                     <div className="flex justify-between w-32"><span className="text-slate-500">الكمية:</span> <span className="font-bold">{t.quantity}</span></div>
-                                                                    {t.supplierNet && <div className="flex justify-between w-32"><span className="text-slate-500">للمورد:</span> <span>{t.supplierNet}</span></div>}
+                                                                    {t.supplierNet && <div className="flex justify-between w-32"><span className="text-slate-500">صافي المورد:</span> <span>{t.supplierNet}</span></div>}
                                                                     {t.difference !== 0 && <div className={`flex justify-between w-32 pt-1 border-t border-slate-100 ${t.difference && t.difference < 0 ? 'text-red-600' : 'text-green-600'}`}><span>الفرق:</span> <span className="font-bold dir-ltr">{formatNumber(t.difference)}</span></div>}
-                                                                    {t.weightSlip && <div className="flex justify-between w-32 text-slate-600"><span>بوليصة الوزن:</span> <span className="font-mono"><Highlighter text={t.weightSlip} highlight={debouncedQuery} /></span></div>}
+                                                                    {t.weightSlip && <div className="flex justify-between w-32 text-slate-600"><span>رقم نموذج الوزن:</span> <span className="font-mono"><Highlighter text={t.weightSlip} highlight={debouncedQuery} /></span></div>}
                                                                 </div>
                                                             </td>
                                                         );
@@ -3597,11 +3637,11 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                             <div className="font-bold text-emerald-300 dir-ltr text-left">{formatNumber(operationSummary.totalNetWeight)}</div>
                         </div>
                         <div className="bg-slate-800 rounded-lg px-3 py-2 border border-slate-700">
-                            <div className="text-slate-300">إجمالي كمية المورد</div>
+                            <div className="text-slate-300">إجمالي صافي المورد</div>
                             <div className="font-bold text-blue-200 dir-ltr text-left">{formatNumber(operationSummary.totalSupplierNet)}</div>
                         </div>
                         <div className="bg-slate-800 rounded-lg px-3 py-2 border border-slate-700">
-                            <div className="text-slate-300">الفرق بين كمية الصنف وكمية المورد</div>
+                            <div className="text-slate-300">الفرق بين كمية الصنف وصافي المورد</div>
                             <div className="font-bold text-white dir-ltr text-left">{formatNumber(operationSummary.totalNetWeight - operationSummary.totalSupplierNet)}</div>
                         </div>
                         <div className="bg-slate-800 rounded-lg px-3 py-2 border border-slate-700">
@@ -3647,7 +3687,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                     <div className="h-full w-full bg-slate-100 flex flex-col">
                         <div className="bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between gap-3">
                             <div>
-                                <h3 className="font-bold text-slate-800 flex items-center gap-2"><Printer size={18} className="text-indigo-600" /> استوديو الباعة المتقدمة - سجل العمليات</h3>
+                                <h3 className="font-bold text-slate-800 flex items-center gap-2"><Printer size={18} className="text-indigo-600" /> استوديو الطباعة المتقدمة - سجل العمليات</h3>
                                 <p className="text-xs text-slate-500">معاينة للباعة WYSIWYG مع إمكانية تصدير للـ PDF أو Excel وباعة QR.</p>
                             </div>
                             <div className="flex items-center gap-2">
@@ -4043,16 +4083,26 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                     {importPreview.invalid.length > 0 && (
                                         <div className="bg-white border border-red-200 rounded-xl overflow-hidden shadow-sm">
                                             <div className="bg-red-50 px-4 py-2 border-b border-red-100 font-bold text-red-700 text-sm flex items-center gap-2">
-                                                <AlertCircle size={16} /> العمليات الخائة (أمثلة)
+                                                <AlertCircle size={16} /> العمليات الخاطئة (أمثلة)
                                             </div>
                                             <div className="max-h-40 overflow-y-auto p-4 space-y-2">
-                                                {importPreview.invalid.slice(0, 20).map((item, idx) => (
+                                                {importPreview.invalid.slice(0, showAllImportInvalidRows ? importPreview.invalid.length : 20).map((item, idx) => (
                                                     <div key={idx} className="text-xs text-red-600 border-b border-red-50 pb-1 mb-1 last:border-0">
                                                         <span className="font-bold text-slate-700">صف {idx + 1}: </span>
                                                         {item.errors.join('، ')}
                                                     </div>
                                                 ))}
-                                                {importPreview.invalid.length > 20 && <div className="text-center text-xs text-slate-400">... والمزيد</div>}
+                                                {importPreview.invalid.length > 20 && (
+                                                    <div className="pt-1 text-center">
+                                                        <button
+                                                            type="button"
+                                                            className="text-xs text-slate-500 underline underline-offset-2 hover:text-slate-700"
+                                                            onClick={() => setShowAllImportInvalidRows((prev) => !prev)}
+                                                        >
+                                                            {showAllImportInvalidRows ? 'إظهار أقل' : `إظهار ${importPreview.invalid.length - 20} إضافية`}
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     )}
@@ -4071,9 +4121,9 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                                         <th className="p-2">النوع</th>
                                                         <th className="p-2">رقم الفاتورة</th>
                                                         <th className="p-2">الصنف</th>
-                                                        <th className="p-2">الرف المعني</th>
-                                                        <th className="p-2">الكمية</th>
-                                                        <th className="p-2">المورد</th>
+                                                        <th className="p-2">اسم المورد/العميل</th>
+                                                        <th className="p-2">صافي السهل</th>
+                                                        <th className="p-2">صافي المورد</th>
                                                         <th className="p-2">وقت الدخول</th>
                                                         <th className="p-2">وقت الخروج</th>
                                                     </tr>
@@ -4083,7 +4133,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                                         <tr key={`normalized-${row.rowNumber}`} className="border-b border-slate-50">
                                                             <td className="p-2 font-mono text-slate-500">{row.rowNumber}</td>
                                                             <td className={`p-2 font-bold ${row.status === 'valid' ? 'text-green-600' : 'text-red-600'}`}>
-                                                                {row.status === 'valid' ? 'صالح' : 'خأ'}
+                                                                {row.status === 'valid' ? 'صالح' : 'خطأ'}
                                                             </td>
                                                             <td className="p-2">{row.date || '-'}</td>
                                                             <td className="p-2">{row.type || '-'}</td>
@@ -4306,7 +4356,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                 </div>
 
                                 <div className="md:col-span-3">
-                                    <label className="text-xs font-bold text-slate-500">ملاحات</label>
+                                    <label className="text-xs font-bold text-slate-500">الملاحضات</label>
                                     <input type="text" className="w-full p-2 border rounded bg-white" value={editingTransaction.notes || ''} onChange={e => handleEditChange('notes', e.target.value)} />
                                 </div>
                             </div>

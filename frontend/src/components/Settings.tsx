@@ -9,6 +9,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { User, Tag, SystemSettings, OperationAppearance, ReportColumnConfig, UnloadingRule, OperationType, AuditLog, GridColumnPreference } from '../types';
+import { OPERATION_TYPES } from '../constants';
 import UnifiedIAM from './UnifiedIAM';
 import AuditLogViewer from './AuditLogViewer';
 import UniversalColumnManager from './UniversalColumnManager';
@@ -21,6 +22,7 @@ import { useInventoryStore } from '../store/useInventoryStore';
 import { usePermissions } from '../hooks/usePermissions';
 import { useSessionTimeout } from '../hooks/useSessionTimeout';
 import { toast } from '@services/toastService';
+import { canonicalizeOperationType } from '../utils/operationTypes';
 
 // ENTERPRISE FIX: Modern System Reset v2 - SuperAdmin Safe + Server-First - 2026-03-01
 type ResetModalState = {
@@ -568,8 +570,8 @@ const Settings: React.FC<SettingsProps> = ({
                 <p className="text-sm text-slate-500 mb-4">اختر الألوان المناسبة لكل نوع من أنواع العمليات على حدة.</p>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {['إيداع', 'سحب', 'انتاج', 'تالف'].map(type => {
-                  const current = appearance.find(a => a.type === type)?.color || '#000000';
+                {OPERATION_TYPES.map(type => {
+                  const current = appearance.find(a => canonicalizeOperationType(a.type) === type)?.color || '#000000';
                   return (
                     <div key={type} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
                       <span className="font-bold text-slate-700">{type}</span>

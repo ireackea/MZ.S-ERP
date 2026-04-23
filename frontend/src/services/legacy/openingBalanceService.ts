@@ -1,5 +1,6 @@
 // ENTERPRISE FIX: Phase 0.3 – Final Arabic Encoding Fix & 10/10 Declaration - 2026-03-13
 import { Item, Transaction } from '../../types';
+import { isInboundOperationType, isOutboundOperationType } from '../../utils/operationTypes';
 
 const OPENING_BALANCES_KEY = 'feed_factory_opening_balances';
 
@@ -108,8 +109,8 @@ export function getFinancialYearFromDate(input?: string | Date): number {
 }
 
 function movementToSignedQuantity(tx: Transaction): number {
-  if (tx.type === 'وارد' || tx.type === 'استلام') return Number(tx.quantity || 0);
-  if (tx.type === 'صادر' || tx.type === 'صرف') return -Number(tx.quantity || 0);
+  if (isInboundOperationType(tx.type)) return Number(tx.quantity || 0);
+  if (isOutboundOperationType(tx.type)) return -Number(tx.quantity || 0);
   return 0;
 }
 

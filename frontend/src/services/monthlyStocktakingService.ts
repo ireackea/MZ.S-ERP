@@ -1,5 +1,6 @@
 import { Item, OperationType, Transaction } from '../types';
 import { getOpeningQuantityByPeriod, upsertOpeningBalancesByPeriod } from './openingBalanceService';
+import { canonicalizeOperationType } from '../utils/operationTypes';
 
 export interface StocktakingCountEntry {
   userName: string;
@@ -33,6 +34,7 @@ export interface MonthlyAuditRow {
   itemName: string;
   openingBalance: number;
   totalInbound: number;
+  totalReturns: number;
   totalProduction: number;
   totalOutbound: number;
   totalWaste: number;
@@ -177,15 +179,16 @@ export function computeMonthlyAuditRows(params: {
     });
 
     const totalByType = (operationType: OperationType) => itemTransactions
-      .filter((tx) => tx.type === operationType)
+      .filter((tx) => canonicalizeOperationType(tx.type) === operationType)
       .reduce((sum, tx) => sum + Number(tx.quantity || 0), 0);
 
     const totalInbound = totalByType('وارد');
-    const totalProduction = totalByType('إنتاج');
+    const totalReturns = totalByType('مرتجع');
+    const totalProduction = totalByType('انتاج');
     const totalOutbound = totalByType('صادر');
     const totalWaste = totalByType('هالك');
 
-    const theoreticalBalance = openingBalance + totalInbound + totalProduction - totalOutbound - totalWaste;
+    const theoreticalBalance = openingBalance + totalInbound + totalReturns + totalProduction - totalOutbound - totalWaste;
     const itemRecord = session.itemRecords[item.id];
     const actualCount = itemRecord?.actualCount;
     const difference = actualCount === undefined ? undefined : Number((theoreticalBalance - actualCount).toFixed(3));
@@ -195,6 +198,7 @@ export function computeMonthlyAuditRows(params: {
       itemName: item.name,
       openingBalance: Number(openingBalance.toFixed(3)),
       totalInbound: Number(totalInbound.toFixed(3)),
+      totalReturns: Number(totalReturns.toFixed(3)),
       totalProduction: Number(totalProduction.toFixed(3)),
       totalOutbound: Number(totalOutbound.toFixed(3)),
       totalWaste: Number(totalWaste.toFixed(3)),

@@ -53,6 +53,13 @@ export interface ReportColumnConfig {
   isVisible: boolean;
 }
 
+export interface UnloadingRuleDraft {
+  rule_name: string;
+  allowed_duration_minutes: number;
+  penalty_rate_per_minute: number;
+  is_active?: boolean;
+}
+
 export interface UnloadingRule {
   id: string;
   name?: string;
@@ -63,6 +70,8 @@ export interface UnloadingRule {
   unloading_duration_minutes?: number;
   penalty_rate_per_minute?: number;
   is_active?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Item {

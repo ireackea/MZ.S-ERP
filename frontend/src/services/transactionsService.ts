@@ -4,6 +4,7 @@
 import apiClient from '@api/client';
 // ENTERPRISE FIX: Phase 0.3 – Final Arabic Encoding Fix & 10/10 Declaration - 2026-03-13
 import { Transaction } from '../types';
+import { canonicalizeOperationType } from '../utils/operationTypes';
 
 type ApiListResponse = {
   data?: any[];
@@ -38,7 +39,7 @@ const normalizeApiTransaction = (row: any): Transaction => {
     id: String(row?.id ?? row?.publicId ?? crypto.randomUUID()),
     date: String(row?.date || new Date().toISOString().split('T')[0]),
     itemId: String(row?.itemId ?? row?.item?.publicId ?? row?.item?.id ?? ''),
-    type: String(row?.type || 'وارد') as Transaction['type'],
+    type: canonicalizeOperationType(row?.type || 'وارد') as Transaction['type'],
     quantity: Number(row?.quantity ?? 0),
     warehouseInvoice: String(row?.warehouseInvoice ?? ''),
     supplierOrReceiver: String(row?.supplierOrReceiver ?? ''),

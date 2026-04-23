@@ -1,9 +1,10 @@
 import { Item, StockCheck, Transaction } from '../types';
 import { v4 as uuidv4 } from 'uuid';
+import { isInboundOperationType, isOutboundOperationType } from '../utils/operationTypes';
 
 function toSignedMovement(transaction: Transaction): number {
-  if (transaction.type === 'وارد' || transaction.type === 'إنتاج') return transaction.quantity;
-  if (transaction.type === 'صادر' || transaction.type === 'هالك') return -transaction.quantity;
+  if (isInboundOperationType(transaction.type)) return transaction.quantity;
+  if (isOutboundOperationType(transaction.type)) return -transaction.quantity;
   return 0;
 }
 

@@ -16,8 +16,8 @@ interface EnterpriseLoadingProps {
 }
 
 const EnterpriseLoading: React.FC<EnterpriseLoadingProps> = ({
-  message = 'جارٍ تحميل النام...',
-  subMessage = 'يرجى الانتار، يتم إعداد بيئة العمل الآمنة',
+  message = 'جارٍ تحميل النظام...',
+  subMessage = 'يرجى الانتظار، يتم إعداد بيئة العمل الآمنة',
   showSteps = true,
 }) => {
   const [currentStep, setCurrentStep] = React.useState(0);
@@ -26,7 +26,7 @@ const EnterpriseLoading: React.FC<EnterpriseLoadingProps> = ({
     'جاري التحقق من المصادقة...',
     'جاري تحميل بيانات المستخدم...',
     'جاري إعداد الصلاحيات...',
-    'جاري تهيئة النام...',
+    'جاري تهيئة النظام...',
   ];
 
   React.useEffect(() => {
@@ -59,10 +59,10 @@ const EnterpriseLoading: React.FC<EnterpriseLoadingProps> = ({
               </div>
             </div>
             <h1 className="text-xl font-black text-white mb-1">
-              نام إدارة المخازن Enterprise
+              نظام إدارة المخازن Enterprise
             </h1>
             <p className="text-emerald-200 text-sm font-medium">
-              بوابة الدخول الموحدة
+              بوابة التشغيل الموحدة
             </p>
           </div>
 
@@ -154,7 +154,7 @@ const EnterpriseLoading: React.FC<EnterpriseLoadingProps> = ({
               <div className="flex items-center justify-center gap-2">
                 <Shield size={16} className="text-emerald-600" />
                 <span className="text-xs font-bold text-emerald-700">
-                  محمي بواسة FeedFactory IAM Security
+                  محمي بواسطة FeedFactory IAM Security
                 </span>
               </div>
             </div>
@@ -166,7 +166,7 @@ const EnterpriseLoading: React.FC<EnterpriseLoadingProps> = ({
 &copy; 2026 FeedFactory Pro Enterprise
             </p>
             <p className="text-xs text-slate-400 mt-1">
-              إصدار النام: v2.0.0
+              إصدار النظام: v2.0.0
             </p>
           </div>
         </div>

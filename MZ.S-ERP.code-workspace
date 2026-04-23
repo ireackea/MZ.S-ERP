@@ -4,5 +4,7 @@
 			"path": "."
 		}
 	],
-	"settings": {}
+	"settings": {
+		"workbench.browser.dataStorage": "workspace"
+	}
 }

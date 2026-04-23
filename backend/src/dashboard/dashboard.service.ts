@@ -9,6 +9,36 @@ import { PrismaService } from '../prisma.service';
 export class DashboardService {
   constructor(private prisma: PrismaService) {}
 
+  private normalizeType(type: string): string {
+    return String(type || '').trim().toLowerCase();
+  }
+
+  private describeAction(type: string): string {
+    const normalized = this.normalizeType(type);
+
+    if (['مرتجع', 'return', 'returned', 'إرجاع', 'ارجاع'].some((value) => normalized.includes(value))) {
+      return 'حركة مرتجع';
+    }
+
+    if (['وارد', 'in', 'incoming', 'import', 'purchase'].some((value) => normalized.includes(value))) {
+      return 'حركة واردة';
+    }
+
+    if (['صادر', 'out', 'outgoing', 'export', 'sale', 'صرف', 'تحويل_صادر'].some((value) => normalized.includes(value))) {
+      return 'حركة صادرة';
+    }
+
+    if (['انتاج', 'إنتاج', 'production', 'تصنيع'].some((value) => normalized.includes(value))) {
+      return 'حركة انتاج';
+    }
+
+    if (['هالك', 'تالف', 'waste', 'damaged'].some((value) => normalized.includes(value))) {
+      return 'حركة هالك';
+    }
+
+    return 'حركة مخزنية';
+  }
+
   async getDashboardStats() {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -37,7 +67,7 @@ export class DashboardService {
       recentActivity: recentActivity.map(t => ({
         id: t.publicId || String(t.id),
         date: t.date.toISOString(),
-        action: t.type === 'IN' ? 'حركة واردة' : 'حركة صادرة',
+        action: this.describeAction(t.type),
         user: 'مستخدم النظام',
         amount: t.supplierNet ? Number(t.supplierNet) : undefined,
         item: t.item?.name || 'صنف غير معروف'

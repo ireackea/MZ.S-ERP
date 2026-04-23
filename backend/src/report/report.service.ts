@@ -22,6 +22,8 @@ export class ReportService {
       lowerType.includes('وارد') ||
       lowerType.includes('ادخال') ||
       lowerType.includes('إدخال') ||
+      lowerType.includes('مرتجع') ||
+      lowerType.includes('return') ||
       lowerType.includes('انتاج') ||
       lowerType.includes('إنتاج')
     );
@@ -36,7 +38,12 @@ export class ReportService {
       lowerType.includes('sale') ||
       lowerType.includes('export') ||
       lowerType.includes('صادر') ||
-      lowerType.includes('خروج')
+      lowerType.includes('صرف') ||
+      lowerType.includes('خروج') ||
+      lowerType.includes('هالك') ||
+      lowerType.includes('تالف') ||
+      lowerType.includes('waste') ||
+      lowerType.includes('damaged')
     );
   }
 

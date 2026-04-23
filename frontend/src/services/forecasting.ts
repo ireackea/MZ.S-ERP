@@ -1,6 +1,7 @@
 
 import { Item, Transaction } from '../types';
 import { differenceInDays, addDays, format } from 'date-fns';
+import { canonicalizeOperationType } from '../utils/operationTypes';
 
 export interface ForecastResult {
   itemId: string;
@@ -21,7 +22,8 @@ export const generateForecast = (items: Item[], transactions: Transaction[], loo
   
   transactions.forEach(t => {
     // Only consider OUT operations (Sales, Production, Export)
-    if (t.type === 'صادر' || t.type === 'إنتاج') {
+        const operationType = canonicalizeOperationType(t.type);
+        if (operationType === 'صادر' || operationType === 'انتاج') {
         const txDate = new Date(t.date);
         const diff = differenceInDays(today, txDate);
         

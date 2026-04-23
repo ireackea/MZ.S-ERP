@@ -1,4 +1,5 @@
 import apiClient from '@api/client';
+import type { UnloadingRule } from '../types';
 
 export type AppBootstrapSession = {
   id: string;
@@ -23,6 +24,7 @@ export type AppBootstrapPayload = {
     categories: string[];
     units: string[];
   };
+  unloadingRules: UnloadingRule[];
   startupFlags: {
     hasItems: boolean;
     hasTransactions: boolean;

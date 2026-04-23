@@ -21,9 +21,16 @@ import {
   getOpeningBalances as getOpeningBalancesFromApi,
 } from '@services/openingBalanceService';
 import { getTransactionsFromApi } from '@services/transactionsService';
+import {
+  createUnloadingRuleInApi,
+  deleteUnloadingRulesInApi,
+  fetchUnloadingRules,
+  updateUnloadingRuleInApi,
+} from '@services/unloadingRulesService';
 import { fetchRoles, fetchUsers, type RoleDto, type UserDto } from '@services/usersService';
 import apiClient from '@api/client';
 import { normalizeUsers } from '../services/iamService';
+import { isInboundOperationType, isOutboundOperationType } from '../utils/operationTypes';
 import type {
   Formula,
   GridColumnPreference,
@@ -33,6 +40,7 @@ import type {
   RoleDefinition,
   SystemSettings,
   Transaction,
+  UnloadingRuleDraft,
   UnloadingRule,
   User,
 } from '../types';
@@ -48,7 +56,7 @@ type OpeningBalanceRow = { itemId: string; quantity: number };
 type GridDisplayPolicy = { forceUnified: boolean };
 type GridPreferenceMap = Record<string, GridColumnPreference[]>;
 type GridDisplayPolicyMap = Record<string, GridDisplayPolicy>;
-type SyncTarget = 'all' | 'items' | 'transactions' | 'openingBalances' | 'users' | 'formulas';
+type SyncTarget = 'all' | 'items' | 'transactions' | 'openingBalances' | 'users' | 'formulas' | 'unloadingRules';
 type LoaderOptions = { force?: boolean; staleMs?: number };
 type ExportSheet = {
   name: string;
@@ -96,6 +104,7 @@ type Store = {
   inventoryCoreLoadedAt: number | null;
   transactionsLoadedAt: number | null;
   usersAndRolesLoadedAt: number | null;
+  unloadingRulesLoadedAt: number | null;
   formulasLoadedAt: number | null;
   soft: SoftMap;
   sortMode: ItemSortMode;
@@ -107,6 +116,7 @@ type Store = {
   loadUsersAndRoles: (options?: LoaderOptions) => Promise<void>;
   loadOpeningBalances: (financialYear?: number) => Promise<void>;
   loadFormulas: () => Promise<void>;
+  loadUnloadingRules: (options?: LoaderOptions) => Promise<void>;
   syncFromServer: (target?: SyncTarget) => Promise<void>;
   setTransactions: (transactions: Transaction[]) => void;
   setOpeningBalances: (financialYear: number, rows: OpeningBalanceRow[]) => void;
@@ -118,6 +128,9 @@ type Store = {
   setReportConfig: (config: ReportColumnConfig[]) => void;
   setOpeningBalanceReportConfig: (config: ReportColumnConfig[]) => void;
   setFormulas: (formulas: Formula[]) => void;
+  createUnloadingRule: (rule: UnloadingRuleDraft) => Promise<UnloadingRule>;
+  updateUnloadingRule: (rule: UnloadingRule) => Promise<UnloadingRule>;
+  deleteUnloadingRule: (id: string) => Promise<void>;
   createFormula: (formula: Formula) => Promise<Formula>;
   updateFormula: (formula: Formula) => Promise<Formula>;
   deleteFormula: (id: string) => Promise<void>;
@@ -186,15 +199,10 @@ const uniqueStrings = (values: string[]) => {
 // ENTERPRISE FIX: Phase 0 - Fatal Errors Fixed - Blueprint Compliant - 2026-03-02
 const cmp = (a: unknown, b: unknown) => String(a || '').localeCompare(String(b || ''), 'ar-EG', { numeric: true, sensitivity: 'base' });
 
-const inboundKeywords = ['in', 'purchase', 'incoming', 'import', 'production', 'وارد', 'شراء', 'إنتاج', 'دخول'];
-const outboundKeywords = ['out', 'sale', 'outgoing', 'export', 'consumption', 'صادر', 'صرف', 'بيع', 'استهلاك', 'تالف'];
-
 const toDelta = (type: string, quantity: number): number => {
   if (!Number.isFinite(quantity)) return 0;
-  const normalized = String(type).trim().toLowerCase();
-
-  if (inboundKeywords.some((keyword) => normalized.includes(keyword))) return Math.abs(quantity);
-  if (outboundKeywords.some((keyword) => normalized.includes(keyword))) return -Math.abs(quantity);
+  if (isInboundOperationType(type)) return Math.abs(quantity);
+  if (isOutboundOperationType(type)) return -Math.abs(quantity);
 
   return 0;
 };
@@ -258,6 +266,33 @@ const deriveReferenceData = (items: Item[], categories: string[], units: string[
   categories: uniqueStrings([...categories, ...items.map((item) => item.category)]),
   units: uniqueStrings([...units, ...items.map((item) => item.unit)]),
 });
+
+const normalizeUnloadingRule = (rule: Partial<UnloadingRule>): UnloadingRule => ({
+  id: String(rule.id || ''),
+  rule_name: String(rule.rule_name ?? rule.name ?? '').trim(),
+  allowed_duration_minutes: n(rule.allowed_duration_minutes ?? rule.durationMinutes ?? rule.unloading_duration_minutes, 0),
+  penalty_rate_per_minute: n(rule.penalty_rate_per_minute ?? rule.delayPenaltyPerMinute, 0),
+  is_active: rule.is_active ?? true,
+  createdAt: rule.createdAt,
+  updatedAt: rule.updatedAt,
+});
+
+const normalizeUnloadingRulesCollection = (rules: UnloadingRule[]) => {
+  const normalized = rules
+    .map((rule) => normalizeUnloadingRule(rule))
+    .filter((rule) => rule.id && rule.rule_name);
+
+  const unique = new Map<string, UnloadingRule>();
+  normalized.forEach((rule) => {
+    unique.set(rule.id, rule);
+  });
+
+  return [...unique.values()].sort((left, right) => {
+    const activeDelta = Number(Boolean(right.is_active)) - Number(Boolean(left.is_active));
+    if (activeDelta !== 0) return activeDelta;
+    return cmp(left.rule_name || '', right.rule_name || '') || cmp(left.id, right.id);
+  });
+};
 
 const normalizeCollections = (items: Item[], mode: ItemSortMode, manualOrder: string[], categories: string[], units: string[]) => {
   const nextManualOrder = normOrder(items, manualOrder);
@@ -551,6 +586,7 @@ export const useInventoryStore = create<Store>()(
       inventoryCoreLoadedAt: null,
       transactionsLoadedAt: null,
       usersAndRolesLoadedAt: null,
+      unloadingRulesLoadedAt: null,
       formulasLoadedAt: null,
       soft: {},
       sortMode: initialSort.mode,
@@ -705,6 +741,28 @@ export const useInventoryStore = create<Store>()(
         }
       },
 
+      loadUnloadingRules: async (options) => {
+        const current = get();
+        if (!shouldReload(current.unloadingRulesLoadedAt, options)) {
+          return;
+        }
+
+        set({ syncing: true, error: null });
+        try {
+          const unloadingRules = await fetchUnloadingRules();
+          const loadedAt = Date.now();
+          set({
+            unloadingRules: normalizeUnloadingRulesCollection(unloadingRules),
+            syncing: false,
+            unloadingRulesLoadedAt: loadedAt,
+            lastLoadedAt: loadedAt,
+          });
+        } catch (error: any) {
+          set({ syncing: false, error: error?.message || 'تعذر تحميل قواعد التفريغ من الخادم.' });
+          throw error;
+        }
+      },
+
       syncFromServer: async (target = 'all') => {
         set({ syncing: true, error: null });
 
@@ -715,14 +773,16 @@ export const useInventoryStore = create<Store>()(
         const shouldLoadUsers = target === 'all' || target === 'users';
         const shouldLoadRoles = target === 'all' || target === 'users';
         const shouldLoadFormulas = target === 'all' || target === 'formulas';
+        const shouldLoadUnloadingRules = target === 'all' || target === 'unloadingRules';
 
-        const [itemsResult, transactionsResult, openingBalancesResult, usersResult, rolesResult, formulasResult] = await Promise.allSettled([
+        const [itemsResult, transactionsResult, openingBalancesResult, usersResult, rolesResult, formulasResult, unloadingRulesResult] = await Promise.allSettled([
           shouldLoadItems ? syncItemsFromServer() : Promise.resolve(null),
           shouldLoadTransactions ? syncTransactionsFromServer() : Promise.resolve(null),
           shouldLoadOpeningBalances ? syncOpeningBalancesFromServer(openingBalanceYear) : Promise.resolve(null),
           shouldLoadUsers ? syncUsersFromServer() : Promise.resolve(null),
           shouldLoadRoles ? syncRolesFromServer() : Promise.resolve(null),
           shouldLoadFormulas ? syncFormulasFromServer() : Promise.resolve(null),
+          shouldLoadUnloadingRules ? fetchUnloadingRules() : Promise.resolve(null),
         ]);
 
         const current = get();
@@ -747,6 +807,9 @@ export const useInventoryStore = create<Store>()(
         const nextFormulas = shouldLoadFormulas && formulasResult.status === 'fulfilled' && Array.isArray(formulasResult.value)
           ? formulasResult.value
           : current.formulas;
+        const nextUnloadingRules = shouldLoadUnloadingRules && unloadingRulesResult.status === 'fulfilled' && Array.isArray(unloadingRulesResult.value)
+          ? normalizeUnloadingRulesCollection(unloadingRulesResult.value)
+          : current.unloadingRules;
 
         const normalized = normalizeCollections(nextItems, current.sortMode, current.manualOrder, current.categories, current.units);
         const failures = [
@@ -756,6 +819,7 @@ export const useInventoryStore = create<Store>()(
           shouldLoadUsers ? usersResult : null,
           shouldLoadRoles ? rolesResult : null,
           shouldLoadFormulas ? formulasResult : null,
+          shouldLoadUnloadingRules ? unloadingRulesResult : null,
         ].filter((result): result is PromiseRejectedResult | PromiseFulfilledResult<unknown> => result !== null)
           .filter((result) => result.status === 'rejected');
 
@@ -771,6 +835,7 @@ export const useInventoryStore = create<Store>()(
             : current.openingBalancesError,
           users: nextUsers,
           roles: nextRoles,
+          unloadingRules: nextUnloadingRules,
           formulas: nextFormulas,
           categories: normalized.categories,
           units: normalized.units,
@@ -783,6 +848,7 @@ export const useInventoryStore = create<Store>()(
           usersAndRolesLoadedAt: (shouldLoadUsers || shouldLoadRoles) && usersResult.status === 'fulfilled' && rolesResult.status === 'fulfilled'
             ? Date.now()
             : current.usersAndRolesLoadedAt,
+          unloadingRulesLoadedAt: shouldLoadUnloadingRules && unloadingRulesResult.status === 'fulfilled' ? Date.now() : current.unloadingRulesLoadedAt,
           formulasLoadedAt: shouldLoadFormulas && formulasResult.status === 'fulfilled' ? Date.now() : current.formulasLoadedAt,
         });
       },
@@ -851,7 +917,7 @@ export const useInventoryStore = create<Store>()(
       },
 
       setUnloadingRules: (rules) => {
-        set({ unloadingRules: [...rules] });
+        set({ unloadingRules: normalizeUnloadingRulesCollection(rules) });
       },
 
       setReportConfig: (config) => {
@@ -864,6 +930,41 @@ export const useInventoryStore = create<Store>()(
 
       setFormulas: (formulas) => {
         set({ formulas: [...formulas] });
+      },
+
+      createUnloadingRule: async (rule) => {
+        const saved = normalizeUnloadingRule(await createUnloadingRuleInApi(rule));
+        set((state) => ({
+          unloadingRules: normalizeUnloadingRulesCollection([saved, ...state.unloadingRules]),
+          unloadingRulesLoadedAt: Date.now(),
+        }));
+        return saved;
+      },
+
+      updateUnloadingRule: async (rule) => {
+        const saved = normalizeUnloadingRule(
+          await updateUnloadingRuleInApi(String(rule.id), {
+            rule_name: String(rule.rule_name || ''),
+            allowed_duration_minutes: n(rule.allowed_duration_minutes, 0),
+            penalty_rate_per_minute: n(rule.penalty_rate_per_minute, 0),
+            is_active: rule.is_active ?? true,
+          })
+        );
+        set((state) => ({
+          unloadingRules: normalizeUnloadingRulesCollection(
+            state.unloadingRules.map((entry) => (String(entry.id) === String(saved.id) ? saved : entry))
+          ),
+          unloadingRulesLoadedAt: Date.now(),
+        }));
+        return saved;
+      },
+
+      deleteUnloadingRule: async (id) => {
+        await deleteUnloadingRulesInApi([String(id)]);
+        set((state) => ({
+          unloadingRules: state.unloadingRules.filter((entry) => String(entry.id) !== String(id)),
+          unloadingRulesLoadedAt: Date.now(),
+        }));
       },
 
       createFormula: async (formula) => {

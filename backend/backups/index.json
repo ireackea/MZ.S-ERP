@@ -1,5 +1,53 @@
 [
   {
+    "id": "e0191de8-7489-4eda-b251-f09499830bbb",
+    "fileName": "full_2026-04-23T00-00-24-958Z_e0191de8.ffbkp",
+    "type": "full",
+    "trigger": "scheduled",
+    "createdAt": "2026-04-23T00:00:24.956Z",
+    "sizeBytes": 1078908,
+    "checksumSha256": "1b44949836f59b9eb1025586e881668e53d49f2df89f3b1ef23b2d0c1ef90524",
+    "integrity": "verified",
+    "passwordProtected": false,
+    "actor": {
+      "type": "system",
+      "mode": "scheduled",
+      "username": "scheduler"
+    },
+    "metadata": {
+      "users": 4,
+      "items": 90,
+      "openingBalances": 0,
+      "transactions": 0,
+      "configFiles": 0
+    },
+    "safetySnapshotForId": null
+  },
+  {
+    "id": "e598e945-5f73-4a01-ac86-ee74d79a54b7",
+    "fileName": "full_2026-04-22T00-00-19-892Z_e598e945.ffbkp",
+    "type": "full",
+    "trigger": "scheduled",
+    "createdAt": "2026-04-22T00:00:19.891Z",
+    "sizeBytes": 1078914,
+    "checksumSha256": "67068de103e4d7d5619f677b71900034c8f775caceb604107f6375841a59c80a",
+    "integrity": "verified",
+    "passwordProtected": false,
+    "actor": {
+      "type": "system",
+      "mode": "scheduled",
+      "username": "scheduler"
+    },
+    "metadata": {
+      "users": 4,
+      "items": 90,
+      "openingBalances": 0,
+      "transactions": 341,
+      "configFiles": 0
+    },
+    "safetySnapshotForId": null
+  },
+  {
     "id": "74b12a41-9d6a-44e7-a423-558d4e6d0026",
     "fileName": "full_2026-04-21T00-00-04-801Z_74b12a41.ffbkp",
     "type": "full",

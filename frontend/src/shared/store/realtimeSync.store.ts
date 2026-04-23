@@ -1,7 +1,7 @@
 // ENTERPRISE FIX: Legacy Migration Phase 5 - Final Stabilization & Production - 2026-02-27
 import { create } from 'zustand';
 
-export type RealtimeScope = 'dashboard' | 'items' | 'operations' | 'transactions' | 'formulation' | 'stocktaking';
+export type RealtimeScope = 'dashboard' | 'items' | 'operations' | 'transactions' | 'formulation' | 'stocktaking' | 'settings';
 
 export type RealtimeSyncEvent = {
   scopes?: RealtimeScope[];
@@ -30,9 +30,10 @@ const defaultScopes = (): ScopeVersions => ({
   transactions: 0,
   formulation: 0,
   stocktaking: 0,
+  settings: 0,
 });
 
-const SCOPES: RealtimeScope[] = ['dashboard', 'items', 'operations', 'transactions', 'formulation', 'stocktaking'];
+const SCOPES: RealtimeScope[] = ['dashboard', 'items', 'operations', 'transactions', 'formulation', 'stocktaking', 'settings'];
 
 export const useRealtimeSyncStore = create<RealtimeSyncStore>((set) => ({
   isConnected: false,

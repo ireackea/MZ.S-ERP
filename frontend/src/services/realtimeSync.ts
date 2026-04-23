@@ -5,9 +5,35 @@ import { useRealtimeSyncStore, type RealtimeSyncEvent } from '@/shared/store/rea
 
 let socket: Socket | null = null;
 
+type AppBuildInfo = {
+  backendOrigin?: string;
+};
+
+const readConfiguredBackendOrigin = () => {
+  const buildInfo = (globalThis as typeof globalThis & { __APP_BUILD_INFO__?: AppBuildInfo }).__APP_BUILD_INFO__;
+  const backendOrigin = String(buildInfo?.backendOrigin || '').trim();
+  return backendOrigin.replace(/\/+$/, '');
+};
+
+const toOrigin = (value: string) => {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return '';
+  }
+};
+
 const getRealtimeBaseUrl = () => {
   const configured = String((import.meta as any)?.env?.VITE_REALTIME_URL || '').trim();
-  if (configured) return configured;
+  if (configured) return configured.replace(/\/+$/, '');
+
+  const apiUrl = String((import.meta as any)?.env?.VITE_API_URL || '').trim();
+  const apiOrigin = toOrigin(apiUrl);
+  if (apiOrigin) return apiOrigin;
+
+  const backendOrigin = readConfiguredBackendOrigin();
+  if (backendOrigin) return backendOrigin;
+
   if (typeof window !== 'undefined') return window.location.origin;
   return 'http://localhost:5173';
 };

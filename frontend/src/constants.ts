@@ -1,4 +1,5 @@
 import { CategoryType, Item, UnitType, OperationType } from './types';
+import { SYSTEM_OPERATION_TYPES } from './utils/operationTypes';
 
 export const CATEGORIES: CategoryType[] = [
   'المركزات',
@@ -19,10 +20,7 @@ export const UNITS: UnitType[] = [
 ];
 
 export const OPERATION_TYPES: OperationType[] = [
-  'وارد',
-  'صادر',
-  'تالف',
-  'تحويل_صادر',
+  ...SYSTEM_OPERATION_TYPES,
 ];
 
 export const INITIAL_ITEMS: Item[] = [
