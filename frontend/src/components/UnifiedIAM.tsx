@@ -3,7 +3,7 @@
 
 // ENTERPRISE FIX: Phase 2 - Multi-User Sync - Final Completion Pass - 2026-03-02
 // UTF-8 Encoding Fixed - Arabic Text Restored
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users,
@@ -39,7 +39,17 @@ import {
   type UserDto,
   type RoleDto,
   type UserAuditDto,
+  type UsersStatusFilter,
 } from '@services/usersService';
+import UnifiedIamRoleModal from './unified-iam/RoleModal';
+import {
+  INITIAL_CREATE_FORM,
+  getErrorMessage,
+  normalizeStatusFilter,
+  type CreateUserFormState,
+} from './unified-iam/shared';
+
+type UpdateUserPayload = Parameters<typeof updateUser>[1];
 
 const UnifiedIAM: React.FC = () => {
   const [users, setUsers] = useState<UserDto[]>([]);
@@ -50,7 +60,7 @@ const UnifiedIAM: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'active' | 'locked' | ''>('');
+  const [statusFilter, setStatusFilter] = useState<UsersStatusFilter | ''>('');
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [bulkRoleId, setBulkRoleId] = useState('');
 
@@ -66,14 +76,7 @@ const UnifiedIAM: React.FC = () => {
   const [auditUserId, setAuditUserId] = useState('');
   const [auditRows, setAuditRows] = useState<UserAuditDto[]>([]);
 
-  const [createForm, setCreateForm] = useState({
-    username: '',
-    email: '',
-    password: '',
-    firstName: '',
-    lastName: '',
-    roleId: '',
-  });
+  const [createForm, setCreateForm] = useState<CreateUserFormState>(INITIAL_CREATE_FORM);
 
   const selectedIds = useMemo(() => Object.keys(selected).filter((id) => selected[id]), [selected]);
   const pageCount = Math.max(1, Math.ceil(total / limit));
@@ -85,8 +88,8 @@ const UnifiedIAM: React.FC = () => {
       if (!bulkRoleId && data[0]) setBulkRoleId(data[0].id);
       if (!selectedRoleId && data[0]) setSelectedRoleId(data[0].id);
       if (!createForm.roleId && data[0]) setCreateForm((prev) => ({ ...prev, roleId: data[0].id }));
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'فشل تحميل الأدوار');
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, 'فشل تحميل الأدوار'));
     }
   };
 
@@ -105,18 +108,26 @@ const UnifiedIAM: React.FC = () => {
       setTotal(response.total);
       setPage(response.page);
       if (!auditUserId && response.data[0]) setAuditUserId(response.data[0].id);
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'فشل تحميل المستخدمين');
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, 'فشل تحميل المستخدمين'));
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    void Promise.all([loadRoles(), loadUsers(false)]);
-  }, []);
+  // لماذا: نستخدم ref بدلاً من effect منفصل لتجنب الطلب المزدوج عند mount.
+  // React يُشغّل useEffect بعد كل render حيث تغيّرت dependencies — لكن عند mount
+  // يُشغّله دائمًا حتى لو القيم لم تتغيّر. وجود effect أول لـ [] وثانٍ لـ [search,...]
+  // كان يُنتج استدعاءَين لـ loadUsers في أول render: مصدر 2 req/mount.
+  // الحل: حذف الـ effect الأول والسماح للثاني بالعمل وحده. loadRoles تُستدعى عند
+  // mount عبر الـ ref guard مرة واحدة.
+  const mountedRef = useRef(false);
 
   useEffect(() => {
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      void loadRoles();
+    }
     void loadUsers(false);
   }, [search, roleFilter, statusFilter, limit]);
 
@@ -131,11 +142,10 @@ const UnifiedIAM: React.FC = () => {
     if (!auditUserId) return;
     void fetchUserAudit(auditUserId)
       .then(setAuditRows)
-      .catch((error: any) => toast.error(error?.response?.data?.message || 'فشل تحميل سجل التدقيق'));
+      .catch((error: unknown) => toast.error(getErrorMessage(error, 'فشل تحميل سجل التدقيق')));
   }, [auditUserId]);
 
-  const handleCreateRole = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreateRole = async () => {
     if (!newRoleName.trim()) {
       toast.error('يرجى إدخال اسم الدور');
       return;
@@ -146,8 +156,8 @@ const UnifiedIAM: React.FC = () => {
       setShowRoleModal(false);
       setNewRoleName('');
       void loadRoles();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'فشل إنشاء الدور');
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, 'فشل إنشاء الدور'));
     }
   };
 
@@ -167,20 +177,20 @@ const UnifiedIAM: React.FC = () => {
         roleId: createForm.roleId || undefined,
       });
       toast.success('تم إنشاء المستخدم بنجاح');
-      setCreateForm({ username: '', email: '', password: '', firstName: '', lastName: '', roleId: roles[0]?.id || '' });
+      setCreateForm({ ...INITIAL_CREATE_FORM, roleId: roles[0]?.id || '' });
       void loadUsers(true);
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'فشل إنشاء المستخدم');
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, 'فشل إنشاء المستخدم'));
     }
   };
 
-  const handleUpdateUser = async (id: string, payload: any) => {
+  const handleUpdateUser = async (id: string, payload: UpdateUserPayload) => {
     try {
       await updateUser(id, payload);
       toast.success('تم تحديث المستخدم');
       void loadUsers(true);
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'فشل تحديث المستخدم');
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, 'فشل تحديث المستخدم'));
     }
   };
 
@@ -190,8 +200,8 @@ const UnifiedIAM: React.FC = () => {
       await deleteUser(id);
       toast.success('تم حذف المستخدم');
       void loadUsers(true);
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'فشل حذف المستخدم');
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, 'فشل حذف المستخدم'));
     }
   };
 
@@ -200,8 +210,8 @@ const UnifiedIAM: React.FC = () => {
       await lockUser(id, { locked, durationMinutes: 24 * 60, reason: 'إجراء إداري' });
       toast.success(locked ? 'تم قفل المستخدم' : 'تم فتح المستخدم');
       void loadUsers(true);
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'فشل في حالة القفل');
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, 'فشل في حالة القفل'));
     }
   };
 
@@ -212,8 +222,8 @@ const UnifiedIAM: React.FC = () => {
       toast.success(`تم تعيين الدور لـ ${result.updated} مستخدمين`);
       setSelected({});
       void loadUsers(true);
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'فشل تعيين الدور');
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, 'فشل تعيين الدور'));
     }
   };
 
@@ -225,8 +235,8 @@ const UnifiedIAM: React.FC = () => {
       toast.success(`تم حذف ${result.deleted} مستخدمين`);
       setSelected({});
       void loadUsers(true);
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'فشل في الحذف الجماعي');
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, 'فشل في الحذف الجماعي'));
     }
   };
 
@@ -236,8 +246,8 @@ const UnifiedIAM: React.FC = () => {
       await updateRolePermissions(selectedRoleId, { permissions: [...new Set(matrix)].sort() });
       toast.success('تم حفظ مصفوفة الصلاحيات');
       void loadRoles();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'فشل حفظ الصلاحيات');
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, 'فشل حفظ الصلاحيات'));
     }
   };
 
@@ -432,7 +442,7 @@ const UnifiedIAM: React.FC = () => {
                 </select>
                 <select
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as any)}
+                  onChange={(e) => setStatusFilter(normalizeStatusFilter(e.target.value))}
                   className="rounded-xl border border-slate-200 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 >
                   <option value="">كل الحالات</option>
@@ -733,61 +743,17 @@ const UnifiedIAM: React.FC = () => {
           </motion.div>
         )}
       </motion.div>
-
-      {/* ENTERPRISE FIX: Custom Roles Modal - 2026-03-02 */}
-      {showRoleModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-              <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                <Shield className="w-5 h-5 text-emerald-600" />
-                إنشاء دور صلاحيات جديد
-              </h3>
-              <button onClick={() => setShowRoleModal(false)} className="text-slate-400 hover:text-slate-600">
-                <Unlock className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">اسم الدور</label>
-                <input
-                  value={newRoleName}
-                  onChange={(e) => setNewRoleName(e.target.value)}
-                  placeholder="مثال: مشرف مبيعات"
-                  className="w-full rounded-xl border border-slate-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">لون الشارة</label>
-                <div className="flex gap-2">
-                  {['#64748b', '#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#6366f1', '#8b5cf6', '#d946ef'].map(color => (
-                    <button
-                      key={color}
-                      onClick={() => setNewRoleColor(color)}
-                      className={`w-8 h-8 rounded-full border-2 ${newRoleColor === color ? 'border-slate-800 scale-110 shadow-md' : 'border-transparent'}`}
-                      style={{ backgroundColor: color }}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
-              <button
-                onClick={() => setShowRoleModal(false)}
-                className="px-6 py-2 rounded-xl text-slate-600 font-bold hover:bg-slate-200 transition"
-              >
-                إلغاء
-              </button>
-              <button
-                onClick={handleCreateRole}
-                className="px-6 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-md flex items-center gap-2"
-              >
-                <Save className="w-4 h-4" /> حفظ الدور
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <UnifiedIamRoleModal
+        open={showRoleModal}
+        roleName={newRoleName}
+        roleColor={newRoleColor}
+        onRoleNameChange={setNewRoleName}
+        onRoleColorChange={setNewRoleColor}
+        onClose={() => setShowRoleModal(false)}
+        onSave={() => {
+          void handleCreateRole();
+        }}
+      />
     </div>
   );
 };

@@ -4,6 +4,7 @@
 import React, { useMemo, useState } from 'react';
 import { AlertCircle, AlertTriangle, DollarSign, Package, Printer, RefreshCw, TrendingUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { getInventoryStatus } from '@services/inventoryStatus';
 import { toast } from '@services/toastService';
 import { useSession } from '@hooks/useSession';
 import { useInventoryStore } from '../store/useInventoryStore';
@@ -36,7 +37,11 @@ const DashboardPage: React.FC = () => {
   const stats = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
     const todayTransactions = transactions.filter((transaction) => String(transaction.date || '').slice(0, 10) === today);
-    const lowStockItems = items.filter((item) => Number(item.currentStock || 0) <= Number(item.minLimit || 0));
+    const lowStockItems = items.filter((item) => getInventoryStatus({
+      balance: Number(item.currentStock || 0),
+      minLimit: Number(item.minLimit || 0),
+      orderLimit: item.orderLimit == null ? undefined : Number(item.orderLimit || 0),
+    }).requiresAttention);
     const recentActivity = [...transactions]
       .sort((left, right) => Number(right.timestamp || 0) - Number(left.timestamp || 0))
       .slice(0, 5)

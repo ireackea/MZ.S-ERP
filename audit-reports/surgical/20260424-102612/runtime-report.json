@@ -1,0 +1,59 @@
+{
+  "stage": "runtime",
+  "generatedAt": "2026-04-24T08:37:18.979Z",
+  "backendBaseUrl": "http://localhost:33517",
+  "allowedOrigin": "http://localhost:34313",
+  "checks": [
+    {
+      "name": "health-endpoint",
+      "ok": true,
+      "status": 200,
+      "payloadStatus": "healthy"
+    },
+    {
+      "name": "metrics-auth-without-token",
+      "ok": true,
+      "status": 401
+    },
+    {
+      "name": "metrics-auth-with-token",
+      "ok": true,
+      "status": 200
+    },
+    {
+      "name": "cors-allowed-origin",
+      "ok": true,
+      "header": "http://localhost:34313"
+    },
+    {
+      "name": "cors-denied-origin",
+      "ok": true,
+      "header": "",
+      "status": 500
+    },
+    {
+      "name": "protected-endpoint-without-session",
+      "ok": true,
+      "status": 401
+    },
+    {
+      "name": "auth-cookie-flags",
+      "ok": true,
+      "status": 201,
+      "cookie": "feed_factory_jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0ODYyZWMyYy01NmQyLTQ4YjItYjQ5ZS00Njg1M2Q3M2UwZWQiLCJ1c2VybmFtZSI6InN1cGVyYWRtaW4iLCJyb2xlIjoiU3VwZXJBZG1pbiIsInBlcm1pc3Npb25zIjpbIioiXSwibmFtZSI6IlN5c3RlbSBTdXBlckFkbWluIiwic2lkIjoiYWIzNTNiNTgtNGM1MC00MDRlLWE5NGYtYmY2ZmQ4NGQyMWJhIiwiaWF0IjoxNzc3MDE5ODM3LCJleHAiOjE3NzcxMDYyMzd9.Qi59P9XddpZO2JaAbPh8OxsPuDggyI_3uSVy8GDMl9g; Max-Age=86400; Path=/; Expires=Sat, 25 Apr 2026 08:37:18 GMT; HttpOnly; SameSite=Strict"
+    },
+    {
+      "name": "socket-rejects-anonymous-connection",
+      "ok": true,
+      "connected": false,
+      "error": "Unauthorized"
+    },
+    {
+      "name": "socket-rejects-disallowed-origin",
+      "ok": true,
+      "connected": false,
+      "error": "websocket error"
+    }
+  ],
+  "findings": []
+}

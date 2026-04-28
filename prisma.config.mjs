@@ -1,8 +1,12 @@
-const { PrismaPg } = require('@prisma/adapter-pg');
+import 'dotenv/config';
+import { defineConfig } from 'prisma/config';
 
-const config = {
-  url: 'file:./backend/prisma/dev.db',
-  adapter: new PrismaPg({ connectionString: 'file:./backend/prisma/dev.db' }),
-};
-
-export default config;
+export default defineConfig({
+  schema: 'backend/prisma/schema.prisma',
+  migrations: {
+    path: 'backend/prisma/migrations',
+  },
+  datasource: {
+    url: process.env.DATABASE_URL,
+  },
+});

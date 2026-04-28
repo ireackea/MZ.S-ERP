@@ -12,6 +12,7 @@ import {
   UserRole,
   UserSession,
 } from '../types';
+import { hasGrantedPermission } from './permissionAliases';
 
 const IAM_CONFIG_KEY = 'feed_factory_iam_config';
 const USER_ACTIVITY_LOG_KEY = 'feed_factory_user_activity_logs';
@@ -252,16 +253,16 @@ export function hasPermission(user: User | undefined, permissionId: string): boo
     return true;
   }
 
-  if (directPermissions.includes('*') || directPermissions.includes(permissionId)) {
+  if (directPermissions.includes('*')) {
     return true;
   }
 
-  if (directPermissions.some((granted) => granted.endsWith('.*') && (permissionId === granted.slice(0, -2) || permissionId.startsWith(`${granted.slice(0, -2)}.`)))) {
+  if (hasGrantedPermission(directPermissions, permissionId)) {
     return true;
   }
 
   const role = getUserRole(normalizedUser);
-  return Boolean(role?.permissionIds.includes(permissionId));
+  return hasGrantedPermission(role?.permissionIds || [], permissionId);
 }
 
 export function getScopeWhereClause(user: User | undefined, columnName = 'warehouse_id'): string {

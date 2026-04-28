@@ -32,6 +32,11 @@ function normalizeDecimalString(value) {
   return raw.replace(/(\.\d*?[1-9])0+$/u, '$1').replace(/\.0+$/u, '');
 }
 
+function ensureApiBase(rawBase) {
+  const normalizedBase = String(rawBase || 'http://localhost:3001').trim().replace(/\/+$/u, '');
+  return /\/api$/iu.test(normalizedBase) ? normalizedBase : `${normalizedBase}/api`;
+}
+
 const results = [];
 const pushResult = (name, ok, details) => {
   results.push({ name, ok, details });
@@ -82,7 +87,7 @@ async function run() {
   loadEnvFile(path.join(root, '.env'));
   loadEnvFile(path.join(root, '.env.local'));
 
-  const apiBase = process.env.VITE_API_URL || process.env.API_URL || 'http://localhost:3001';
+  const apiBase = ensureApiBase(process.env.VITE_API_URL || process.env.API_URL || 'http://localhost:3001');
   const adminToken = process.env.ADMIN_TOKEN || process.env.BACKUP_API_TOKEN || process.env.VITE_BACKUP_API_TOKEN || '';
   const authUsername = process.env.VALIDATION_AUTH_USER || process.env.ADMIN_USERNAME || 'superadmin';
   const authPassword = process.env.VALIDATION_AUTH_PASSWORD || process.env.ADMIN_PASSWORD || 'SecurePassword2026!';

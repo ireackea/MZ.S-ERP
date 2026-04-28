@@ -3,6 +3,7 @@
 // ENTERPRISE FIX: Server-First Sync + Optimistic UI - 2026-02-28
 import apiClient from '@api/client';
 import { createExcelWorkbook } from '../utils/exceljs';
+import { readFirstWorksheetRows } from '../utils/excelWorkbook';
 
 export interface ItemDto {
   id: number;
@@ -226,8 +227,10 @@ export interface ExcelImportRow {
   name: string;
   code?: string;
   barcode?: string;
+  englishName?: string;
   category?: string;
   unit?: string;
+  packageWeight?: number;
   minLimit?: number;
   maxLimit?: number;
   orderLimit?: number;
@@ -272,61 +275,47 @@ export const uploadItemAttachment = async (
 
 // Phase 5: Parse Excel File
 export const parseExcelFile = async (file: File): Promise<ExcelImportRow[]> => {
-  const workbook = await createExcelWorkbook();
-  const arrayBuffer = await file.arrayBuffer();
-  await workbook.xlsx.load(arrayBuffer);
-
-  const worksheet = workbook.getWorksheet(1);
-  if (!worksheet) {
-    throw new Error('No worksheet found in Excel file');
-  }
-
+  const rows = await readFirstWorksheetRows(file);
   const items: ExcelImportRow[] = [];
-  const headers: string[] = [];
   const normalizeHeader = (header: string) => header.replace(/[\s_-]+/g, '').toLowerCase();
-
-  worksheet.eachRow((row, rowNumber) => {
-    if (rowNumber === 1) {
-      // Parse headers
-      row.eachCell((cell) => {
-        headers.push(normalizeHeader(String(cell.value || '').trim()));
-      });
-      return;
+  const readString = (row: Record<string, unknown>, headers: string[]) => {
+    for (const header of headers) {
+      const value = row[header];
+      if (value == null) continue;
+      const normalized = String(value).trim();
+      if (normalized) return normalized;
     }
+    return '';
+  };
+  const readNumber = (row: Record<string, unknown>, headers: string[]) => {
+    for (const header of headers) {
+      const value = row[header];
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    return undefined;
+  };
 
-    const item: any = {};
-    row.eachCell((cell, colNumber) => {
-      const header = headers[colNumber - 1];
-      const value = cell.value;
+  rows.forEach((rawRow) => {
+    const normalizedRow = Object.entries(rawRow).reduce<Record<string, unknown>>((result, [header, value]) => {
+      result[normalizeHeader(header)] = value;
+      return result;
+    }, {});
 
-      if (header === 'name' || header === 'الاسم') {
-        item.name = String(value || '').trim();
-      } else if (header === 'code' || header === 'الكود') {
-        item.code = String(value || '').trim();
-      } else if (header === 'barcode' || header === 'الباركود') {
-        item.barcode = String(value || '').trim();
-      } else if (header === 'category' || header === 'التصنيف') {
-        item.category = String(value || '').trim();
-      } else if (header === 'unit' || header === 'الوحدة') {
-        item.unit = String(value || '').trim();
-      } else if (header === 'minlimit' || header === 'min' || header === 'الحد الأدنى') {
-        item.minLimit = Number(value) || 0;
-      } else if (header === 'maxlimit' || header === 'max' || header === 'الحد الأقصى') {
-        item.maxLimit = Number(value) || 1000;
-      } else if (header === 'orderlimit' || header === 'order' || header === 'حد الطلب') {
-        item.orderLimit = Number(value) || undefined;
-      } else if (header === 'currentstock' || header === 'stock' || header === 'الكمية') {
-        item.currentStock = Number(value) || 0;
-      } else if (
-        header === 'description'
-        || header === 'الوصف'
-        || header === 'englishname'
-        || header === 'english'
-        || header === 'الاسمالانجليزي'
-      ) {
-        item.description = String(value || '').trim();
-      }
-    });
+    const item: ExcelImportRow = {
+      name: readString(normalizedRow, ['name', 'الاسم']),
+      code: readString(normalizedRow, ['code', 'الكود']) || undefined,
+      barcode: readString(normalizedRow, ['barcode', 'الباركود']) || undefined,
+      englishName: readString(normalizedRow, ['englishname', 'english', 'الاسمالانجليزي']) || undefined,
+      category: readString(normalizedRow, ['category', 'التصنيف']) || undefined,
+      unit: readString(normalizedRow, ['unit', 'الوحدة']) || undefined,
+      description: readString(normalizedRow, ['description', 'الوصف']) || undefined,
+      packageWeight: readNumber(normalizedRow, ['packageweight', 'وزنالعبوة']),
+      minLimit: readNumber(normalizedRow, ['minlimit', 'min', 'الحدالأدنى']) ?? 0,
+      maxLimit: readNumber(normalizedRow, ['maxlimit', 'max', 'الحدالأقصى']) ?? 1000,
+      orderLimit: readNumber(normalizedRow, ['orderlimit', 'order', 'حدالطلب']),
+      currentStock: readNumber(normalizedRow, ['currentstock', 'stock', 'الكمية']) ?? 0,
+    };
 
     if (item.name) {
       items.push(item);

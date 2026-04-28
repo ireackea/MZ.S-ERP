@@ -3,10 +3,13 @@ import {
   IsBoolean,
   IsIn,
   IsNotEmpty,
+  IsNumber,
   IsObject,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -84,5 +87,41 @@ export class PrintReportDto {
   @ValidateNested({ each: true })
   @Type(() => PrintReportSummaryDto)
   summary?: PrintReportSummaryDto[];
+}
+
+export class RenderHtmlPdfDto {
+  @IsString()
+  @IsNotEmpty()
+  html!: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['A3', 'A4', 'Letter'])
+  paperSize?: 'A3' | 'A4' | 'Letter';
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['portrait', 'landscape'])
+  orientation?: 'portrait' | 'landscape';
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['narrow', 'normal', 'wide'])
+  margins?: 'narrow' | 'normal' | 'wide';
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.1)
+  @Max(2)
+  scale?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  printBackground?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  repeatHeaders?: boolean;
 }
 

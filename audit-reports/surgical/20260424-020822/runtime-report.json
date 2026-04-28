@@ -1,0 +1,18 @@
+{
+    "checks":  [
+
+               ],
+    "findings":  [
+                     {
+                         "title":  "Runtime surgical audit could not start",
+                         "description":  "Failed to start temporary docker runtime environment.",
+                         "remediation":  "Resolve the runtime prerequisite, then rerun the surgical audit in runtime/full mode.",
+                         "evidence":  "Inspect logs/docker-compose.log for compose startup details.",
+                         "severity":  "critical",
+                         "category":  "runtime",
+                         "ruleId":  "runtime-prerequisite-failed"
+                     }
+                 ],
+    "generatedAt":  "2026-04-24T02:08:34.2832676+02:00",
+    "stage":  "runtime"
+}

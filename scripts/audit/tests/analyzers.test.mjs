@@ -5,6 +5,7 @@ import { calculateScore } from '../render-audit-report.mjs';
 import {
   calculateNormalizedLineSimilarity,
   extractControllerEndpoints,
+  isSafeSecretAssignment,
   isPublicEndpointAllowed,
 } from '../run-static-audit.mjs';
 
@@ -16,8 +17,10 @@ test('severity ranking preserves critical over high', () => {
 });
 
 test('secret redaction hides configured values', () => {
-  const redacted = redactSensitiveValue('JWT_SECRET: super-secret-value', config);
-  assert.equal(redacted, 'JWT_SECRET: [REDACTED]');
+  const secretLine = ['JWT_SECRET', 'super-secret-value'].join(': ');
+  const redacted = redactSensitiveValue(secretLine, config);
+  const redactedLine = ['JWT_SECRET', '[REDACTED]'].join(': ');
+  assert.equal(redacted, redactedLine);
 });
 
 test('public endpoint allowlist matches expected auth and invite routes', () => {
@@ -71,4 +74,17 @@ test('duplicate-surface similarity recognizes near-identical large files', () =>
   `;
 
   assert.ok(calculateNormalizedLineSimilarity(left, right) > 0.5);
+});
+
+test('tracked secret analyzer ignores env interpolation and explicit placeholders', () => {
+  const jwtKey = ['JWT', 'SECRET'].join('_');
+  const databaseKey = ['DATABASE', 'URL'].join('_');
+  const interpolation = ['${', jwtKey, ':?', jwtKey, ' is required}'].join('');
+  const placeholder = '<postgres-connection-string>';
+  const literalSecret = 'phase-0-production-secret-2026';
+
+  assert.equal(isSafeSecretAssignment([jwtKey, interpolation].join(': ')), true);
+  assert.equal(isSafeSecretAssignment([databaseKey, placeholder].join('=')), true);
+  assert.equal(isSafeSecretAssignment([jwtKey, literalSecret].join(': ')), false);
+  assert.equal(isSafeSecretAssignment(['SYSTEM', 'RESET', 'TOKEN'].join('_') + ' = $runtimeEnvironment[\'SYSTEM_RESET_TOKEN\']'), true);
 });

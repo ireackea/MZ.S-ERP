@@ -19,6 +19,60 @@ import { RbacGuard } from '../auth/rbac.guard';
 import { BackupGuard } from './backup.guard';
 import { BackupService, BackupType } from './backup.service';
 
+type BackupRequestUser = {
+  id?: string | number;
+  username?: string;
+  name?: string;
+  role?: string;
+};
+
+type BackupRequestActor = {
+  type?: 'user' | 'system';
+  mode?: 'manual' | 'scheduled';
+  userId?: string | number;
+  username?: string;
+  role?: string;
+};
+
+type BackupHttpRequest = Request & {
+  user?: BackupRequestUser;
+  backupActor?: BackupRequestActor;
+};
+
+type BackupCreateBody = {
+  encryptionPassword?: string;
+};
+
+type RestoreBackupBody = {
+  confirmRestore?: boolean;
+  backupId?: string;
+  restorePin?: string;
+  restoreToken?: string;
+  decryptionPassword?: string;
+};
+
+type ApiErrorLike = {
+  message?: unknown;
+  status?: unknown;
+};
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'object' && error && 'message' in error) {
+    const candidate = (error as ApiErrorLike).message;
+    if (typeof candidate === 'string' && candidate.trim()) return candidate;
+  }
+  return 'unknown_error';
+};
+
+const getErrorStatus = (error: unknown, fallback: number): number => {
+  if (typeof error === 'object' && error && 'status' in error) {
+    const candidate = Number((error as ApiErrorLike).status);
+    if (Number.isInteger(candidate) && candidate > 0) return candidate;
+  }
+  return fallback;
+};
+
 @UseGuards(BackupGuard, RbacGuard)
 @Controller()
 export class BackupController {
@@ -31,7 +85,8 @@ export class BackupController {
     username?: string;
     role?: string;
   } {
-    const user = (request as any)?.user;
+    const typedRequest = request as BackupHttpRequest;
+    const user = typedRequest.user;
     if (user && (user.id || user.username)) {
       return {
         type: 'user' as const,
@@ -42,7 +97,7 @@ export class BackupController {
       };
     }
 
-    const backupActor = (request as any)?.backupActor;
+    const backupActor = typedRequest.backupActor;
     if (backupActor && (backupActor.userId || backupActor.username)) {
       return {
         type: backupActor.type === 'user' ? ('user' as const) : ('system' as const),
@@ -72,7 +127,7 @@ export class BackupController {
 
   @Permissions('backup.create')
   @Post('backup/full')
-  async createFullSystemBackup(@Body() body: any, @Req() req: Request, @Res() res: Response) {
+  async createFullSystemBackup(@Body() body: BackupCreateBody, @Req() req: Request, @Res() res: Response) {
     try {
       const data = await this.backupService.createBackup({
         type: 'full',
@@ -80,18 +135,18 @@ export class BackupController {
         encryptionPassword: body?.encryptionPassword,
       });
       return res.status(HttpStatus.OK).json({ success: true, data });
-    } catch (error: any) {
+    } catch (error: unknown) {
       return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: 'Failed to create full backup',
-        error: error?.message || 'unknown_error',
+        error: getErrorMessage(error),
       });
     }
   }
 
   @Permissions('backup.create')
   @Post('backup/inventory')
-  async createInventoryBackup(@Body() body: any, @Req() req: Request, @Res() res: Response) {
+  async createInventoryBackup(@Body() body: BackupCreateBody, @Req() req: Request, @Res() res: Response) {
     try {
       const data = await this.backupService.createBackup({
         type: 'inventory',
@@ -99,18 +154,18 @@ export class BackupController {
         encryptionPassword: body?.encryptionPassword,
       });
       return res.status(HttpStatus.OK).json({ success: true, data });
-    } catch (error: any) {
+    } catch (error: unknown) {
       return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: 'Failed to create inventory backup',
-        error: error?.message || 'unknown_error',
+        error: getErrorMessage(error),
       });
     }
   }
 
   @Permissions('backup.create')
   @Post('backup/config')
-  async createConfigBackup(@Body() body: any, @Req() req: Request, @Res() res: Response) {
+  async createConfigBackup(@Body() body: BackupCreateBody, @Req() req: Request, @Res() res: Response) {
     try {
       const data = await this.backupService.createBackup({
         type: 'config',
@@ -118,11 +173,11 @@ export class BackupController {
         encryptionPassword: body?.encryptionPassword,
       });
       return res.status(HttpStatus.OK).json({ success: true, data });
-    } catch (error: any) {
+    } catch (error: unknown) {
       return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: 'Failed to create config backup',
-        error: error?.message || 'unknown_error',
+        error: getErrorMessage(error),
       });
     }
   }
@@ -133,11 +188,11 @@ export class BackupController {
     try {
       const data = await this.backupService.listBackups(this.resolveListType(type));
       return res.status(HttpStatus.OK).json({ success: true, data });
-    } catch (error: any) {
+    } catch (error: unknown) {
       return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: 'Failed to list backups',
-        error: error?.message || 'unknown_error',
+        error: getErrorMessage(error),
       });
     }
   }
@@ -146,7 +201,7 @@ export class BackupController {
   @Roles('Admin', 'SuperAdmin')
   @UseGuards(JwtAuthGuard)
   @Post('backup/restore')
-  async restoreBackup(@Body() body: any, @Req() req: Request, @Res() res: Response) {
+  async restoreBackup(@Body() body: RestoreBackupBody, @Req() req: Request, @Res() res: Response) {
     try {
       const actor = this.actorFromRequest(req);
       if (actor.type !== 'user') {
@@ -174,9 +229,9 @@ export class BackupController {
         decryptionPassword: body?.decryptionPassword,
       });
       return res.status(HttpStatus.OK).json({ success: true, stage: 'preview', data });
-    } catch (error: any) {
-      const message = error?.message || 'unknown_error';
-      const status = error?.status || HttpStatus.BAD_REQUEST;
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      const status = getErrorStatus(error, HttpStatus.BAD_REQUEST);
       return res.status(status).json({ success: false, message, error: message });
     }
   }
@@ -184,13 +239,13 @@ export class BackupController {
   @Permissions('backup.schedule')
   @Roles('Admin', 'SuperAdmin')
   @Post('backup/schedule')
-  async updateBackupSchedule(@Body() body: any, @Res() res: Response) {
+  async updateBackupSchedule(@Body() body: Record<string, unknown>, @Res() res: Response) {
     try {
       const data = await this.backupService.updateSchedule(body || {});
       return res.status(HttpStatus.OK).json({ success: true, data });
-    } catch (error: any) {
-      const message = error?.message || 'unknown_error';
-      const status = error?.status || HttpStatus.BAD_REQUEST;
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      const status = getErrorStatus(error, HttpStatus.BAD_REQUEST);
       return res.status(status).json({ success: false, message, error: message });
     }
   }
@@ -201,11 +256,11 @@ export class BackupController {
     try {
       const data = await this.backupService.getStorageStats();
       return res.status(HttpStatus.OK).json({ success: true, data });
-    } catch (error: any) {
+    } catch (error: unknown) {
       return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: 'Failed to read storage stats',
-        error: error?.message || 'unknown_error',
+        error: getErrorMessage(error),
       });
     }
   }
@@ -219,9 +274,9 @@ export class BackupController {
       res.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
       res.setHeader('X-Backup-Checksum', file.checksumSha256);
       return res.sendFile(file.filePath);
-    } catch (error: any) {
-      const message = error?.message || 'unknown_error';
-      const status = error?.status || HttpStatus.BAD_REQUEST;
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      const status = getErrorStatus(error, HttpStatus.BAD_REQUEST);
       return res.status(status).json({ success: false, message, error: message });
     }
   }
@@ -233,11 +288,11 @@ export class BackupController {
     try {
       const data = await this.backupService.deleteBackup(id);
       return res.status(HttpStatus.OK).json({ success: true, data });
-    } catch (error: any) {
+    } catch (error: unknown) {
       return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: 'Failed to delete backup',
-        error: error?.message || 'unknown_error',
+        error: getErrorMessage(error),
       });
     }
   }
@@ -249,29 +304,29 @@ export class BackupController {
     try {
       const data = await this.backupService.createProductionBackup();
       return res.status(HttpStatus.OK).json({ success: true, data });
-    } catch (error: any) {
+    } catch (error: unknown) {
       return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: 'Failed to create backup',
-        error: error?.message || 'unknown_error',
+        error: getErrorMessage(error),
       });
     }
   }
 
   @Permissions('backup.create')
-  @Post('api/backups/full')
-  async createLegacyFull(@Body() body: any, @Req() req: Request, @Res() res: Response) {
+  @Post('backups/full')
+  async createLegacyFull(@Body() body: BackupCreateBody, @Req() req: Request, @Res() res: Response) {
     return this.createFullSystemBackup(body, req, res);
   }
 
   @Permissions('backup.create')
-  @Post('api/backups/incremental')
-  async createLegacyIncremental(@Body() body: any, @Req() req: Request, @Res() res: Response) {
+  @Post('backups/incremental')
+  async createLegacyIncremental(@Body() body: BackupCreateBody, @Req() req: Request, @Res() res: Response) {
     return this.createInventoryBackup(body, req, res);
   }
 
   @Permissions('backup.view')
-  @Get('api/backups/restore-points')
+  @Get('backups/restore-points')
   async getLegacyRestorePoints(@Res() res: Response) {
     return this.listBackups(undefined, res);
   }

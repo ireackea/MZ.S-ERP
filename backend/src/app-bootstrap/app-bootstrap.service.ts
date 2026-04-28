@@ -1,6 +1,26 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 
+/** Default permissions per built-in role – mirrors auth.service.ts DEFAULT_ROLES */
+const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
+  SuperAdmin: ['*'],
+  Admin: [
+    'users.*',
+    'settings.*',
+    'reports.*',
+    'backup.*',
+    'items.*',
+    'transactions.*',
+    'formulation.*',
+    'opening-balances.*',
+    'theme.*',
+    'monitoring.logs.write',
+  ],
+  Manager: ['transactions.*', 'reports.view', 'items.view', 'formulation.view', 'opening-balances.view', 'backup.view'],
+  Operator: ['transactions.create', 'transactions.update', 'transactions.delete', 'transactions.view', 'items.view'],
+  Viewer: ['items.view', 'transactions.view', 'reports.view', 'formulation.view', 'opening-balances.view', 'backup.view'],
+};
+
 @Injectable()
 export class AppBootstrapService {
   constructor(private readonly prisma: PrismaService) {}
@@ -40,23 +60,44 @@ export class AppBootstrapService {
 
   async getBootstrapPayload(principal: any) {
     const userId = String(principal?.id || principal?.sub || '').trim();
-    if (!userId) {
-      throw new UnauthorizedException('Authenticated principal is required');
-    }
+    const user = userId
+      ? await this.prisma.user.findUnique({
+          where: { id: userId },
+          include: { role: true },
+        })
+      : null;
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: { role: true },
-    });
-
-    if (!user || !user.isActive) {
+    if (userId && (!user || !user.isActive)) {
       throw new UnauthorizedException('Authenticated user is inactive or missing');
     }
 
-    const permissions = this.parsePermissions(user.role?.permissions);
+    const permissions = user ? this.parsePermissions(user.role?.permissions) : [];
+
+    // Self-heal: if the DB role has no permissions (not yet seeded or wiped),
+    // fall back to DEFAULT_ROLE_PERMISSIONS and repair the DB row non-blocking.
+    const resolvedPermissions = (() => {
+      if (permissions.length > 0 || !user?.role?.name) {
+        return permissions;
+      }
+
+      const defaults = DEFAULT_ROLE_PERMISSIONS[user.role.name];
+      if (!defaults || defaults.length === 0) {
+        return permissions;
+      }
+
+      console.warn(`[AppBootstrap] Role "${user.role.name}" had empty permissions in DB – applying defaults.`);
+      this.prisma.role
+        .update({ where: { id: user.role.id }, data: { permissions: JSON.stringify(defaults) } })
+        .catch((err: unknown) =>
+          console.warn('[AppBootstrap] Non-blocking role-permissions repair failed:', (err as Error)?.message || err),
+        );
+
+      return defaults;
+    })();
+
     const includeInactiveUnloadingRules =
-      this.hasPermission(permissions, 'settings.view.general') ||
-      this.hasPermission(permissions, 'settings.update.system');
+      this.hasPermission(resolvedPermissions, 'settings.view.general') ||
+      this.hasPermission(resolvedPermissions, 'settings.update.system');
 
     const [categoryRows, unitRows, unloadingRuleRows, itemsCount, transactionsCount, openingBalancesCount] = await Promise.all([
       this.prisma.item.findMany({
@@ -80,6 +121,29 @@ export class AppBootstrapService {
       this.prisma.openingBalance.count(),
     ]);
 
+    if (!user) {
+      return {
+        session: null,
+        resolvedPermissions: [],
+        referenceData: {
+          categories: this.normalizeDistinctValues(categoryRows.map((row) => ({ value: row.category }))),
+          units: this.normalizeDistinctValues(unitRows.map((row) => ({ value: row.unit }))),
+        },
+        unloadingRules: unloadingRuleRows.map((row) => ({
+          id: row.id,
+          rule_name: row.ruleName,
+          allowed_duration_minutes: row.allowedDurationMinutes,
+          penalty_rate_per_minute: row.penaltyRatePerMinute.toNumber(),
+          is_active: row.isActive,
+        })),
+        startupFlags: {
+          hasItems: itemsCount > 0,
+          hasTransactions: transactionsCount > 0,
+          hasOpeningBalances: openingBalancesCount > 0,
+        },
+      };
+    }
+
     const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
 
     return {
@@ -92,13 +156,13 @@ export class AppBootstrapService {
         name: fullName || user.username,
         role: user.role?.name || 'Viewer',
         roleId: user.roleId,
-        permissions,
+        permissions: resolvedPermissions,
         isActive: user.isActive,
         active: user.isActive,
         status: user.isActive ? 'active' : 'locked',
         scope: 'all',
       },
-      resolvedPermissions: permissions,
+      resolvedPermissions: resolvedPermissions,
       referenceData: {
         categories: this.normalizeDistinctValues(categoryRows.map((row) => ({ value: row.category }))),
         units: this.normalizeDistinctValues(unitRows.map((row) => ({ value: row.unit }))),

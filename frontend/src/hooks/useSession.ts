@@ -1,14 +1,13 @@
 import { useSyncExternalStore } from 'react';
 import {
   AUTH_SESSION_EVENT,
-  AuthSessionUser,
+  AUTH_USER_STORAGE_KEY,
+  type AuthSessionUser,
   getAuthUser,
-  getAuthToken,
-} from '@services/authService';
+} from '@services/authSession';
 
 export type SessionState = {
   status: 'anonymous' | 'authenticated';
-  token: string;
   user: AuthSessionUser | null;
   isAuthenticated: boolean;
 };
@@ -16,17 +15,15 @@ export type SessionState = {
 let cachedSessionKey = '';
 let cachedSessionState: SessionState = {
   status: 'anonymous',
-  token: '',
   user: null,
   isAuthenticated: false,
 };
 
 const readSession = (): SessionState => {
   const user = getAuthUser();
-  const token = getAuthToken();
   const isAuthenticated = Boolean(user);
 
-  const nextSessionKey = JSON.stringify({ token, user, isAuthenticated });
+  const nextSessionKey = JSON.stringify({ user, isAuthenticated });
   if (nextSessionKey === cachedSessionKey) {
     return cachedSessionState;
   }
@@ -34,7 +31,6 @@ const readSession = (): SessionState => {
   cachedSessionKey = nextSessionKey;
   cachedSessionState = {
     status: isAuthenticated ? 'authenticated' : 'anonymous',
-    token,
     user,
     isAuthenticated,
   };
@@ -54,7 +50,7 @@ const subscribe = (onStoreChange: () => void) => {
       return;
     }
 
-    if (event.key === 'feed_factory_jwt_user' || event.key === 'feed_factory_jwt_token') {
+    if (event.key === AUTH_USER_STORAGE_KEY) {
       refresh();
     }
   };

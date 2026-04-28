@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Item, Transaction } from '../types';
+import { getInventoryStatus } from '@services/inventoryStatus';
 import { getTransactions } from '../services/storage';
 import { calculateBalancesMap, getFinancialYearFromDate } from '../services/legacy/openingBalanceService';
 import { getComputedBalancesFromApi, getTransactionsFromApi } from '@services/transactionsService';
@@ -104,12 +105,16 @@ export const useInventoryCalculations = ({
       const balance = Number(balanceMap.get(item.id) ?? 0);
       const minLimit = Number(item.minLimit ?? 0);
       const orderLimit = item.orderLimit == null ? undefined : Number(item.orderLimit);
+      const inventoryStatus = getInventoryStatus({
+        balance,
+        minLimit,
+        orderLimit,
+      });
 
       next.set(item.id, {
         balance,
-        isBelowMin: Number.isFinite(minLimit) ? balance < minLimit : false,
-        isBelowOrder:
-          orderLimit != null && Number.isFinite(orderLimit) ? balance <= orderLimit : false,
+        isBelowMin: inventoryStatus.isBelowMin,
+        isBelowOrder: inventoryStatus.isBelowOrder,
       });
     });
     return next;

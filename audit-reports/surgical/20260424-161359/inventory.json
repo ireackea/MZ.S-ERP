@@ -1,0 +1,186 @@
+{
+  "generatedAt": "2026-04-24T14:13:59.350Z",
+  "totalFiles": 403,
+  "sourceFiles": 287,
+  "categories": {
+    "frontend": 139,
+    "backend": 107,
+    "controllers": 17,
+    "dtoAndValidation": 30,
+    "prisma": 1,
+    "configs": 12,
+    "tests": 18
+  },
+  "giantComponents": [
+    {
+      "path": "frontend/src/components/DailyOperations.tsx",
+      "lines": 4349
+    },
+    {
+      "path": "frontend/src/components/Statement.tsx",
+      "lines": 1880
+    },
+    {
+      "path": "frontend/src/pages/StocktakingView.tsx",
+      "lines": 1749
+    },
+    {
+      "path": "frontend/src/pages/Items.tsx",
+      "lines": 1611
+    },
+    {
+      "path": "frontend/src/components/ItemManagement.tsx",
+      "lines": 1133
+    },
+    {
+      "path": "frontend/src/components/Settings.tsx",
+      "lines": 956
+    },
+    {
+      "path": "frontend/src/components/UnifiedIAM.tsx",
+      "lines": 816
+    },
+    {
+      "path": "frontend/src/App.tsx",
+      "lines": 786
+    },
+    {
+      "path": "frontend/src/components/BackupCenter.tsx",
+      "lines": 695
+    },
+    {
+      "path": "frontend/src/components/OpeningBalancePage.tsx",
+      "lines": 613
+    },
+    {
+      "path": "frontend/src/components/ItemForm.tsx",
+      "lines": 598
+    },
+    {
+      "path": "frontend/src/components/Reports.tsx",
+      "lines": 582
+    },
+    {
+      "path": "frontend/src/components/StockCardReport.tsx",
+      "lines": 575
+    },
+    {
+      "path": "frontend/src/components/StockBalances.tsx",
+      "lines": 508
+    },
+    {
+      "path": "frontend/src/components/FormulationForm.tsx",
+      "lines": 497
+    }
+  ],
+  "topLevelEntries": [
+    {
+      "name": ".dockerignore",
+      "type": "file"
+    },
+    {
+      "name": ".editorconfig",
+      "type": "file"
+    },
+    {
+      "name": ".env",
+      "type": "file"
+    },
+    {
+      "name": ".env.example",
+      "type": "file"
+    },
+    {
+      "name": ".gitattributes",
+      "type": "file"
+    },
+    {
+      "name": ".github",
+      "type": "directory"
+    },
+    {
+      "name": ".gitignore",
+      "type": "file"
+    },
+    {
+      "name": ".gitkeep",
+      "type": "file"
+    },
+    {
+      "name": "backend",
+      "type": "directory"
+    },
+    {
+      "name": "docker-compose.prod.yml",
+      "type": "file"
+    },
+    {
+      "name": "docker-compose.yml",
+      "type": "file"
+    },
+    {
+      "name": "frontend",
+      "type": "directory"
+    },
+    {
+      "name": "logs",
+      "type": "directory"
+    },
+    {
+      "name": "MZ.S-ERP.code-workspace",
+      "type": "file"
+    },
+    {
+      "name": "nginx.prod.conf",
+      "type": "file"
+    },
+    {
+      "name": "package-lock.json",
+      "type": "file"
+    },
+    {
+      "name": "package.json",
+      "type": "file"
+    },
+    {
+      "name": "prisma.config.js",
+      "type": "file"
+    },
+    {
+      "name": "prisma.config.mjs",
+      "type": "file"
+    },
+    {
+      "name": "prisma.config.ts",
+      "type": "file"
+    },
+    {
+      "name": "run-mzs-erp.bat",
+      "type": "file"
+    },
+    {
+      "name": "scripts",
+      "type": "directory"
+    },
+    {
+      "name": "start-mzs-erp-safe.ps1",
+      "type": "file"
+    },
+    {
+      "name": "start-mzs-erp.bat",
+      "type": "file"
+    },
+    {
+      "name": "START_PROD_ULTIMATE.bat",
+      "type": "file"
+    },
+    {
+      "name": "stop-mzs-erp-safe.ps1",
+      "type": "file"
+    },
+    {
+      "name": "tests",
+      "type": "directory"
+    }
+  ]
+}

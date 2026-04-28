@@ -11,13 +11,12 @@ import { screen, waitFor } from '@testing-library/dom';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import LoginV2 from './LoginV2';
-import { login, resetLoginAttempts } from '@services/authService';
+import { login } from '@services/authService';
 
 const mockNavigate = vi.fn();
 
 vi.mock('@services/authService', () => ({
   login: vi.fn(),
-  resetLoginAttempts: vi.fn(),
 }));
 
 vi.mock('react-router-dom', async () => {
@@ -38,10 +37,6 @@ const renderLogin = (props: Partial<React.ComponentProps<typeof LoginV2>> = {}) 
 describe('LoginV2', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(resetLoginAttempts).mockResolvedValue({
-      success: true,
-      message: 'تمت إعادة ضبط المحاولات. يمكنك تسجيل الدخول من جديد.',
-    });
   });
 
   afterEach(() => {
@@ -162,7 +157,7 @@ describe('LoginV2', () => {
     });
   });
 
-  it('يعرض زر إعادة ضبط المحاولات عند خطأ Too many requests وينفذ الطلب بنجاح', async () => {
+  it('لا يعرض إجراء إعادة ضبط المحاولات من شاشة الدخول العامة عند خطأ Too many requests', async () => {
     const user = userEvent.setup();
     const loginError = new Error('Request failed with status code 429');
     (loginError as any).response = {
@@ -178,14 +173,9 @@ describe('LoginV2', () => {
     await user.type(screen.getByPlaceholderText('********'), 'reset-pass');
     await user.click(screen.getByRole('button', { name: 'تسجيل الدخول' }));
 
-    const resetButton = await screen.findByRole('button', { name: 'إعادة ضبط المحاولات' });
-    await user.click(resetButton);
-
-    await waitFor(() => {
-      expect(resetLoginAttempts).toHaveBeenCalledWith('reset.user');
-    });
-
-    expect(screen.getByText('تمت إعادة ضبط المحاولات. يمكنك تسجيل الدخول من جديد.')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'إعادة المحاولة' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'إعادة ضبط المحاولات' })).not.toBeInTheDocument();
+    expect(screen.getByText(/تمت حماية مسار إعادة الضبط من الخادم/)).toBeInTheDocument();
   });
 
   it('ينفذ onAuthenticated عند تمريره من الأب', async () => {

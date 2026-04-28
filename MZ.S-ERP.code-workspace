@@ -5,6 +5,8 @@
 		}
 	],
 	"settings": {
-		"workbench.browser.dataStorage": "workspace"
+		"workbench.browser.dataStorage": "workspace",
+		"github.copilot.chat.agent.autoFix": true,
+		"qwen-code.codingPlanRegion": "global"
 	}
 }

@@ -30,6 +30,24 @@ import {
 import { fetchRoles, fetchUsers, type RoleDto, type UserDto } from '@services/usersService';
 import apiClient from '@api/client';
 import { normalizeUsers } from '../services/iamService';
+import {
+  getOperationPrintConfig,
+  getOperationPrintTemplates,
+  getStocktakingPrintConfig,
+  getStocktakingPrintTemplates,
+  saveOperationPrintConfig,
+  saveOperationPrintTemplates,
+  saveStocktakingPrintConfig,
+  saveStocktakingPrintTemplates,
+  getUserGridPreferences,
+  upsertGridPreferenceForUser,
+  resetGridPreferenceForUser,
+} from '../services/storage';
+import {
+  exportRowsToExcel as exportRowsToExcelFile,
+  exportSheetsToExcel as exportSheetsToExcelFile,
+} from '../utils/excelWorkbook';
+import { saveElementPdfDocument } from '../utils/elementPdf';
 import { isInboundOperationType, isOutboundOperationType } from '../utils/operationTypes';
 import type {
   Formula,
@@ -63,6 +81,35 @@ type ExportSheet = {
   rows: unknown[][];
   columns?: Array<{ wch: number }>;
 };
+
+type OpeningBalanceApiRow = {
+  id?: unknown;
+  itemPublicId?: unknown;
+  item?: { publicId?: unknown; name?: unknown } | null;
+  item_id?: unknown;
+  itemId?: unknown;
+  quantity?: unknown;
+  unitCost?: unknown;
+  financialYear?: unknown;
+};
+
+type FormulaApiItem = {
+  itemId?: unknown;
+  percentage?: unknown;
+  weightPerTon?: unknown;
+};
+
+type FormulaApiRow = {
+  id?: unknown;
+  code?: unknown;
+  name?: unknown;
+  targetProductId?: unknown;
+  targetItemId?: unknown;
+  isActive?: unknown;
+  notes?: unknown;
+  items?: unknown;
+};
+
 type OpeningBalanceStoreRow = {
   id: number;
   itemId: string;
@@ -71,6 +118,11 @@ type OpeningBalanceStoreRow = {
   quantity: number;
   unitCost?: number | null;
   item?: { name: string; publicId?: string };
+};
+
+type OpeningBalanceSyncResult = {
+  openingBalances: OpeningBalanceMap;
+  openingBalanceRows: OpeningBalanceStoreRow[];
 };
 
 type Store = {
@@ -114,7 +166,7 @@ type Store = {
   loadInventoryCore: (options?: LoaderOptions) => Promise<void>;
   loadTransactions: (options?: LoaderOptions) => Promise<void>;
   loadUsersAndRoles: (options?: LoaderOptions) => Promise<void>;
-  loadOpeningBalances: (financialYear?: number) => Promise<void>;
+  loadOpeningBalances: (financialYear?: number, options?: LoaderOptions) => Promise<void>;
   loadFormulas: () => Promise<void>;
   loadUnloadingRules: (options?: LoaderOptions) => Promise<void>;
   syncFromServer: (target?: SyncTarget) => Promise<void>;
@@ -366,8 +418,8 @@ const normalizeOpeningBalanceRows = (rows: Array<{ item_id?: string; itemId?: st
     return acc;
   }, {});
 
-const normalizeOpeningBalanceStoreRows = (rows: any[], financialYear: number): OpeningBalanceStoreRow[] =>
-  rows.reduce<OpeningBalanceStoreRow[]>((acc, row, index) => {
+const normalizeOpeningBalanceStoreRows = (rows: OpeningBalanceApiRow[], financialYear: number): OpeningBalanceStoreRow[] => {
+  const rawList = rows.reduce<OpeningBalanceStoreRow[]>((acc, row, index) => {
     const itemPublicId = String(row?.itemPublicId ?? row?.item?.publicId ?? row?.item_id ?? row?.itemId ?? '').trim();
     const itemId = itemPublicId;
     const quantity = Number(row?.quantity ?? 0);
@@ -388,7 +440,15 @@ const normalizeOpeningBalanceStoreRows = (rows: any[], financialYear: number): O
     return acc;
   }, []);
 
-const mapApiOpeningBalances = (rows: any[]) =>
+  // إزالة التكرار بـ itemId+financialYear؛ آخر سجل يفوز (يعكس آخر upsert).
+  const dedupeMap = new Map<string, OpeningBalanceStoreRow>();
+  for (const row of rawList) {
+    dedupeMap.set(`${row.itemId}_${row.financialYear}`, row);
+  }
+  return Array.from(dedupeMap.values());
+};
+
+const mapApiOpeningBalances = (rows: OpeningBalanceApiRow[]) =>
   rows.reduce<OpeningBalanceMap>((acc, row) => {
     const itemId = String(row?.itemPublicId ?? row?.item?.publicId ?? row?.itemId ?? '').trim();
     const quantity = Number(row?.quantity ?? 0);
@@ -397,7 +457,7 @@ const mapApiOpeningBalances = (rows: any[]) =>
     return acc;
   }, {});
 
-const normalizeFormula = (raw: any): Formula => ({
+const normalizeFormula = (raw: FormulaApiRow): Formula => ({
   id: String(raw?.id || crypto.randomUUID()),
   code: String(raw?.code || ''),
   name: String(raw?.name || ''),
@@ -405,11 +465,14 @@ const normalizeFormula = (raw: any): Formula => ({
   isActive: raw?.isActive !== false,
   notes: raw?.notes ? String(raw.notes) : undefined,
   items: Array.isArray(raw?.items)
-    ? raw.items.map((entry: any) => ({
+    ? raw.items.map((entry) => {
+        const item = (entry || {}) as FormulaApiItem;
+        return {
         itemId: String(entry?.itemId || ''),
         percentage: Number(entry?.percentage || 0),
         weightPerTon: Number(entry?.weightPerTon || 0),
-      }))
+        };
+      })
     : [],
 });
 
@@ -428,10 +491,21 @@ const toFormulaPayload = (formula: Formula) => ({
   })),
 });
 
-const extractArrayPayload = (payload: any) => {
+const extractArrayPayload = (payload: unknown): unknown[] => {
   if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.data)) return payload.data;
+  if (payload && typeof payload === 'object' && Array.isArray((payload as { data?: unknown }).data)) {
+    return (payload as { data: unknown[] }).data;
+  }
   return [];
+};
+
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'object' && error && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim()) return message;
+  }
+  return fallback;
 };
 
 const currentFinancialYear = () => getFinancialYearFromDate();
@@ -446,12 +520,38 @@ const syncTransactionsFromServer = async () => {
   return getTransactionsFromApi();
 };
 
-const syncOpeningBalancesFromServer = async (financialYear: number) => {
-  const rows = await getOpeningBalancesFromApi(financialYear);
-  return {
-    openingBalances: Array.isArray(rows) ? mapApiOpeningBalances(rows) : {},
-    openingBalanceRows: Array.isArray(rows) ? normalizeOpeningBalanceStoreRows(rows, financialYear) : [],
-  };
+const syncOpeningBalancesFromServer = async (financialYear: number, options?: LoaderOptions) => {
+  const cached = openingBalanceSyncCache.get(financialYear);
+  if (hasFreshOpeningBalanceCache(financialYear, options) && cached) {
+    return cached.data;
+  }
+
+  const inFlight = openingBalanceSyncInFlight.get(financialYear);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const request = (async () => {
+    try {
+      const rows = await getOpeningBalancesFromApi(financialYear);
+      const data: OpeningBalanceSyncResult = {
+        openingBalances: Array.isArray(rows) ? mapApiOpeningBalances(rows) : {},
+        openingBalanceRows: Array.isArray(rows) ? normalizeOpeningBalanceStoreRows(rows, financialYear) : [],
+      };
+      openingBalanceSyncCache.set(financialYear, { loadedAt: Date.now(), data });
+      return data;
+    } catch (error) {
+      if (!options?.force && cached) {
+        return cached.data;
+      }
+      throw error;
+    } finally {
+      openingBalanceSyncInFlight.delete(financialYear);
+    }
+  })();
+
+  openingBalanceSyncInFlight.set(financialYear, request);
+  return request;
 };
 
 const syncUsersFromServer = async () => {
@@ -466,7 +566,30 @@ const syncRolesFromServer = async () => {
 
 const syncFormulasFromServer = async () => {
   const response = await apiClient.get('/formulations');
-  return extractArrayPayload(response.data).map(normalizeFormula);
+  return extractArrayPayload(response.data).map((entry) =>
+    normalizeFormula((entry && typeof entry === 'object' ? entry : {}) as FormulaApiRow),
+  );
+};
+
+const buildInitialGridPreferences = (): Record<string, GridColumnPreference[]> => {
+  const map: Record<string, GridColumnPreference[]> = {};
+  try {
+    getUserGridPreferences()
+      .filter((row) => row.user_id === '0')
+      .forEach((row) => {
+        try {
+          const cols = JSON.parse(row.config_json || '[]') as GridColumnPreference[];
+          if (Array.isArray(cols) && cols.length > 0) {
+            map[row.module_key] = cols;
+          }
+        } catch {
+          // ignore malformed row
+        }
+      });
+  } catch {
+    // ignore storage errors
+  }
+  return map;
 };
 
 const normalizeGridPreferences = (defaults: GridColumnPreference[], stored: GridColumnPreference[] = []) => {
@@ -526,6 +649,37 @@ const normalizePdfPayload = (payload: unknown, fileName: string) => {
 };
 
 const DEFAULT_LOADER_STALE_MS = 30 * 1000;
+const DEFAULT_OPENING_BALANCE_STALE_MS = 20 * 1000;
+
+const openingBalanceSyncCache = new Map<number, { loadedAt: number; data: OpeningBalanceSyncResult }>();
+const openingBalanceSyncInFlight = new Map<number, Promise<OpeningBalanceSyncResult>>();
+
+// لماذا: single-flight guard لمنع طلبات HTTP متزامنة لجلب المستخدمين والأدوار.
+// بدونه يُطلق useAppBootstrap + UnifiedIAM + أي مكوّن آخر طلبات مستقلة في نفس الوقت،
+// مما رصدناه كـ 13 req/min على /api/users. النمط مطابق لـ openingBalanceSyncInFlight.
+type UsersAndRolesResult = { users: ReturnType<typeof mapUserDto>[]; roles: ReturnType<typeof mapRoleDto>[] };
+let usersAndRolesInFlight: Promise<UsersAndRolesResult> | null = null;
+
+const syncUsersAndRolesFromServer = async (): Promise<UsersAndRolesResult> => {
+  if (usersAndRolesInFlight) return usersAndRolesInFlight;
+
+  usersAndRolesInFlight = (async () => {
+    try {
+      const [usersResponse, roles] = await Promise.all([
+        fetchUsers({ page: 1, limit: 500 }),
+        fetchRoles(),
+      ]);
+      return {
+        users: usersResponse.data.map(mapUserDto),
+        roles: roles.map(mapRoleDto),
+      };
+    } finally {
+      usersAndRolesInFlight = null;
+    }
+  })();
+
+  return usersAndRolesInFlight;
+};
 
 const shouldReload = (loadedAt: number | null, options?: LoaderOptions) => {
   if (options?.force) return true;
@@ -534,22 +688,12 @@ const shouldReload = (loadedAt: number | null, options?: LoaderOptions) => {
   return Date.now() - loadedAt >= staleMs;
 };
 
-let xlsxLoader: Promise<typeof import('xlsx')> | null = null;
-let html2PdfLoader: Promise<any> | null = null;
-
-const loadXlsx = () => {
-  if (!xlsxLoader) {
-    xlsxLoader = import('xlsx');
-  }
-  return xlsxLoader;
-};
-
-const loadHtml2Pdf = async () => {
-  if (!html2PdfLoader) {
-    html2PdfLoader = import('html2pdf.js');
-  }
-  const module = await html2PdfLoader;
-  return (module as { default?: any }).default || module;
+const hasFreshOpeningBalanceCache = (financialYear: number, options?: LoaderOptions) => {
+  if (options?.force) return false;
+  const cached = openingBalanceSyncCache.get(financialYear);
+  if (!cached) return false;
+  const staleMs = Math.max(0, Number(options?.staleMs ?? DEFAULT_OPENING_BALANCE_STALE_MS));
+  return Date.now() - cached.loadedAt < staleMs;
 };
 
 const initialSort: SortState = { mode: 'manual_locked', manualOrder: [] };
@@ -573,12 +717,12 @@ export const useInventoryStore = create<Store>()(
       formulas: [],
       units: [],
       categories: [],
-      gridPreferences: {},
+      gridPreferences: buildInitialGridPreferences(),
       gridDisplayPolicies: {},
-      operationPrintConfig: {},
-      operationPrintTemplates: [],
-      stocktakingPrintConfig: {},
-      stocktakingPrintTemplates: [],
+      operationPrintConfig: getOperationPrintConfig(),
+      operationPrintTemplates: getOperationPrintTemplates(),
+      stocktakingPrintConfig: getStocktakingPrintConfig(),
+      stocktakingPrintTemplates: getStocktakingPrintTemplates(),
       loading: false,
       syncing: false,
       error: null,
@@ -608,8 +752,8 @@ export const useInventoryStore = create<Store>()(
             loading: false,
             lastLoadedAt: Date.now(),
           });
-        } catch (e: any) {
-          set({ loading: false, error: e?.message || 'Failed to load items' });
+        } catch (error: unknown) {
+          set({ loading: false, error: getErrorMessage(error, 'Failed to load items') });
         }
       },
 
@@ -652,8 +796,8 @@ export const useInventoryStore = create<Store>()(
             inventoryCoreLoadedAt: loadedAt,
             lastLoadedAt: loadedAt,
           });
-        } catch (error: any) {
-          set({ syncing: false, error: error?.message || 'تعذر تحميل بيانات الأصناف من الخادم.' });
+        } catch (error: unknown) {
+          set({ syncing: false, error: getErrorMessage(error, 'تعذر تحميل بيانات الأصناف من الخادم.') });
           throw error;
         }
       },
@@ -675,8 +819,8 @@ export const useInventoryStore = create<Store>()(
             transactionsLoadedAt: loadedAt,
             lastLoadedAt: loadedAt,
           });
-        } catch (error: any) {
-          set({ syncing: false, error: error?.message || 'تعذر تحميل الحركات من الخادم.' });
+        } catch (error: unknown) {
+          set({ syncing: false, error: getErrorMessage(error, 'تعذر تحميل الحركات من الخادم.') });
           throw error;
         }
       },
@@ -687,9 +831,15 @@ export const useInventoryStore = create<Store>()(
           return;
         }
 
+        // لماذا: نستخدم syncUsersAndRolesFromServer (التي تملك single-flight guard)
+        // بدلاً من استدعاء syncUsersFromServer + syncRolesFromServer بشكل مستقل.
+        // هذا يضمن أنه حتى لو نادَى N مكوّنات loadUsersAndRoles في آنٍ واحد،
+        // ينتج طلب HTTP واحد فقط لكل من /api/users و /api/users/roles.
         set({ syncing: true, error: null });
         try {
-          const [users, roles] = await Promise.all([syncUsersFromServer(), syncRolesFromServer()]);
+          const { users: rawUsers, roles: rawRoles } = await syncUsersAndRolesFromServer();
+          const users = normalizeUsers(rawUsers);
+          const roles = rawRoles;
           const loadedAt = Date.now();
 
           set({
@@ -699,23 +849,23 @@ export const useInventoryStore = create<Store>()(
             usersAndRolesLoadedAt: loadedAt,
             lastLoadedAt: loadedAt,
           });
-        } catch (error: any) {
-          set({ syncing: false, error: error?.message || 'تعذر تحميل المستخدمين والأدوار من الخادم.' });
+        } catch (error: unknown) {
+          set({ syncing: false, error: getErrorMessage(error, 'تعذر تحميل المستخدمين والأدوار من الخادم.') });
           throw error;
         }
       },
 
-      loadOpeningBalances: async (financialYear = currentFinancialYear()) => {
-        set({ openingBalancesLoading: true, openingBalancesError: null });
+      loadOpeningBalances: async (financialYear = currentFinancialYear(), options) => {
+        if (!hasFreshOpeningBalanceCache(financialYear, options)) {
+          set({ openingBalancesLoading: true, openingBalancesError: null });
+        }
 
         try {
-          const rows = await getOpeningBalancesFromApi(financialYear);
-          const nextOpeningBalanceRows = Array.isArray(rows) ? normalizeOpeningBalanceStoreRows(rows, financialYear) : [];
-          const nextOpeningBalances = Array.isArray(rows) ? mapApiOpeningBalances(rows) : {};
+          const synced = await syncOpeningBalancesFromServer(financialYear, options);
 
           set({
-            openingBalances: nextOpeningBalances,
-            openingBalanceRows: nextOpeningBalanceRows,
+            openingBalances: synced.openingBalances,
+            openingBalanceRows: synced.openingBalanceRows,
             openingBalancesYear: financialYear,
             openingBalancesLoading: false,
             openingBalancesError: null,
@@ -735,8 +885,8 @@ export const useInventoryStore = create<Store>()(
         try {
           const formulas = await syncFormulasFromServer();
           set({ formulas: [...formulas], formulasLoadedAt: Date.now(), lastLoadedAt: Date.now() });
-        } catch (error: any) {
-          set({ error: error?.message || 'تعذر تحميل التركيبات من الخادم.' });
+        } catch (error: unknown) {
+          set({ error: getErrorMessage(error, 'تعذر تحميل التركيبات من الخادم.') });
           throw error;
         }
       },
@@ -757,13 +907,14 @@ export const useInventoryStore = create<Store>()(
             unloadingRulesLoadedAt: loadedAt,
             lastLoadedAt: loadedAt,
           });
-        } catch (error: any) {
-          set({ syncing: false, error: error?.message || 'تعذر تحميل قواعد التفريغ من الخادم.' });
+        } catch (error: unknown) {
+          set({ syncing: false, error: getErrorMessage(error, 'تعذر تحميل قواعد التفريغ من الخادم.') });
           throw error;
         }
       },
 
       syncFromServer: async (target = 'all') => {
+        if (get().syncing) return;
         set({ syncing: true, error: null });
 
         const openingBalanceYear = get().openingBalancesYear ?? currentFinancialYear();
@@ -771,16 +922,23 @@ export const useInventoryStore = create<Store>()(
         const shouldLoadTransactions = target === 'all' || target === 'transactions';
         const shouldLoadOpeningBalances = target === 'all' || target === 'openingBalances';
         const shouldLoadUsers = target === 'all' || target === 'users';
-        const shouldLoadRoles = target === 'all' || target === 'users';
         const shouldLoadFormulas = target === 'all' || target === 'formulas';
         const shouldLoadUnloadingRules = target === 'all' || target === 'unloadingRules';
 
-        const [itemsResult, transactionsResult, openingBalancesResult, usersResult, rolesResult, formulasResult, unloadingRulesResult] = await Promise.allSettled([
+        // لماذا: دمجنا syncUsersFromServer + syncRolesFromServer في syncUsersAndRolesFromServer
+        // الواحدة لتشترك في الـ single-flight guard وتُصدر طلبَي HTTP معًا في Promise.all
+        // بدلاً من طلبَين مستقلَّين قد يُضاعَفان عند الاستدعاء المتزامن.
+        // إضافة 2026: نتحقق من usersAndRolesLoadedAt قبل الاستدعاء حتى تحترم loadAll
+        // نافذة الـ stale وتوقف اندفاع /api/users عند التنقل بين الصفحات.
+        const [itemsResult, transactionsResult, openingBalancesResult, usersAndRolesResult, formulasResult, unloadingRulesResult] = await Promise.allSettled([
           shouldLoadItems ? syncItemsFromServer() : Promise.resolve(null),
           shouldLoadTransactions ? syncTransactionsFromServer() : Promise.resolve(null),
-          shouldLoadOpeningBalances ? syncOpeningBalancesFromServer(openingBalanceYear) : Promise.resolve(null),
-          shouldLoadUsers ? syncUsersFromServer() : Promise.resolve(null),
-          shouldLoadRoles ? syncRolesFromServer() : Promise.resolve(null),
+          shouldLoadOpeningBalances
+            ? syncOpeningBalancesFromServer(openingBalanceYear, { staleMs: DEFAULT_OPENING_BALANCE_STALE_MS })
+            : Promise.resolve(null),
+          shouldLoadUsers && shouldReload(get().usersAndRolesLoadedAt, { staleMs: DEFAULT_LOADER_STALE_MS })
+            ? syncUsersAndRolesFromServer()
+            : Promise.resolve(null),
           shouldLoadFormulas ? syncFormulasFromServer() : Promise.resolve(null),
           shouldLoadUnloadingRules ? fetchUnloadingRules() : Promise.resolve(null),
         ]);
@@ -798,12 +956,15 @@ export const useInventoryStore = create<Store>()(
         const nextOpeningBalanceRows = shouldLoadOpeningBalances && openingBalancesResult.status === 'fulfilled' && openingBalancesResult.value
           ? openingBalancesResult.value.openingBalanceRows
           : current.openingBalanceRows;
-        const nextUsers = shouldLoadUsers && usersResult.status === 'fulfilled' && Array.isArray(usersResult.value)
-          ? usersResult.value
+
+        const usersAndRolesData = shouldLoadUsers && usersAndRolesResult.status === 'fulfilled' && usersAndRolesResult.value;
+        const nextUsers = usersAndRolesData
+          ? normalizeUsers(usersAndRolesData.users)
           : current.users;
-        const nextRoles = shouldLoadRoles && rolesResult.status === 'fulfilled' && Array.isArray(rolesResult.value)
-          ? rolesResult.value
+        const nextRoles = usersAndRolesData
+          ? usersAndRolesData.roles
           : current.roles;
+
         const nextFormulas = shouldLoadFormulas && formulasResult.status === 'fulfilled' && Array.isArray(formulasResult.value)
           ? formulasResult.value
           : current.formulas;
@@ -816,12 +977,10 @@ export const useInventoryStore = create<Store>()(
           shouldLoadItems ? itemsResult : null,
           shouldLoadTransactions ? transactionsResult : null,
           shouldLoadOpeningBalances ? openingBalancesResult : null,
-          shouldLoadUsers ? usersResult : null,
-          shouldLoadRoles ? rolesResult : null,
+          shouldLoadUsers ? usersAndRolesResult : null,
           shouldLoadFormulas ? formulasResult : null,
           shouldLoadUnloadingRules ? unloadingRulesResult : null,
-        ].filter((result): result is PromiseRejectedResult | PromiseFulfilledResult<unknown> => result !== null)
-          .filter((result) => result.status === 'rejected');
+        ].flatMap((result) => (result && result.status === 'rejected' ? [result] : []));
 
         set({
           items: normalized.items,
@@ -845,7 +1004,7 @@ export const useInventoryStore = create<Store>()(
           lastLoadedAt: Date.now(),
           inventoryCoreLoadedAt: shouldLoadItems && itemsResult.status === 'fulfilled' ? Date.now() : current.inventoryCoreLoadedAt,
           transactionsLoadedAt: shouldLoadTransactions && transactionsResult.status === 'fulfilled' ? Date.now() : current.transactionsLoadedAt,
-          usersAndRolesLoadedAt: (shouldLoadUsers || shouldLoadRoles) && usersResult.status === 'fulfilled' && rolesResult.status === 'fulfilled'
+          usersAndRolesLoadedAt: shouldLoadUsers && usersAndRolesResult.status === 'fulfilled' && usersAndRolesResult.value !== null
             ? Date.now()
             : current.usersAndRolesLoadedAt,
           unloadingRulesLoadedAt: shouldLoadUnloadingRules && unloadingRulesResult.status === 'fulfilled' ? Date.now() : current.unloadingRulesLoadedAt,
@@ -1006,6 +1165,7 @@ export const useInventoryStore = create<Store>()(
             [moduleKey]: normalizedColumns,
           },
         }));
+        upsertGridPreferenceForUser('0', moduleKey, normalizedColumns);
       },
 
       resetGridPreferences: (moduleKey, defaults) => {
@@ -1015,6 +1175,7 @@ export const useInventoryStore = create<Store>()(
             [moduleKey]: normalizeGridPreferences(defaults, defaults),
           },
         }));
+        resetGridPreferenceForUser('0', moduleKey);
       },
 
       getGridDisplayPolicy: (moduleKey) => get().gridDisplayPolicies[moduleKey] || { forceUnified: false },
@@ -1029,46 +1190,35 @@ export const useInventoryStore = create<Store>()(
       },
 
       setOperationPrintConfig: (config) => {
-        set({ operationPrintConfig: { ...config } });
+        const nextConfig = { ...config };
+        saveOperationPrintConfig(nextConfig);
+        set({ operationPrintConfig: nextConfig });
       },
 
       setOperationPrintTemplates: (templates) => {
-        set({ operationPrintTemplates: [...templates] });
+        const nextTemplates = [...templates];
+        saveOperationPrintTemplates(nextTemplates);
+        set({ operationPrintTemplates: nextTemplates });
       },
 
       setStocktakingPrintConfig: (config) => {
-        set({ stocktakingPrintConfig: { ...config } });
+        const nextConfig = { ...config };
+        saveStocktakingPrintConfig(nextConfig);
+        set({ stocktakingPrintConfig: nextConfig });
       },
 
       setStocktakingPrintTemplates: (templates) => {
-        set({ stocktakingPrintTemplates: [...templates] });
+        const nextTemplates = [...templates];
+        saveStocktakingPrintTemplates(nextTemplates);
+        set({ stocktakingPrintTemplates: nextTemplates });
       },
 
       exportRowsToExcel: async ({ fileName, sheetName = 'Sheet1', rows }) => {
-        const XLSX = await loadXlsx();
-        const worksheet = XLSX.utils.json_to_sheet(rows);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, sheetName.slice(0, 31));
-        XLSX.writeFile(workbook, fileName);
+        await exportRowsToExcelFile({ fileName, sheetName: sheetName.slice(0, 31), rows });
       },
 
       exportSheetsToExcel: async ({ fileName, sheets }) => {
-        const XLSX = await loadXlsx();
-        const workbook = XLSX.utils.book_new();
-
-        sheets.forEach((sheet, index) => {
-          const worksheet = XLSX.utils.aoa_to_sheet(sheet.rows);
-          if (sheet.columns) {
-            worksheet['!cols'] = sheet.columns;
-          }
-          XLSX.utils.book_append_sheet(
-            workbook,
-            worksheet,
-            (sheet.name || `Sheet${index + 1}`).slice(0, 31)
-          );
-        });
-
-        XLSX.writeFile(workbook, fileName);
+        await exportSheetsToExcelFile({ fileName, sheets });
       },
 
       exportPdfReport: async ({ endpoint, payload, fileName }) => {
@@ -1078,24 +1228,14 @@ export const useInventoryStore = create<Store>()(
       },
 
       exportElementToPdf: async ({ element, fileName, jsPdfOptions = {} }) => {
-        const html2pdf = await loadHtml2Pdf();
-
-        await html2pdf()
-          .set({
-            margin: 8,
-            filename: fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`,
-            image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2, useCORS: true },
-            jsPDF: {
-              unit: 'mm',
-              format: 'a4',
-              orientation: 'landscape',
-              ...jsPdfOptions,
-            },
-            pagebreak: { mode: ['css', 'legacy'] },
-          })
-          .from(element)
-          .save();
+        await saveElementPdfDocument({
+          element,
+          fileName,
+          marginMm: 8,
+          paperSize: String(jsPdfOptions.format || 'a4') as 'a3' | 'a4' | 'legal' | 'letter',
+          orientation: String(jsPdfOptions.orientation || 'landscape') as 'portrait' | 'landscape',
+          scale: 2,
+        });
       },
 
       setReferenceData: ({ units, categories }) => {
@@ -1272,9 +1412,9 @@ export const useInventoryStore = create<Store>()(
           });
           set({ soft });
           toast.success('تم أرشفة الأصناف بنجاح');
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error('Failed to archive items:', error);
-          toast.error(error?.message || 'فشل أرشفة الأصناف');
+          toast.error(getErrorMessage(error, 'فشل أرشفة الأصناف'));
           throw error;
         }
       },
@@ -1288,9 +1428,9 @@ export const useInventoryStore = create<Store>()(
           ids.forEach((id) => delete soft[id]);
           set({ soft });
           toast.success('تم استعادة الأصناف بنجاح');
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error('Failed to restore items:', error);
-          toast.error(error?.message || 'فشل استعادة الأصناف');
+          toast.error(getErrorMessage(error, 'فشل استعادة الأصناف'));
           throw error;
         }
       },
@@ -1316,9 +1456,9 @@ export const useInventoryStore = create<Store>()(
             soft,
           });
           toast.success('تم حذف الأصناف نهائياً بنجاح');
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error('Failed to permanently delete items:', error);
-          toast.error(error?.message || 'فشل حذف الأصناف نهائياً');
+          toast.error(getErrorMessage(error, 'فشل حذف الأصناف نهائياً'));
           throw error;
         }
       },

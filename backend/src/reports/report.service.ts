@@ -35,6 +35,17 @@ type ResolvedPrintModel = {
   summary: PrintSummary[];
 };
 
+type PrintColumnInput = {
+  key?: unknown;
+  label?: unknown;
+  align?: unknown;
+};
+
+type PrintSummaryInput = {
+  label?: unknown;
+  value?: unknown;
+};
+
 @Injectable()
 export class ReportService {
   private readonly defaultColumnsByType: Record<PrintableReportType, PrintColumn[]> = {
@@ -165,8 +176,24 @@ export class ReportService {
     };
   }
 
+  private getArrayValue<T = unknown>(value: unknown): T[] {
+    return Array.isArray(value) ? (value as T[]) : [];
+  }
+
+  private getRecordArrayValue(value: unknown): Array<Record<string, unknown>> {
+    return this.getArrayValue<unknown>(value)
+      .filter((entry): entry is Record<string, unknown> => typeof entry === 'object' && entry !== null)
+      .slice(0, 5000);
+  }
+
+  private getRecordValue(value: unknown): Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  }
+
   private extractColumns(data: Record<string, unknown>, type: PrintableReportType): PrintColumn[] {
-    const customColumns = Array.isArray((data as any)?.columns) ? ((data as any).columns as any[]) : [];
+    const customColumns = this.getArrayValue<PrintColumnInput>(data.columns);
     if (customColumns.length > 0) {
       return customColumns
         .map((col) => ({
@@ -181,15 +208,14 @@ export class ReportService {
   }
 
   private extractRows(data: Record<string, unknown>, type: PrintableReportType): Array<Record<string, unknown>> {
-    if (Array.isArray((data as any)?.rows)) return ((data as any).rows as Array<Record<string, unknown>>).slice(0, 5000);
-    if (Array.isArray((data as any)?.items)) return ((data as any).items as Array<Record<string, unknown>>).slice(0, 5000);
-    if (Array.isArray((data as any)?.transactions)) {
-      return ((data as any).transactions as Array<Record<string, unknown>>).slice(0, 5000);
-    }
-    if (Array.isArray((data as any)?.recentActivity)) {
-      return ((data as any).recentActivity as Array<Record<string, unknown>>).slice(0, 5000);
-    }
-    if (Array.isArray(data as unknown)) return (data as unknown as Array<Record<string, unknown>>).slice(0, 5000);
+    if (Array.isArray(data.rows)) return this.getRecordArrayValue(data.rows);
+    if (Array.isArray(data.items)) return this.getRecordArrayValue(data.items);
+    if (Array.isArray(data.transactions)) return this.getRecordArrayValue(data.transactions);
+    if (Array.isArray(data.recentActivity)) return this.getRecordArrayValue(data.recentActivity);
+
+    const rawData = data as unknown;
+    if (Array.isArray(rawData)) return this.getRecordArrayValue(rawData);
+
     throw new BadRequestException(`Unsupported data shape for "${type}" report.`);
   }
 
@@ -198,7 +224,7 @@ export class ReportService {
     type: PrintableReportType,
     rowCount: number,
   ): PrintSummary[] {
-    const customSummary = Array.isArray((data as any)?.summary) ? ((data as any).summary as any[]) : [];
+    const customSummary = this.getArrayValue<PrintSummaryInput>(data.summary);
     if (customSummary.length > 0) {
       return customSummary
         .map((entry) => ({
@@ -210,10 +236,10 @@ export class ReportService {
 
     if (type === 'dashboard') {
       return [
-        { label: 'Total Items', value: String((data as any)?.totalItems ?? '-') },
-        { label: 'Low Stock', value: String((data as any)?.lowStock ?? '-') },
-        { label: 'Today Transactions', value: String((data as any)?.todayTransactions ?? '-') },
-        { label: 'Total Revenue', value: String((data as any)?.totalRevenue ?? '-') },
+        { label: 'Total Items', value: String(data.totalItems ?? '-') },
+        { label: 'Low Stock', value: String(data.lowStock ?? '-') },
+        { label: 'Today Transactions', value: String(data.todayTransactions ?? '-') },
+        { label: 'Total Revenue', value: String(data.totalRevenue ?? '-') },
       ];
     }
 
@@ -251,7 +277,7 @@ export class ReportService {
       .map((row) => {
         const cells = model.columns
           .map((col) => {
-            const value = this.formatCellValue((row as Record<string, unknown>)[col.key]);
+            const value = this.formatCellValue(this.getRecordValue(row)[col.key]);
             return `<td class="align-${col.align || 'left'}">${this.escapeHtml(value)}</td>`;
           })
           .join('');

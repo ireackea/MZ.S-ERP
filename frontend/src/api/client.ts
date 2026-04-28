@@ -3,6 +3,7 @@
 
 import axios from 'axios';
 import { markBootstrapRequest } from '@utils/bootstrapMetrics';
+import { clearAllAuthData } from '@services/authSession';
 
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '',
@@ -20,7 +21,6 @@ const baseIncludesApiPrefix = (baseURL: string) => {
 };
 
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('feed_factory_jwt_token');
   const headers = (config.headers ?? {}) as Record<string, string>;
   const url = String(config.url || '');
   const baseURL = String(config.baseURL ?? apiClient.defaults.baseURL ?? '');
@@ -28,14 +28,6 @@ apiClient.interceptors.request.use((config) => {
   if (url && !/^https?:\/\//i.test(url)) {
     const path = toPath(url);
     config.url = hasApiPrefix(path) || baseIncludesApiPrefix(baseURL) ? path : `/api${path}`;
-  }
-
-  const hasJwtBearer = token && token.includes('.') && token.split('.').length === 3;
-
-  if (hasJwtBearer) {
-    headers.Authorization = `Bearer ${token}`;
-  } else {
-    delete headers.Authorization;
   }
 
   markBootstrapRequest(String(config.method || 'GET').toUpperCase(), String(config.url || ''));
@@ -48,8 +40,7 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error?.response?.status === 401) {
-      localStorage.removeItem('feed_factory_jwt_token');
-      localStorage.removeItem('feed_factory_jwt_user');
+      clearAllAuthData();
     }
     return Promise.reject(error);
   },

@@ -1,5 +1,29 @@
 [
   {
+    "id": "3f2fc7d1-283b-4636-a6af-66b2f10ef7c2",
+    "fileName": "full_2026-04-27T00-00-18-619Z_3f2fc7d1.ffbkp",
+    "type": "full",
+    "trigger": "scheduled",
+    "createdAt": "2026-04-27T00:00:18.601Z",
+    "sizeBytes": 1079095,
+    "checksumSha256": "854d7f2f5d35731f02f2f302a1e39bd257b82c2a7b3464a0cce8350e7a7b5d4d",
+    "integrity": "verified",
+    "passwordProtected": false,
+    "actor": {
+      "type": "system",
+      "mode": "scheduled",
+      "username": "scheduler"
+    },
+    "metadata": {
+      "users": 4,
+      "items": 91,
+      "openingBalances": 90,
+      "transactions": 505,
+      "configFiles": 0
+    },
+    "safetySnapshotForId": null
+  },
+  {
     "id": "e0191de8-7489-4eda-b251-f09499830bbb",
     "fileName": "full_2026-04-23T00-00-24-958Z_e0191de8.ffbkp",
     "type": "full",

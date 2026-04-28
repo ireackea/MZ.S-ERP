@@ -1,0 +1,1 @@
+UPDATE users SET "passwordHash" = '$2b$10$5mlLMaxOy8LywLkkveAoKOs3R3k7EMxEjNBLq2wx4UoMSDQORWeVC', "failedAttempts" = 0, "isLocked" = false WHERE username = '311' RETURNING id, username, "failedAttempts", "isLocked";

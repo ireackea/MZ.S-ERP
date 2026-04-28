@@ -1,23 +1,36 @@
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { existsSync } from 'fs';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = join(__filename, '..');
+const __dirname = dirname(__filename);
 const rootDir = join(__dirname, '..');
 const backendDir = join(rootDir, 'backend');
 const schemaPath = join(backendDir, 'prisma', 'schema.prisma');
 
+function resolvePrismaCli() {
+  const candidates = [
+    join(backendDir, 'node_modules', 'prisma', 'build', 'index.js'),
+    join(rootDir, 'node_modules', 'prisma', 'build', 'index.js'),
+  ];
+
+  return candidates.find((candidate) => existsSync(candidate));
+}
+
 try {
   if (existsSync(schemaPath)) {
     console.log('Generating Prisma client...');
-    // Use local prisma from backend node_modules
-    const prismaPath = join(backendDir, 'node_modules', '.bin', 'prisma');
-    execSync(`"${prismaPath}" generate`, {
+    const prismaCli = resolvePrismaCli();
+
+    if (!prismaCli) {
+      throw new Error('Prisma CLI could not be resolved from backend or root node_modules.');
+    }
+
+    execFileSync(process.execPath, [prismaCli, 'generate', '--config', 'prisma.config.ts'], {
       cwd: backendDir,
       stdio: 'inherit',
-      env: { ...process.env }
+      env: { ...process.env },
     });
     console.log('Prisma client generated successfully!');
   } else {

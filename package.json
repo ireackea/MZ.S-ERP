@@ -22,20 +22,20 @@
     "build:full": "npm run check:encoding && npm run frontend:build && npm run backend:build",
     "build:prod": "npm run check:encoding && npm run frontend:build && npm run backend:build",
     "preview": "npm run frontend:preview",
-    "frontend:dev": "npm run dev --workspace=frontend",
+    "frontend:dev": "npm run dev --workspace=frontend --",
     "frontend:build": "npm run build --workspace=frontend",
-    "frontend:preview": "npm run preview --workspace=frontend",
+    "frontend:preview": "npm run preview --workspace=frontend --",
     "backend:dev": "npm run start:dev --workspace=backend",
     "backend:build": "npm run build --workspace=backend",
     "backend:start": "npm run start:prod --workspace=backend",
     "start:prod": "node scripts/run-parallel.mjs \"[{\\\"label\\\":\\\"BACKEND\\\",\\\"command\\\":\\\"npm run backend:start\\\"},{\\\"label\\\":\\\"FRONTEND\\\",\\\"command\\\":\\\"npm run preview --workspace=frontend -- --host 0.0.0.0 --port 4173\\\"}]\"",
     "start:prod-full": "npm run prisma:migrate:prod && npm run build:full && npm run start:prod",
-    "prisma:generate": "cd backend && npx prisma generate --config prisma.config.ts",
-    "prisma:migrate:dev": "cd backend && npx prisma migrate dev --config prisma.config.ts",
-    "prisma:migrate:prod": "cd backend && npx prisma migrate deploy --config prisma.config.ts",
+    "prisma:generate": "npm run prisma:generate --workspace=backend",
+    "prisma:migrate:dev": "npm run prisma:migrate:dev --workspace=backend",
+    "prisma:migrate:prod": "npm run prisma:migrate:prod --workspace=backend",
     "prisma:seed": "npm run prisma:seed --workspace=backend",
     "health-check": "node scripts/health-check.mjs",
-    "monitor:check": "node -e \"fetch('http://127.0.0.1:3001/metrics').then(async (response) => { if (!response.ok) throw new Error('Metrics endpoint unavailable'); const text = await response.text(); if (!text.includes('http_requests_total')) throw new Error('Missing Prometheus request metrics'); if (!text.includes('process_uptime_seconds')) throw new Error('Missing Prometheus uptime metrics'); console.log('monitoring:ok'); }).catch((error) => { console.error(error.message); process.exit(1); });\"",
+    "monitor:check": "node scripts/monitor-check.mjs",
     "test:e2e:login": "npm exec vitest -- --run tests/e2e/login.spec.ts",
     "test:e2e:settings": "npm exec vitest -- --run tests/e2e/settings-regression.spec.ts",
     "test:e2e:full": "npm exec vitest -- --run tests/e2e/full-system.spec.ts",
@@ -48,9 +48,15 @@
     "start:frontend": "npm run frontend:dev",
     "db:sync": "npm run prisma:generate && npm run prisma:migrate:dev"
   },
+  "dependencies": {
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  },
   "devDependencies": {
-    "@prisma/client": "^5.22.0",
+    "@prisma/client": "^7.7.0",
     "concurrently": "^9.2.1",
-    "prisma": "^5.22.0"
+    "prisma": "^7.7.0"
   }
 }

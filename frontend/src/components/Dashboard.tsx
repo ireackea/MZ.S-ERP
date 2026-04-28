@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Package, AlertTriangle, TrendingUp, DollarSign, Activity, RefreshCw, AlertCircle, Printer } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from '@services/toastService';
-import { getAuthToken, getAuthUser } from '../services/authService';
+import { getAuthUser } from '../services/authService';
 import { useInventoryStore } from '../store/useInventoryStore';
 
 interface DashboardStats {

@@ -31,6 +31,10 @@ const CATEGORIES_KEY = 'feed_factory_categories';
 const SETTINGS_KEY = 'feed_factory_settings';
 const APPEARANCE_KEY = 'feed_factory_appearance';
 const REPORT_CONFIG_KEY = 'feed_factory_report_config';
+const OPERATION_PRINT_CONFIG_KEY = 'feed_factory_operation_print_config';
+const OPERATION_PRINT_TEMPLATES_KEY = 'feed_factory_operation_print_templates';
+const STOCKTAKING_PRINT_CONFIG_KEY = 'feed_factory_stocktaking_print_config';
+const STOCKTAKING_PRINT_TEMPLATES_KEY = 'feed_factory_stocktaking_print_templates';
 const AUDIT_LOGS_KEY = 'feed_factory_audit_logs';
 const OPENING_BALANCE_REPORT_CONFIG_KEY = 'feed_factory_opening_balance_report_config';
 const ITEM_SORT_SETTINGS_KEY = 'feed_factory_item_sort_settings';
@@ -241,6 +245,18 @@ export const saveAppearanceSettings = (settings: OperationAppearance[]) => write
 
 export const getReportConfig = (): ReportColumnConfig[] => readJson<ReportColumnConfig[]>(REPORT_CONFIG_KEY, defaultReportConfig());
 export const saveReportConfig = (config: ReportColumnConfig[]) => writeJson(REPORT_CONFIG_KEY, config);
+
+export const getOperationPrintConfig = (): Record<string, unknown> => readJson<Record<string, unknown>>(OPERATION_PRINT_CONFIG_KEY, {});
+export const saveOperationPrintConfig = (config: Record<string, unknown>) => writeJson(OPERATION_PRINT_CONFIG_KEY, config);
+
+export const getOperationPrintTemplates = (): Array<Record<string, unknown>> => readJson<Array<Record<string, unknown>>>(OPERATION_PRINT_TEMPLATES_KEY, []);
+export const saveOperationPrintTemplates = (templates: Array<Record<string, unknown>>) => writeJson(OPERATION_PRINT_TEMPLATES_KEY, templates);
+
+export const getStocktakingPrintConfig = (): Record<string, unknown> => readJson<Record<string, unknown>>(STOCKTAKING_PRINT_CONFIG_KEY, {});
+export const saveStocktakingPrintConfig = (config: Record<string, unknown>) => writeJson(STOCKTAKING_PRINT_CONFIG_KEY, config);
+
+export const getStocktakingPrintTemplates = (): Array<Record<string, unknown>> => readJson<Array<Record<string, unknown>>>(STOCKTAKING_PRINT_TEMPLATES_KEY, []);
+export const saveStocktakingPrintTemplates = (templates: Array<Record<string, unknown>>) => writeJson(STOCKTAKING_PRINT_TEMPLATES_KEY, templates);
 
 export const getOpeningBalanceReportConfig = (): ReportColumnConfig[] => {
 	const defaults = defaultOpeningBalanceReportConfig();

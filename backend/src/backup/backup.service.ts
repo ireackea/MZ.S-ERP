@@ -22,7 +22,9 @@ import {
   randomBytes,
   timingSafeEqual,
 } from 'crypto';
+import type { Prisma } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
+import { DatabaseInfrastructureService } from '../database/database-infrastructure.service';
 import { PrismaService } from '../prisma.service';
 
 export type BackupType = 'full' | 'inventory' | 'config' | 'safety_snapshot';
@@ -91,16 +93,59 @@ type ConfigSnapshot = {
   contentBase64: string;
 };
 
+type RoleSnapshot = Omit<Prisma.RoleCreateManyInput, 'createdAt' | 'updatedAt'> & {
+  createdAt: string;
+  updatedAt: string;
+};
+
+type PermissionSnapshot = Omit<Prisma.PermissionCreateManyInput, 'createdAt' | 'updatedAt'> & {
+  createdAt: string;
+  updatedAt: string;
+};
+
+type RolePermissionSnapshot = Omit<Prisma.RolePermissionCreateManyInput, 'createdAt'> & {
+  createdAt: string;
+};
+
+type UserSnapshot = Omit<Prisma.UserCreateManyInput, 'lockoutUntil' | 'inviteExpires' | 'createdAt' | 'updatedAt'> & {
+  lockoutUntil?: string | null;
+  inviteExpires?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type UserRoleSnapshot = Omit<Prisma.UserRoleCreateManyInput, 'assignedAt'> & {
+  assignedAt: string;
+};
+
+type OpeningBalanceSnapshot = Omit<Prisma.OpeningBalanceCreateManyInput, 'createdAt' | 'updatedAt'> & {
+  createdAt: string;
+  updatedAt: string;
+};
+
+type TransactionSnapshot = Omit<Prisma.TransactionCreateManyInput, 'date' | 'timestamp' | 'createdAt' | 'updatedAt'> & {
+  date: string;
+  timestamp?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type StatFsResult = {
+  bavail?: number | bigint;
+  bsize?: number | bigint;
+  blocks?: number | bigint;
+};
+
 type PrismaDataSnapshot = {
   engine: 'prisma';
-  roles?: any[];
-  permissions?: any[];
-  rolePermissions?: any[];
-  users?: any[];
-  userRoles?: any[];
-  items?: any[];
-  openingBalances?: any[];
-  transactions?: any[];
+  roles?: RoleSnapshot[];
+  permissions?: PermissionSnapshot[];
+  rolePermissions?: RolePermissionSnapshot[];
+  users?: UserSnapshot[];
+  userRoles?: UserRoleSnapshot[];
+  items?: Prisma.ItemCreateManyInput[];
+  openingBalances?: OpeningBalanceSnapshot[];
+  transactions?: TransactionSnapshot[];
 };
 
 type BackupPayload = {
@@ -159,7 +204,10 @@ export class BackupService implements OnModuleDestroy {
   private scheduleTimer: NodeJS.Timeout | null = null;
   private schedulerRunning = false;
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly databaseInfrastructure: DatabaseInfrastructureService,
+  ) {
     void this.ensureWorkspace();
     this.startScheduler();
   }
@@ -244,26 +292,29 @@ export class BackupService implements OnModuleDestroy {
     return normalized.length > 0 ? Array.from(new Set(normalized)) : ['local'];
   }
 
-  private sanitizeSchedule(input: any): BackupScheduleState {
+  private sanitizeSchedule(input: unknown): BackupScheduleState {
     const defaults = this.defaultSchedule();
+    const source = (typeof input === 'object' && input !== null ? input : {}) as Partial<BackupScheduleState>;
     return {
-      enabled: input?.enabled ?? defaults.enabled,
-      frequency: ['daily', 'weekly', 'monthly'].includes(input?.frequency) ? input.frequency : defaults.frequency,
-      hour: this.clamp(input?.hour, 0, 23, defaults.hour),
-      minute: this.clamp(input?.minute, 0, 59, defaults.minute),
-      dayOfWeek: this.clamp(input?.dayOfWeek, 0, 6, defaults.dayOfWeek),
-      dayOfMonth: this.clamp(input?.dayOfMonth, 1, 31, defaults.dayOfMonth),
-      retentionDays: this.clamp(input?.retentionDays, 1, 3650, defaults.retentionDays),
-      storageTargets: this.normalizeStorageTargets(input?.storageTargets),
-      encryptionEnabled: Boolean(input?.encryptionEnabled ?? defaults.encryptionEnabled),
-      encryptedPassword: typeof input?.encryptedPassword === 'string' ? input.encryptedPassword : undefined,
-      passwordHash: typeof input?.passwordHash === 'string' ? input.passwordHash : undefined,
-      passwordSaltBase64: typeof input?.passwordSaltBase64 === 'string' ? input.passwordSaltBase64 : undefined,
-      restorePinHash: typeof input?.restorePinHash === 'string' ? input.restorePinHash : undefined,
-      restorePinSaltBase64: typeof input?.restorePinSaltBase64 === 'string' ? input.restorePinSaltBase64 : undefined,
-      lastRunAt: typeof input?.lastRunAt === 'string' ? input.lastRunAt : undefined,
-      lastRunKey: typeof input?.lastRunKey === 'string' ? input.lastRunKey : undefined,
-      updatedAt: typeof input?.updatedAt === 'string' ? input.updatedAt : new Date().toISOString(),
+      enabled: source.enabled ?? defaults.enabled,
+      frequency: ['daily', 'weekly', 'monthly'].includes(String(source.frequency || ''))
+        ? (source.frequency as BackupScheduleState['frequency'])
+        : defaults.frequency,
+      hour: this.clamp(source.hour, 0, 23, defaults.hour),
+      minute: this.clamp(source.minute, 0, 59, defaults.minute),
+      dayOfWeek: this.clamp(source.dayOfWeek, 0, 6, defaults.dayOfWeek),
+      dayOfMonth: this.clamp(source.dayOfMonth, 1, 31, defaults.dayOfMonth),
+      retentionDays: this.clamp(source.retentionDays, 1, 3650, defaults.retentionDays),
+      storageTargets: this.normalizeStorageTargets(source.storageTargets),
+      encryptionEnabled: Boolean(source.encryptionEnabled ?? defaults.encryptionEnabled),
+      encryptedPassword: typeof source.encryptedPassword === 'string' ? source.encryptedPassword : undefined,
+      passwordHash: typeof source.passwordHash === 'string' ? source.passwordHash : undefined,
+      passwordSaltBase64: typeof source.passwordSaltBase64 === 'string' ? source.passwordSaltBase64 : undefined,
+      restorePinHash: typeof source.restorePinHash === 'string' ? source.restorePinHash : undefined,
+      restorePinSaltBase64: typeof source.restorePinSaltBase64 === 'string' ? source.restorePinSaltBase64 : undefined,
+      lastRunAt: typeof source.lastRunAt === 'string' ? source.lastRunAt : undefined,
+      lastRunKey: typeof source.lastRunKey === 'string' ? source.lastRunKey : undefined,
+      updatedAt: typeof source.updatedAt === 'string' ? source.updatedAt : new Date().toISOString(),
     };
   }
   private async ensureWorkspace() {
@@ -957,19 +1008,11 @@ export class BackupService implements OnModuleDestroy {
       }
     });
 
-    await this.syncPostgresSequences();
-  }
-
-  private async syncPostgresSequences() {
-    const statements = [
-      'SELECT setval(pg_get_serial_sequence(\'"Item"\', \'id\'), COALESCE((SELECT MAX(id) FROM "Item"), 1), true);',
-      'SELECT setval(pg_get_serial_sequence(\'"OpeningBalance"\', \'id\'), COALESCE((SELECT MAX(id) FROM "OpeningBalance"), 1), true);',
-      'SELECT setval(pg_get_serial_sequence(\'"Transaction"\', \'id\'), COALESCE((SELECT MAX(id) FROM "Transaction"), 1), true);',
-    ];
-
-    for (const statement of statements) {
-      await this.prisma.$executeRawUnsafe(statement).catch(() => undefined);
-    }
+    await this.databaseInfrastructure.syncPrimaryKeySequences([
+      { tableName: 'Item', columnName: 'id' },
+      { tableName: 'OpeningBalance', columnName: 'id' },
+      { tableName: 'Transaction', columnName: 'id' },
+    ]);
   }
 
   async createRestorePreview(params: {
@@ -1248,7 +1291,10 @@ export class BackupService implements OnModuleDestroy {
     let freeBytes = 0;
     let totalBytes = 0;
     try {
-      const statFs: any = await (fsPromises as any).statfs(this.backupDir);
+      const statFsProvider = fsPromises as typeof fsPromises & {
+        statfs?: (path: string) => Promise<StatFsResult>;
+      };
+      const statFs = statFsProvider.statfs ? await statFsProvider.statfs(this.backupDir) : null;
       freeBytes = Number(statFs?.bavail || 0) * Number(statFs?.bsize || 0);
       totalBytes = Number(statFs?.blocks || 0) * Number(statFs?.bsize || 0);
     } catch {
@@ -1352,7 +1398,7 @@ export class BackupService implements OnModuleDestroy {
     return path.join(this.backupDir, result.fileName);
   }
 
-  async createIncrementalBackup(_changes: any): Promise<string> {
+  async createIncrementalBackup(_changes: unknown): Promise<string> {
     const result = await this.createBackupInternal({
       type: 'inventory',
       trigger: 'manual',

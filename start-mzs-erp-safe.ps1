@@ -194,7 +194,11 @@ function Test-PlaceholderValue {
         return $true
     }
 
-    return $Value -match '^CHANGE_THIS'
+    return $Value -match '^CHANGE_THIS' -or $Value -match '^<[^>]+>$'
+}
+
+function New-StrongAdminPassword {
+    return ('Aa1!' + (New-SecureToken -Bytes 16))
 }
 
 function Ensure-EnvSecret {
@@ -487,7 +491,15 @@ function Start-ManagedProcess {
     $envAssignments = Convert-EnvMapToAssignments -Environment $Environment
     $quotedWorkingDir = $WorkingDirectory.Replace("'", "''")
     $quotedLogFile = $LogFile.Replace("'", "''")
-    $commandText = "& {{ Set-Location -LiteralPath '{0}'; {1}; {2} *>> '{3}' }}" -f $quotedWorkingDir, $envAssignments, $CommandLine, $quotedLogFile
+    $utf8Bootstrap = @(
+        "`$ErrorActionPreference = 'Continue'",
+        "if (Test-Path variable:PSNativeCommandUseErrorActionPreference) { `$PSNativeCommandUseErrorActionPreference = `$false }",
+        "`$utf8NoBom = [System.Text.UTF8Encoding]::new(`$false)",
+        "`$OutputEncoding = `$utf8NoBom",
+        "[Console]::InputEncoding = `$utf8NoBom",
+        "[Console]::OutputEncoding = `$utf8NoBom"
+    ) -join '; '
+    $commandText = "& {{ {0}; Set-Location -LiteralPath '{1}'; {2}; {3} *>> '{4}' }}" -f $utf8Bootstrap, $quotedWorkingDir, $envAssignments, $CommandLine, $quotedLogFile
 
     Write-Log ("Starting {0}: {1}" -f $Name, $CommandLine)
     $process = Start-Process -FilePath $shellExecutable -PassThru -ArgumentList @(
@@ -669,7 +681,7 @@ function Build-RuntimeEnvironment {
     )
     $corsOrigins = Merge-CorsOrigins -RawOrigins (Get-EnvValue -Map $BackendEnv -Key 'CORS_ORIGINS' -DefaultValue (Get-EnvValue -Map $RootEnv -Key 'CORS_ORIGINS')) -RequiredOrigins $requiredCorsOrigins
     $allowCodespaces = Get-EnvValue -Map $BackendEnv -Key 'ALLOW_CODESPACES_ORIGINS' -DefaultValue (Get-EnvValue -Map $RootEnv -Key 'ALLOW_CODESPACES_ORIGINS' -DefaultValue 'false')
-    $adminPassword = Get-EnvValue -Map $BackendEnv -Key 'ADMIN_PASSWORD' -DefaultValue (Get-EnvValue -Map $RootEnv -Key 'ADMIN_PASSWORD' -DefaultValue 'SecurePassword2026!')
+    $adminPassword = Get-EnvValue -Map $BackendEnv -Key 'ADMIN_PASSWORD' -DefaultValue (Get-EnvValue -Map $RootEnv -Key 'ADMIN_PASSWORD')
     $frontendApiUrl = Get-EnvValue -Map $FrontendEnv -Key 'VITE_API_URL' -DefaultValue 'http://localhost:3001'
     $frontendBackendOrigin = Get-EnvValue -Map $FrontendEnv -Key 'VITE_BACKEND_ORIGIN' -DefaultValue 'http://localhost:3001'
     $nodeEnvironment = if ($SafeMode) { 'production' } else { 'development' }
@@ -707,6 +719,12 @@ function Sync-EnvironmentFiles {
         $rootEnv = Read-EnvFile -Path $script:RootEnvPath
     }
 
+    if (Test-PlaceholderValue -Value (Get-EnvValue -Map $rootEnv -Key 'ADMIN_PASSWORD')) {
+        Set-OrAppendEnvValue -Path $script:RootEnvPath -Key 'ADMIN_PASSWORD' -Value (New-StrongAdminPassword)
+        Write-Log ("Generated ADMIN_PASSWORD in {0}" -f $script:RootEnvPath) 'OK'
+        $rootEnv = Read-EnvFile -Path $script:RootEnvPath
+    }
+
     $normalizedCorsOrigins = Merge-CorsOrigins -RawOrigins (Get-EnvValue -Map $rootEnv -Key 'CORS_ORIGINS') -RequiredOrigins @(
         'http://localhost:5173',
         'http://localhost:4173',
@@ -728,7 +746,7 @@ function Sync-EnvironmentFiles {
         @{ Key = 'BACKUP_ENCRYPTION_SECRET'; Value = (Get-EnvValue -Map $rootEnv -Key 'BACKUP_ENCRYPTION_SECRET') },
         @{ Key = 'SYSTEM_RESET_TOKEN'; Value = (Get-EnvValue -Map $rootEnv -Key 'SYSTEM_RESET_TOKEN') },
         @{ Key = 'METRICS_AUTH_TOKEN'; Value = (Get-EnvValue -Map $rootEnv -Key 'METRICS_AUTH_TOKEN') },
-        @{ Key = 'ADMIN_PASSWORD'; Value = (Get-EnvValue -Map $rootEnv -Key 'ADMIN_PASSWORD' -DefaultValue 'SecurePassword2026!') },
+        @{ Key = 'ADMIN_PASSWORD'; Value = (Get-EnvValue -Map $rootEnv -Key 'ADMIN_PASSWORD') },
         @{ Key = 'CORS_ORIGINS'; Value = $normalizedCorsOrigins },
         @{ Key = 'ALLOW_CODESPACES_ORIGINS'; Value = (Get-EnvValue -Map $rootEnv -Key 'ALLOW_CODESPACES_ORIGINS' -DefaultValue 'false') },
         @{ Key = 'PORT'; Value = [string]$script:BackendPort },

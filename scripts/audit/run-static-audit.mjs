@@ -23,6 +23,33 @@ import {
 } from './shared.mjs';
 
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.prisma', '.json', '.md', '.yml', '.yaml', '.ps1']);
+const SECRET_ASSIGNMENT_REGEX = /\b(JWT_SECRET|POSTGRES_PASSWORD|DATABASE_URL|SYSTEM_RESET_TOKEN|RESET_TOKEN|BACKUP_ENCRYPTION_SECRET|ADMIN_PASSWORD|METRICS_AUTH_TOKEN)\b\s*[:=]\s*(.+)/i;
+
+export function isSafeSecretAssignment(lineText) {
+  const match = String(lineText || '').match(SECRET_ASSIGNMENT_REGEX);
+  if (!match) return false;
+
+  const rawValue = String(match[2] || '').trim();
+  const normalizedValue = rawValue.replace(/^['"]|['"]$/g, '').trim();
+
+  if (/^\$\{[A-Z0-9_]+(?::\?[^^}]*)?\}$/i.test(normalizedValue)) {
+    return true;
+  }
+
+  if (normalizedValue === '[REDACTED]') {
+    return true;
+  }
+
+  if (/^\$[A-Za-z_][A-Za-z0-9_]*(?::[A-Za-z_][A-Za-z0-9_]*)?(?:\[[^\]]+\])*$/u.test(normalizedValue)) {
+    return true;
+  }
+
+  if (/^<[^>]+>$/.test(normalizedValue)) {
+    return true;
+  }
+
+  return false;
+}
 
 export function isPublicEndpointAllowed(route, allowlist = []) {
   const normalizedRoute = `/${String(route || '').replace(/^\/+/, '').replace(/\/+$/, '')}`;
@@ -356,14 +383,13 @@ function addTrackedSecretsChecks({ findings, projectRoot, config }) {
     const relativePath = relative(projectRoot, filePath);
     return SOURCE_EXTENSIONS.has(path.extname(filePath).toLowerCase()) && !isExcludedRelativePath(relativePath, config.excludedPaths);
   });
-  const hardcodedSecretRegex = /\b(JWT_SECRET|POSTGRES_PASSWORD|DATABASE_URL|RESET_TOKEN|BACKUP_ENCRYPTION_SECRET|ADMIN_PASSWORD|METRICS_AUTH_TOKEN)\b\s*[:=]\s*.+/i;
 
   for (const filePath of trackedFiles) {
     const source = fs.readFileSync(filePath, 'utf8');
     const lines = source.split(/\r?\n/u);
     for (let index = 0; index < lines.length; index += 1) {
       const line = lines[index];
-      if (!hardcodedSecretRegex.test(line)) continue;
+      if (!SECRET_ASSIGNMENT_REGEX.test(line) || isSafeSecretAssignment(line)) continue;
 
       findings.push(makeFinding({
         severity: /docker-compose/i.test(filePath) ? 'high' : 'medium',

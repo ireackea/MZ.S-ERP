@@ -358,10 +358,17 @@ export class AuditService {
     });
   }
 
+  // لماذا: نستخدم guard لمنع تشغيل عمليات التنظيف المتزامنة التي كانت تستنفد
+  // connection pool عند وصول طلبات متعددة في آنٍ واحد.
+  private _isPurging = false;
+
   async purgeExpiredSessions(): Promise<void> {
-    const prisma = this.getPrisma();
-    await prisma.$transaction(async (tx) => {
-      await tx.activeSession.deleteMany({
+    // لماذا: نتجنب تشغيل تنظيف متزامن — deleteMany أتومي بطبيعته ولا يحتاج $transaction
+    if (this._isPurging) return;
+    this._isPurging = true;
+    try {
+      const prisma = this.getPrisma();
+      await prisma.activeSession.deleteMany({
         where: {
           OR: [
             { isRevoked: true },
@@ -369,7 +376,9 @@ export class AuditService {
           ],
         },
       });
-    });
+    } finally {
+      this._isPurging = false;
+    }
   }
 
   async findActiveSession(params: {
@@ -377,7 +386,10 @@ export class AuditService {
     userId?: string;
     tokenHash?: string;
   }): Promise<ActiveSessionEntry | null> {
-    await this.purgeExpiredSessions();
+    // لماذا: أُزيل استدعاء purgeExpiredSessions() من هنا لأنه كان يُطلَق مع كل طلب API
+    // مُصادَق عليه، مما أدى إلى إنشاء Prisma transactions متزامنة تستنفد connection pool.
+    // التنظيف الدوري كل 5 دقائق في main.ts كافٍ — والاستعلام أدناه يُرشِّح الجلسات
+    // المنتهية تلقائياً بـ expiresAt > now.
     const prisma = this.getPrisma();
     const session = await prisma.activeSession.findFirst({
       where: {
@@ -394,7 +406,8 @@ export class AuditService {
   }
 
   async listActiveSessions(userId?: string): Promise<ActiveSessionEntry[]> {
-    await this.purgeExpiredSessions();
+    // لماذا: أُزيل استدعاء purgeExpiredSessions() — نفس سبب findActiveSession أعلاه.
+    // الاستعلام يُرشِّح الجلسات المنتهية بـ expiresAt > now.
     const prisma = this.getPrisma();
     const sessions = await prisma.activeSession.findMany({
       where: {

@@ -5,7 +5,7 @@ const data = JSON.stringify({ username: 'superadmin', password: 'SecurePassword2
 const options = {
   hostname: 'localhost',
   port: 3001,
-  path: '/auth/login',
+  path: '/api/auth/login',
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',

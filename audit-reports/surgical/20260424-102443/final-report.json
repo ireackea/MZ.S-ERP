@@ -1,0 +1,2880 @@
+{
+  "generatedAt": "2026-04-24T08:25:35.906Z",
+  "mode": "static",
+  "score": 0,
+  "counts": {
+    "critical": 0,
+    "high": 26,
+    "medium": 81,
+    "low": 7,
+    "info": 0
+  },
+  "verdict": {
+    "decision": "YELLOW",
+    "exitCode": 1,
+    "summary": "High-severity findings require remediation before trust is restored."
+  },
+  "inventory": {
+    "generatedAt": "2026-04-24T08:24:44.398Z",
+    "totalFiles": 402,
+    "sourceFiles": 286,
+    "categories": {
+      "frontend": 138,
+      "backend": 107,
+      "controllers": 17,
+      "dtoAndValidation": 30,
+      "prisma": 1,
+      "configs": 12,
+      "tests": 18
+    },
+    "giantComponents": [
+      {
+        "path": "frontend/src/components/DailyOperations.tsx",
+        "lines": 4382
+      },
+      {
+        "path": "frontend/src/pages/OperationsView.tsx",
+        "lines": 4381
+      },
+      {
+        "path": "frontend/src/components/Statement.tsx",
+        "lines": 1880
+      },
+      {
+        "path": "frontend/src/pages/StocktakingView.tsx",
+        "lines": 1761
+      },
+      {
+        "path": "frontend/src/components/Stocktaking.tsx",
+        "lines": 1697
+      },
+      {
+        "path": "frontend/src/pages/Items.tsx",
+        "lines": 1611
+      },
+      {
+        "path": "frontend/src/components/ItemManagement.tsx",
+        "lines": 1125
+      },
+      {
+        "path": "frontend/src/components/Settings.tsx",
+        "lines": 956
+      },
+      {
+        "path": "frontend/src/components/UnifiedIAM.tsx",
+        "lines": 796
+      },
+      {
+        "path": "frontend/src/App.tsx",
+        "lines": 786
+      },
+      {
+        "path": "frontend/src/pages/BackupCenterView.tsx",
+        "lines": 697
+      },
+      {
+        "path": "frontend/src/components/BackupCenter.tsx",
+        "lines": 695
+      },
+      {
+        "path": "frontend/src/components/OpeningBalancePage.tsx",
+        "lines": 620
+      },
+      {
+        "path": "frontend/src/pages/OpeningBalanceView.tsx",
+        "lines": 618
+      },
+      {
+        "path": "frontend/src/components/ItemForm.tsx",
+        "lines": 598
+      }
+    ],
+    "topLevelEntries": [
+      {
+        "name": ".dockerignore",
+        "type": "file"
+      },
+      {
+        "name": ".editorconfig",
+        "type": "file"
+      },
+      {
+        "name": ".env",
+        "type": "file"
+      },
+      {
+        "name": ".env.example",
+        "type": "file"
+      },
+      {
+        "name": ".gitattributes",
+        "type": "file"
+      },
+      {
+        "name": ".github",
+        "type": "directory"
+      },
+      {
+        "name": ".gitignore",
+        "type": "file"
+      },
+      {
+        "name": ".gitkeep",
+        "type": "file"
+      },
+      {
+        "name": "backend",
+        "type": "directory"
+      },
+      {
+        "name": "docker-compose.prod.yml",
+        "type": "file"
+      },
+      {
+        "name": "docker-compose.yml",
+        "type": "file"
+      },
+      {
+        "name": "frontend",
+        "type": "directory"
+      },
+      {
+        "name": "logs",
+        "type": "directory"
+      },
+      {
+        "name": "MZ.S-ERP.code-workspace",
+        "type": "file"
+      },
+      {
+        "name": "nginx.prod.conf",
+        "type": "file"
+      },
+      {
+        "name": "package-lock.json",
+        "type": "file"
+      },
+      {
+        "name": "package.json",
+        "type": "file"
+      },
+      {
+        "name": "prisma.config.js",
+        "type": "file"
+      },
+      {
+        "name": "prisma.config.mjs",
+        "type": "file"
+      },
+      {
+        "name": "prisma.config.ts",
+        "type": "file"
+      },
+      {
+        "name": "run-mzs-erp.bat",
+        "type": "file"
+      },
+      {
+        "name": "scripts",
+        "type": "directory"
+      },
+      {
+        "name": "start-mzs-erp-safe.ps1",
+        "type": "file"
+      },
+      {
+        "name": "start-mzs-erp.bat",
+        "type": "file"
+      },
+      {
+        "name": "START_PROD_ULTIMATE.bat",
+        "type": "file"
+      },
+      {
+        "name": "stop-mzs-erp-safe.ps1",
+        "type": "file"
+      },
+      {
+        "name": "tests",
+        "type": "directory"
+      }
+    ]
+  },
+  "static": {
+    "stage": "static",
+    "generatedAt": "2026-04-24T08:25:35.770Z",
+    "inventory": {
+      "generatedAt": "2026-04-24T08:24:44.398Z",
+      "totalFiles": 402,
+      "sourceFiles": 286,
+      "categories": {
+        "frontend": 138,
+        "backend": 107,
+        "controllers": 17,
+        "dtoAndValidation": 30,
+        "prisma": 1,
+        "configs": 12,
+        "tests": 18
+      },
+      "giantComponents": [
+        {
+          "path": "frontend/src/components/DailyOperations.tsx",
+          "lines": 4382
+        },
+        {
+          "path": "frontend/src/pages/OperationsView.tsx",
+          "lines": 4381
+        },
+        {
+          "path": "frontend/src/components/Statement.tsx",
+          "lines": 1880
+        },
+        {
+          "path": "frontend/src/pages/StocktakingView.tsx",
+          "lines": 1761
+        },
+        {
+          "path": "frontend/src/components/Stocktaking.tsx",
+          "lines": 1697
+        },
+        {
+          "path": "frontend/src/pages/Items.tsx",
+          "lines": 1611
+        },
+        {
+          "path": "frontend/src/components/ItemManagement.tsx",
+          "lines": 1125
+        },
+        {
+          "path": "frontend/src/components/Settings.tsx",
+          "lines": 956
+        },
+        {
+          "path": "frontend/src/components/UnifiedIAM.tsx",
+          "lines": 796
+        },
+        {
+          "path": "frontend/src/App.tsx",
+          "lines": 786
+        },
+        {
+          "path": "frontend/src/pages/BackupCenterView.tsx",
+          "lines": 697
+        },
+        {
+          "path": "frontend/src/components/BackupCenter.tsx",
+          "lines": 695
+        },
+        {
+          "path": "frontend/src/components/OpeningBalancePage.tsx",
+          "lines": 620
+        },
+        {
+          "path": "frontend/src/pages/OpeningBalanceView.tsx",
+          "lines": 618
+        },
+        {
+          "path": "frontend/src/components/ItemForm.tsx",
+          "lines": 598
+        }
+      ],
+      "topLevelEntries": [
+        {
+          "name": ".dockerignore",
+          "type": "file"
+        },
+        {
+          "name": ".editorconfig",
+          "type": "file"
+        },
+        {
+          "name": ".env",
+          "type": "file"
+        },
+        {
+          "name": ".env.example",
+          "type": "file"
+        },
+        {
+          "name": ".gitattributes",
+          "type": "file"
+        },
+        {
+          "name": ".github",
+          "type": "directory"
+        },
+        {
+          "name": ".gitignore",
+          "type": "file"
+        },
+        {
+          "name": ".gitkeep",
+          "type": "file"
+        },
+        {
+          "name": "backend",
+          "type": "directory"
+        },
+        {
+          "name": "docker-compose.prod.yml",
+          "type": "file"
+        },
+        {
+          "name": "docker-compose.yml",
+          "type": "file"
+        },
+        {
+          "name": "frontend",
+          "type": "directory"
+        },
+        {
+          "name": "logs",
+          "type": "directory"
+        },
+        {
+          "name": "MZ.S-ERP.code-workspace",
+          "type": "file"
+        },
+        {
+          "name": "nginx.prod.conf",
+          "type": "file"
+        },
+        {
+          "name": "package-lock.json",
+          "type": "file"
+        },
+        {
+          "name": "package.json",
+          "type": "file"
+        },
+        {
+          "name": "prisma.config.js",
+          "type": "file"
+        },
+        {
+          "name": "prisma.config.mjs",
+          "type": "file"
+        },
+        {
+          "name": "prisma.config.ts",
+          "type": "file"
+        },
+        {
+          "name": "run-mzs-erp.bat",
+          "type": "file"
+        },
+        {
+          "name": "scripts",
+          "type": "directory"
+        },
+        {
+          "name": "start-mzs-erp-safe.ps1",
+          "type": "file"
+        },
+        {
+          "name": "start-mzs-erp.bat",
+          "type": "file"
+        },
+        {
+          "name": "START_PROD_ULTIMATE.bat",
+          "type": "file"
+        },
+        {
+          "name": "stop-mzs-erp-safe.ps1",
+          "type": "file"
+        },
+        {
+          "name": "tests",
+          "type": "directory"
+        }
+      ]
+    },
+    "findings": [
+      {
+        "severity": "high",
+        "category": "architecture",
+        "ruleId": "giant-react-component",
+        "title": "Large React surface detected (1125 lines)",
+        "description": "This React page/component exceeds the configured maintainability threshold.",
+        "file": "frontend/src/components/ItemManagement.tsx",
+        "line": 1,
+        "evidence": "lines=1125",
+        "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+      },
+      {
+        "severity": "high",
+        "category": "architecture",
+        "ruleId": "giant-react-component",
+        "title": "Large React surface detected (1611 lines)",
+        "description": "This React page/component exceeds the configured maintainability threshold.",
+        "file": "frontend/src/pages/Items.tsx",
+        "line": 1,
+        "evidence": "lines=1611",
+        "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+      },
+      {
+        "severity": "high",
+        "category": "architecture",
+        "ruleId": "giant-react-component",
+        "title": "Large React surface detected (1697 lines)",
+        "description": "This React page/component exceeds the configured maintainability threshold.",
+        "file": "frontend/src/components/Stocktaking.tsx",
+        "line": 1,
+        "evidence": "lines=1697",
+        "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+      },
+      {
+        "severity": "high",
+        "category": "architecture",
+        "ruleId": "giant-react-component",
+        "title": "Large React surface detected (1761 lines)",
+        "description": "This React page/component exceeds the configured maintainability threshold.",
+        "file": "frontend/src/pages/StocktakingView.tsx",
+        "line": 1,
+        "evidence": "lines=1761",
+        "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+      },
+      {
+        "severity": "high",
+        "category": "architecture",
+        "ruleId": "giant-react-component",
+        "title": "Large React surface detected (1880 lines)",
+        "description": "This React page/component exceeds the configured maintainability threshold.",
+        "file": "frontend/src/components/Statement.tsx",
+        "line": 1,
+        "evidence": "lines=1880",
+        "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+      },
+      {
+        "severity": "high",
+        "category": "architecture",
+        "ruleId": "giant-react-component",
+        "title": "Large React surface detected (4381 lines)",
+        "description": "This React page/component exceeds the configured maintainability threshold.",
+        "file": "frontend/src/pages/OperationsView.tsx",
+        "line": 1,
+        "evidence": "lines=4381",
+        "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+      },
+      {
+        "severity": "high",
+        "category": "architecture",
+        "ruleId": "giant-react-component",
+        "title": "Large React surface detected (4382 lines)",
+        "description": "This React page/component exceeds the configured maintainability threshold.",
+        "file": "frontend/src/components/DailyOperations.tsx",
+        "line": 1,
+        "evidence": "lines=4382",
+        "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+      },
+      {
+        "severity": "high",
+        "category": "architecture",
+        "ruleId": "giant-react-component",
+        "title": "Large React surface detected (956 lines)",
+        "description": "This React page/component exceeds the configured maintainability threshold.",
+        "file": "frontend/src/components/Settings.tsx",
+        "line": 1,
+        "evidence": "lines=956",
+        "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+      },
+      {
+        "severity": "high",
+        "category": "architecture",
+        "ruleId": "duplicate-large-surface",
+        "title": "Large React surfaces appear substantially duplicated",
+        "description": "Two large files share a high proportion of normalized lines, suggesting duplicated product logic or forked UI.",
+        "file": "frontend/src/components/BackupCenter.tsx",
+        "line": 1,
+        "evidence": "frontend/src/components/BackupCenter.tsx <-> frontend/src/pages/BackupCenterView.tsx; similarity=1.00",
+        "remediation": "Converge the shared behavior into a common module or clearly separate the responsibilities of the duplicated views."
+      },
+      {
+        "severity": "high",
+        "category": "architecture",
+        "ruleId": "duplicate-large-surface",
+        "title": "Large React surfaces appear substantially duplicated",
+        "description": "Two large files share a high proportion of normalized lines, suggesting duplicated product logic or forked UI.",
+        "file": "frontend/src/components/DailyOperations.tsx",
+        "line": 1,
+        "evidence": "frontend/src/components/DailyOperations.tsx <-> frontend/src/pages/OperationsView.tsx; similarity=1.00",
+        "remediation": "Converge the shared behavior into a common module or clearly separate the responsibilities of the duplicated views."
+      },
+      {
+        "severity": "high",
+        "category": "architecture",
+        "ruleId": "duplicate-large-surface",
+        "title": "Large React surfaces appear substantially duplicated",
+        "description": "Two large files share a high proportion of normalized lines, suggesting duplicated product logic or forked UI.",
+        "file": "frontend/src/components/OpeningBalancePage.tsx",
+        "line": 1,
+        "evidence": "frontend/src/components/OpeningBalancePage.tsx <-> frontend/src/pages/OpeningBalanceView.tsx; similarity=0.99",
+        "remediation": "Converge the shared behavior into a common module or clearly separate the responsibilities of the duplicated views."
+      },
+      {
+        "severity": "high",
+        "category": "architecture",
+        "ruleId": "duplicate-large-surface",
+        "title": "Large React surfaces appear substantially duplicated",
+        "description": "Two large files share a high proportion of normalized lines, suggesting duplicated product logic or forked UI.",
+        "file": "frontend/src/components/Stocktaking.tsx",
+        "line": 1,
+        "evidence": "frontend/src/components/Stocktaking.tsx <-> frontend/src/pages/StocktakingView.tsx; similarity=0.95",
+        "remediation": "Converge the shared behavior into a common module or clearly separate the responsibilities of the duplicated views."
+      },
+      {
+        "severity": "high",
+        "category": "supply-chain",
+        "ruleId": "npm-audit-vulnerabilities",
+        "title": "npm audit reported 1 high vulnerabilities in frontend",
+        "description": "Installed dependencies include reported security vulnerabilities.",
+        "evidence": "workspace=frontend; severity=high; count=1",
+        "remediation": "Review npm-audit.json and remediate or explicitly accept the vulnerable packages."
+      },
+      {
+        "severity": "high",
+        "category": "supply-chain",
+        "ruleId": "npm-audit-vulnerabilities",
+        "title": "npm audit reported 1 high vulnerabilities in root",
+        "description": "Installed dependencies include reported security vulnerabilities.",
+        "evidence": "workspace=root; severity=high; count=1",
+        "remediation": "Review npm-audit.json and remediate or explicitly accept the vulnerable packages."
+      },
+      {
+        "severity": "high",
+        "category": "security",
+        "ruleId": "hardcoded-secret",
+        "title": "Tracked file contains a hardcoded secret-like assignment",
+        "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+        "file": "docker-compose.prod.yml",
+        "line": 11,
+        "evidence": "POSTGRES_PASSWORD: [REDACTED]",
+        "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+      },
+      {
+        "severity": "high",
+        "category": "security",
+        "ruleId": "hardcoded-secret",
+        "title": "Tracked file contains a hardcoded secret-like assignment",
+        "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+        "file": "docker-compose.prod.yml",
+        "line": 24,
+        "evidence": "DATABASE_URL: [REDACTED]",
+        "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+      },
+      {
+        "severity": "high",
+        "category": "security",
+        "ruleId": "hardcoded-secret",
+        "title": "Tracked file contains a hardcoded secret-like assignment",
+        "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+        "file": "docker-compose.yml",
+        "line": 11,
+        "evidence": "POSTGRES_PASSWORD: [REDACTED]",
+        "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+      },
+      {
+        "severity": "high",
+        "category": "security",
+        "ruleId": "hardcoded-secret",
+        "title": "Tracked file contains a hardcoded secret-like assignment",
+        "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+        "file": "docker-compose.yml",
+        "line": 23,
+        "evidence": "DATABASE_URL: [REDACTED]",
+        "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+      },
+      {
+        "severity": "high",
+        "category": "security",
+        "ruleId": "hardcoded-secret",
+        "title": "Tracked file contains a hardcoded secret-like assignment",
+        "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+        "file": "docker-compose.yml",
+        "line": 24,
+        "evidence": "JWT_SECRET: [REDACTED]",
+        "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+      },
+      {
+        "severity": "high",
+        "category": "security",
+        "ruleId": "hardcoded-secret",
+        "title": "Tracked file contains a hardcoded secret-like assignment",
+        "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+        "file": "docker-compose.yml",
+        "line": 25,
+        "evidence": "RESET_TOKEN: [REDACTED]",
+        "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+      },
+      {
+        "severity": "high",
+        "category": "security",
+        "ruleId": "hardcoded-secret",
+        "title": "Tracked file contains a hardcoded secret-like assignment",
+        "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+        "file": "docker-compose.yml",
+        "line": 26,
+        "evidence": "BACKUP_ENCRYPTION_SECRET: [REDACTED]",
+        "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+      },
+      {
+        "severity": "high",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 12 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "backend/src/backup/backup.service.ts",
+        "line": 1,
+        "evidence": "anyUsages=12",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "high",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 13 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "frontend/src/components/UnifiedIAM.tsx",
+        "line": 1,
+        "evidence": "anyUsages=13",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "high",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 15 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "frontend/src/store/useInventoryStore.ts",
+        "line": 1,
+        "evidence": "anyUsages=15",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "high",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 18 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "backend/src/reports/report.service.ts",
+        "line": 1,
+        "evidence": "anyUsages=18",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "high",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 19 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "backend/src/backup/backup.controller.ts",
+        "line": 1,
+        "evidence": "anyUsages=19",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "medium",
+        "category": "architecture",
+        "ruleId": "giant-react-component",
+        "title": "Large React surface detected (598 lines)",
+        "description": "This React page/component exceeds the configured maintainability threshold.",
+        "file": "frontend/src/components/ItemForm.tsx",
+        "line": 1,
+        "evidence": "lines=598",
+        "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+      },
+      {
+        "severity": "medium",
+        "category": "architecture",
+        "ruleId": "giant-react-component",
+        "title": "Large React surface detected (618 lines)",
+        "description": "This React page/component exceeds the configured maintainability threshold.",
+        "file": "frontend/src/pages/OpeningBalanceView.tsx",
+        "line": 1,
+        "evidence": "lines=618",
+        "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+      },
+      {
+        "severity": "medium",
+        "category": "architecture",
+        "ruleId": "giant-react-component",
+        "title": "Large React surface detected (620 lines)",
+        "description": "This React page/component exceeds the configured maintainability threshold.",
+        "file": "frontend/src/components/OpeningBalancePage.tsx",
+        "line": 1,
+        "evidence": "lines=620",
+        "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+      },
+      {
+        "severity": "medium",
+        "category": "architecture",
+        "ruleId": "giant-react-component",
+        "title": "Large React surface detected (695 lines)",
+        "description": "This React page/component exceeds the configured maintainability threshold.",
+        "file": "frontend/src/components/BackupCenter.tsx",
+        "line": 1,
+        "evidence": "lines=695",
+        "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+      },
+      {
+        "severity": "medium",
+        "category": "architecture",
+        "ruleId": "giant-react-component",
+        "title": "Large React surface detected (697 lines)",
+        "description": "This React page/component exceeds the configured maintainability threshold.",
+        "file": "frontend/src/pages/BackupCenterView.tsx",
+        "line": 1,
+        "evidence": "lines=697",
+        "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+      },
+      {
+        "severity": "medium",
+        "category": "architecture",
+        "ruleId": "giant-react-component",
+        "title": "Large React surface detected (786 lines)",
+        "description": "This React page/component exceeds the configured maintainability threshold.",
+        "file": "frontend/src/App.tsx",
+        "line": 1,
+        "evidence": "lines=786",
+        "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+      },
+      {
+        "severity": "medium",
+        "category": "architecture",
+        "ruleId": "giant-react-component",
+        "title": "Large React surface detected (796 lines)",
+        "description": "This React page/component exceeds the configured maintainability threshold.",
+        "file": "frontend/src/components/UnifiedIAM.tsx",
+        "line": 1,
+        "evidence": "lines=796",
+        "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+      },
+      {
+        "severity": "medium",
+        "category": "tooling",
+        "ruleId": "lint-pipeline-missing",
+        "title": "Lint pipeline is not configured end-to-end",
+        "description": "The repo currently lacks a complete lint command and ESLint configuration for the main workspaces.",
+        "evidence": "hasLintScript=false; hasEslintConfig=false",
+        "remediation": "Add a lint script and a shared ESLint configuration so audit quality gates are enforceable."
+      },
+      {
+        "severity": "medium",
+        "category": "auditability",
+        "ruleId": "mutation-without-audit-trace",
+        "title": "Mutation-heavy service lacks obvious audit logging",
+        "description": "This backend service performs create/update/delete operations without an obvious audit trail call.",
+        "file": "backend/src/backup/backup.service.ts",
+        "line": 1,
+        "evidence": "mutations=30",
+        "remediation": "Review whether these mutations should emit structured audit records for ERP traceability."
+      },
+      {
+        "severity": "medium",
+        "category": "auditability",
+        "ruleId": "mutation-without-audit-trace",
+        "title": "Mutation-heavy service lacks obvious audit logging",
+        "description": "This backend service performs create/update/delete operations without an obvious audit trail call.",
+        "file": "backend/src/monitoring/monitoring.service.ts",
+        "line": 1,
+        "evidence": "mutations=3",
+        "remediation": "Review whether these mutations should emit structured audit records for ERP traceability."
+      },
+      {
+        "severity": "medium",
+        "category": "auditability",
+        "ruleId": "mutation-without-audit-trace",
+        "title": "Mutation-heavy service lacks obvious audit logging",
+        "description": "This backend service performs create/update/delete operations without an obvious audit trail call.",
+        "file": "backend/src/theme/theme.service.ts",
+        "line": 1,
+        "evidence": "mutations=1",
+        "remediation": "Review whether these mutations should emit structured audit records for ERP traceability."
+      },
+      {
+        "severity": "medium",
+        "category": "auditability",
+        "ruleId": "mutation-without-audit-trace",
+        "title": "Mutation-heavy service lacks obvious audit logging",
+        "description": "This backend service performs create/update/delete operations without an obvious audit trail call.",
+        "file": "backend/src/transaction/transaction.service.ts",
+        "line": 1,
+        "evidence": "mutations=12",
+        "remediation": "Review whether these mutations should emit structured audit records for ERP traceability."
+      },
+      {
+        "severity": "medium",
+        "category": "supply-chain",
+        "ruleId": "npm-audit-vulnerabilities",
+        "title": "npm audit reported 4 moderate vulnerabilities in frontend",
+        "description": "Installed dependencies include reported security vulnerabilities.",
+        "evidence": "workspace=frontend; severity=moderate; count=4",
+        "remediation": "Review npm-audit.json and remediate or explicitly accept the vulnerable packages."
+      },
+      {
+        "severity": "medium",
+        "category": "supply-chain",
+        "ruleId": "npm-audit-vulnerabilities",
+        "title": "npm audit reported 5 moderate vulnerabilities in backend",
+        "description": "Installed dependencies include reported security vulnerabilities.",
+        "evidence": "workspace=backend; severity=moderate; count=5",
+        "remediation": "Review npm-audit.json and remediate or explicitly accept the vulnerable packages."
+      },
+      {
+        "severity": "medium",
+        "category": "supply-chain",
+        "ruleId": "npm-audit-vulnerabilities",
+        "title": "npm audit reported 7 moderate vulnerabilities in root",
+        "description": "Installed dependencies include reported security vulnerabilities.",
+        "evidence": "workspace=root; severity=moderate; count=7",
+        "remediation": "Review npm-audit.json and remediate or explicitly accept the vulnerable packages."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "sensitive-console-logging",
+        "title": "Sensitive-flow console logging detected",
+        "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+        "file": "backend/prisma/seed.ts",
+        "line": 65,
+        "evidence": "console.warn('[Seed] Ignoring weak ADMIN_PASSWORD value and enforcing enterprise default password.');",
+        "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "sensitive-console-logging",
+        "title": "Sensitive-flow console logging detected",
+        "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+        "file": "backend/prisma/seed.ts",
+        "line": 165,
+        "evidence": "console.log(`Seeded default RBAC roles and users (superadmin, manager, viewer) with password: ${defaultPassword}`);",
+        "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "sensitive-console-logging",
+        "title": "Sensitive-flow console logging detected",
+        "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+        "file": "backend/src/auth/auth.service.ts",
+        "line": 205,
+        "evidence": "console.warn('[Auth Service] SuperAdmin password synchronized from ADMIN_PASSWORD.');",
+        "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "sensitive-console-logging",
+        "title": "Sensitive-flow console logging detected",
+        "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+        "file": "backend/src/auth/auth.service.ts",
+        "line": 224,
+        "evidence": "console.error('[Auth Service] SuperAdmin role not found!');",
+        "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "sensitive-console-logging",
+        "title": "Sensitive-flow console logging detected",
+        "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+        "file": "backend/src/auth/auth.service.ts",
+        "line": 280,
+        "evidence": "console.log('[Auth Service] SuperAdmin seeded successfully!');",
+        "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "sensitive-console-logging",
+        "title": "Sensitive-flow console logging detected",
+        "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+        "file": "backend/src/auth/auth.service.ts",
+        "line": 303,
+        "evidence": "console.log(`[Auth Service] Login attempt for username/email: ${normalized || '<empty>'}`);",
+        "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "sensitive-console-logging",
+        "title": "Sensitive-flow console logging detected",
+        "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+        "file": "backend/src/auth/auth.service.ts",
+        "line": 309,
+        "evidence": "console.warn('[Auth Service] ensureDefaultAdmin skipped due to runtime error:', seedError?.message || seedError);",
+        "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "sensitive-console-logging",
+        "title": "Sensitive-flow console logging detected",
+        "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+        "file": "backend/src/auth/auth.service.ts",
+        "line": 328,
+        "evidence": "console.error('[Auth Service] Failed to load user during login:', queryError?.message || queryError);",
+        "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "sensitive-console-logging",
+        "title": "Sensitive-flow console logging detected",
+        "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+        "file": "backend/src/auth/auth.service.ts",
+        "line": 354,
+        "evidence": "console.warn('[Auth Service] Failed to reset expired lockout metadata:', resetError?.message || resetError);",
+        "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "sensitive-console-logging",
+        "title": "Sensitive-flow console logging detected",
+        "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+        "file": "backend/src/auth/auth.service.ts",
+        "line": 389,
+        "evidence": "console.warn('[Auth Service] Failed to update failedAttempts/lockout metadata:', attemptsUpdateError?.message || attemptsUpdateError);",
+        "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "sensitive-console-logging",
+        "title": "Sensitive-flow console logging detected",
+        "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+        "file": "backend/src/auth/auth.service.ts",
+        "line": 428,
+        "evidence": "console.warn('[Auth Service] Post-auth user metadata update skipped:', postAuthUpdateError?.message || postAuthUpdateError);",
+        "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "sensitive-console-logging",
+        "title": "Sensitive-flow console logging detected",
+        "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+        "file": "backend/src/auth/auth.service.ts",
+        "line": 456,
+        "evidence": "console.error('[Auth Service] JWT signing failed:', jwtError?.message || jwtError);",
+        "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "sensitive-console-logging",
+        "title": "Sensitive-flow console logging detected",
+        "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+        "file": "backend/src/main.ts",
+        "line": 241,
+        "evidence": "console.log(`\\n[Auth Monitor] [Backend Entry] Incoming: ${req.method} ${req.url}`);",
+        "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "sensitive-console-logging",
+        "title": "Sensitive-flow console logging detected",
+        "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+        "file": "backend/src/main.ts",
+        "line": 242,
+        "evidence": "console.log(` [Auth Monitor] IP: ${extractClientIp(req)}`);",
+        "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "sensitive-console-logging",
+        "title": "Sensitive-flow console logging detected",
+        "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+        "file": "frontend/src/App.tsx",
+        "line": 483,
+        "evidence": "console.log('[App] LOGIN SUCCESS:', { username: user?.username, role: user?.role, id: user?.id, redirectTo, permissions: user?.permissions });",
+        "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "sensitive-console-logging",
+        "title": "Sensitive-flow console logging detected",
+        "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+        "file": "frontend/src/components/Settings.tsx",
+        "line": 401,
+        "evidence": "console.log('[DEBUG] System Reset Started - Code:', resetModal.confirmationCode);",
+        "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "sensitive-console-logging",
+        "title": "Sensitive-flow console logging detected",
+        "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+        "file": "frontend/src/components/Settings.tsx",
+        "line": 423,
+        "evidence": "console.log('[DEBUG] Redirecting to /login');",
+        "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "sensitive-console-logging",
+        "title": "Sensitive-flow console logging detected",
+        "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+        "file": "frontend/src/components/Settings.tsx",
+        "line": 430,
+        "evidence": "console.error('[DEBUG] Reset Error:', error);",
+        "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "sensitive-console-logging",
+        "title": "Sensitive-flow console logging detected",
+        "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+        "file": "frontend/src/hooks/useAppBootstrap.ts",
+        "line": 169,
+        "evidence": "console.error('[useAppBootstrap] Session restore failed:', result.error);",
+        "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "sensitive-console-logging",
+        "title": "Sensitive-flow console logging detected",
+        "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+        "file": "frontend/src/hooks/useAppBootstrap.ts",
+        "line": 194,
+        "evidence": "console.error('[useAppBootstrap] Session restore failed:', error);",
+        "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "sensitive-console-logging",
+        "title": "Sensitive-flow console logging detected",
+        "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+        "file": "frontend/src/services/authService.ts",
+        "line": 25,
+        "evidence": "console.log('[authService] Login request:', { username });",
+        "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "sensitive-console-logging",
+        "title": "Sensitive-flow console logging detected",
+        "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+        "file": "frontend/src/services/authService.ts",
+        "line": 36,
+        "evidence": "console.log('[authService] Login successful:', {",
+        "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "sensitive-console-logging",
+        "title": "Sensitive-flow console logging detected",
+        "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+        "file": "frontend/src/services/authService.ts",
+        "line": 44,
+        "evidence": "console.error('[authService] Login failed:', {",
+        "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "sensitive-console-logging",
+        "title": "Sensitive-flow console logging detected",
+        "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+        "file": "frontend/src/services/authService.ts",
+        "line": 58,
+        "evidence": "console.error('[authService] Reset login attempts failed:', {",
+        "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "sensitive-console-logging",
+        "title": "Sensitive-flow console logging detected",
+        "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+        "file": "frontend/src/services/authSession.ts",
+        "line": 57,
+        "evidence": "console.error('[authSession] Failed to parse auth user:', error);",
+        "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "sensitive-console-logging",
+        "title": "Sensitive-flow console logging detected",
+        "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+        "file": "frontend/src/services/authSession.ts",
+        "line": 71,
+        "evidence": "console.error('[authSession] Failed to store auth user:', error);",
+        "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "hardcoded-secret",
+        "title": "Tracked file contains a hardcoded secret-like assignment",
+        "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+        "file": "scripts/audit/Invoke-SurgicalAudit.ps1",
+        "line": 138,
+        "evidence": "POSTGRES_PASSWORD: [REDACTED]",
+        "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "hardcoded-secret",
+        "title": "Tracked file contains a hardcoded secret-like assignment",
+        "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+        "file": "scripts/audit/Invoke-SurgicalAudit.ps1",
+        "line": 143,
+        "evidence": "DATABASE_URL: [REDACTED]",
+        "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "hardcoded-secret",
+        "title": "Tracked file contains a hardcoded secret-like assignment",
+        "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+        "file": "scripts/audit/Invoke-SurgicalAudit.ps1",
+        "line": 144,
+        "evidence": "JWT_SECRET: [REDACTED]",
+        "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "hardcoded-secret",
+        "title": "Tracked file contains a hardcoded secret-like assignment",
+        "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+        "file": "scripts/audit/Invoke-SurgicalAudit.ps1",
+        "line": 145,
+        "evidence": "RESET_TOKEN: [REDACTED]",
+        "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "hardcoded-secret",
+        "title": "Tracked file contains a hardcoded secret-like assignment",
+        "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+        "file": "scripts/audit/Invoke-SurgicalAudit.ps1",
+        "line": 146,
+        "evidence": "BACKUP_ENCRYPTION_SECRET: [REDACTED]",
+        "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "hardcoded-secret",
+        "title": "Tracked file contains a hardcoded secret-like assignment",
+        "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+        "file": "scripts/audit/Invoke-SurgicalAudit.ps1",
+        "line": 147,
+        "evidence": "METRICS_AUTH_TOKEN: [REDACTED]",
+        "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "hardcoded-secret",
+        "title": "Tracked file contains a hardcoded secret-like assignment",
+        "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+        "file": "scripts/audit/Invoke-SurgicalAudit.ps1",
+        "line": 151,
+        "evidence": "ADMIN_PASSWORD: [REDACTED]",
+        "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "hardcoded-secret",
+        "title": "Tracked file contains a hardcoded secret-like assignment",
+        "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+        "file": "scripts/audit/tests/analyzers.test.mjs",
+        "line": 19,
+        "evidence": "const redacted = redactSensitiveValue('JWT_SECRET: [REDACTED], config);",
+        "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "hardcoded-secret",
+        "title": "Tracked file contains a hardcoded secret-like assignment",
+        "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+        "file": "scripts/audit/tests/analyzers.test.mjs",
+        "line": 20,
+        "evidence": "assert.equal(redacted, 'JWT_SECRET: [REDACTED]",
+        "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "hardcoded-secret",
+        "title": "Tracked file contains a hardcoded secret-like assignment",
+        "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+        "file": "start-mzs-erp-safe.ps1",
+        "line": 686,
+        "evidence": "DATABASE_URL = [REDACTED]",
+        "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "hardcoded-secret",
+        "title": "Tracked file contains a hardcoded secret-like assignment",
+        "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+        "file": "start-mzs-erp-safe.ps1",
+        "line": 688,
+        "evidence": "JWT_SECRET = [REDACTED]",
+        "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "hardcoded-secret",
+        "title": "Tracked file contains a hardcoded secret-like assignment",
+        "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+        "file": "start-mzs-erp-safe.ps1",
+        "line": 689,
+        "evidence": "BACKUP_ENCRYPTION_SECRET = [REDACTED]",
+        "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "hardcoded-secret",
+        "title": "Tracked file contains a hardcoded secret-like assignment",
+        "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+        "file": "start-mzs-erp-safe.ps1",
+        "line": 691,
+        "evidence": "METRICS_AUTH_TOKEN = [REDACTED]",
+        "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "hardcoded-secret",
+        "title": "Tracked file contains a hardcoded secret-like assignment",
+        "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+        "file": "start-mzs-erp-safe.ps1",
+        "line": 694,
+        "evidence": "ADMIN_PASSWORD = [REDACTED]",
+        "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "hardcoded-secret",
+        "title": "Tracked file contains a hardcoded secret-like assignment",
+        "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+        "file": "start-mzs-erp-safe.ps1",
+        "line": 1013,
+        "evidence": "DATABASE_URL = [REDACTED]",
+        "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "hardcoded-secret",
+        "title": "Tracked file contains a hardcoded secret-like assignment",
+        "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+        "file": "start-mzs-erp-safe.ps1",
+        "line": 1015,
+        "evidence": "JWT_SECRET = [REDACTED]",
+        "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "hardcoded-secret",
+        "title": "Tracked file contains a hardcoded secret-like assignment",
+        "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+        "file": "start-mzs-erp-safe.ps1",
+        "line": 1016,
+        "evidence": "BACKUP_ENCRYPTION_SECRET = [REDACTED]",
+        "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+      },
+      {
+        "severity": "medium",
+        "category": "security",
+        "ruleId": "hardcoded-secret",
+        "title": "Tracked file contains a hardcoded secret-like assignment",
+        "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+        "file": "start-mzs-erp-safe.ps1",
+        "line": 1018,
+        "evidence": "METRICS_AUTH_TOKEN = [REDACTED]",
+        "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+      },
+      {
+        "severity": "medium",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 10 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "backend/src/item/item.controller.ts",
+        "line": 1,
+        "evidence": "anyUsages=10",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "medium",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 10 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "backend/src/users/users.controller.ts",
+        "line": 1,
+        "evidence": "anyUsages=10",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "medium",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 4 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "backend/src/transaction/transaction.service.ts",
+        "line": 1,
+        "evidence": "anyUsages=4",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "medium",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 4 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "backend/src/unloading-rule/unloading-rule.controller.ts",
+        "line": 1,
+        "evidence": "anyUsages=4",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "medium",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 4 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "frontend/src/components/Settings.tsx",
+        "line": 1,
+        "evidence": "anyUsages=4",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "medium",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 4 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "frontend/src/modules/settings/components/AuditLogs.tsx",
+        "line": 1,
+        "evidence": "anyUsages=4",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "medium",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 4 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "frontend/src/services/mutationQueueService.ts",
+        "line": 1,
+        "evidence": "anyUsages=4",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "medium",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 4 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "frontend/src/services/unloadingRulesService.ts",
+        "line": 1,
+        "evidence": "anyUsages=4",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "medium",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 5 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "frontend/src/components/ItemForm.tsx",
+        "line": 1,
+        "evidence": "anyUsages=5",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "medium",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 5 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "frontend/src/hooks/useOfflineSync.ts",
+        "line": 1,
+        "evidence": "anyUsages=5",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "medium",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 5 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "frontend/src/pages/Items.tsx",
+        "line": 1,
+        "evidence": "anyUsages=5",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "medium",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 6 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "backend/src/auth/jwt-auth.guard.ts",
+        "line": 1,
+        "evidence": "anyUsages=6",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "medium",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 6 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "backend/src/item/item.service.ts",
+        "line": 1,
+        "evidence": "anyUsages=6",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "medium",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 6 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "frontend/src/services/toastService.ts",
+        "line": 1,
+        "evidence": "anyUsages=6",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "medium",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 7 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "frontend/src/components/BackupCenter.tsx",
+        "line": 1,
+        "evidence": "anyUsages=7",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "medium",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 7 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "frontend/src/components/DailyOperations.tsx",
+        "line": 1,
+        "evidence": "anyUsages=7",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "medium",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 7 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "frontend/src/pages/BackupCenterView.tsx",
+        "line": 1,
+        "evidence": "anyUsages=7",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "medium",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 7 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "frontend/src/pages/OperationsView.tsx",
+        "line": 1,
+        "evidence": "anyUsages=7",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "medium",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 7 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "frontend/src/services/transactionsService.ts",
+        "line": 1,
+        "evidence": "anyUsages=7",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "medium",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 8 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "backend/src/auth/auth.service.ts",
+        "line": 1,
+        "evidence": "anyUsages=8",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "medium",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 8 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "frontend/src/pages/Operations.test.tsx",
+        "line": 1,
+        "evidence": "anyUsages=8",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "medium",
+        "category": "type-safety",
+        "ruleId": "any-hotspot",
+        "title": "Type safety hotspot: 8 any-casts/usages",
+        "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+        "file": "frontend/src/pages/Reports.tsx",
+        "line": 1,
+        "evidence": "anyUsages=8",
+        "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+      },
+      {
+        "severity": "low",
+        "category": "authorization",
+        "ruleId": "missing-endpoint-permission",
+        "title": "Authenticated endpoint has no explicit permission or role decorator",
+        "description": "The endpoint relies on authentication only and does not declare endpoint-level RBAC metadata.",
+        "file": "backend/src/app-bootstrap/app-bootstrap.controller.ts",
+        "line": 10,
+        "evidence": "GET /app/bootstrap",
+        "remediation": "Add @Permissions or @Roles, or document why any authenticated user should access this route."
+      },
+      {
+        "severity": "low",
+        "category": "authorization",
+        "ruleId": "missing-endpoint-permission",
+        "title": "Authenticated endpoint has no explicit permission or role decorator",
+        "description": "The endpoint relies on authentication only and does not declare endpoint-level RBAC metadata.",
+        "file": "backend/src/auth/auth.controller.ts",
+        "line": 71,
+        "evidence": "POST /auth/reset-attempts",
+        "remediation": "Add @Permissions or @Roles, or document why any authenticated user should access this route."
+      },
+      {
+        "severity": "low",
+        "category": "authorization",
+        "ruleId": "missing-endpoint-permission",
+        "title": "Authenticated endpoint has no explicit permission or role decorator",
+        "description": "The endpoint relies on authentication only and does not declare endpoint-level RBAC metadata.",
+        "file": "backend/src/auth/auth.controller.ts",
+        "line": 98,
+        "evidence": "GET /auth/me",
+        "remediation": "Add @Permissions or @Roles, or document why any authenticated user should access this route."
+      },
+      {
+        "severity": "low",
+        "category": "authorization",
+        "ruleId": "missing-endpoint-permission",
+        "title": "Authenticated endpoint has no explicit permission or role decorator",
+        "description": "The endpoint relies on authentication only and does not declare endpoint-level RBAC metadata.",
+        "file": "backend/src/unloading-rule/unloading-rule.controller.ts",
+        "line": 33,
+        "evidence": "GET /unloading-rules",
+        "remediation": "Add @Permissions or @Roles, or document why any authenticated user should access this route."
+      },
+      {
+        "severity": "low",
+        "category": "authorization",
+        "ruleId": "missing-endpoint-permission",
+        "title": "Authenticated endpoint has no explicit permission or role decorator",
+        "description": "The endpoint relies on authentication only and does not declare endpoint-level RBAC metadata.",
+        "file": "backend/src/users/users.controller.ts",
+        "line": 34,
+        "evidence": "GET /users/permissions/me",
+        "remediation": "Add @Permissions or @Roles, or document why any authenticated user should access this route."
+      },
+      {
+        "severity": "low",
+        "category": "configuration",
+        "ruleId": "local-env-present",
+        "title": "Local environment file present: .env",
+        "description": "A local environment file exists on disk. The audit intentionally reports its presence without exposing values.",
+        "file": ".env",
+        "remediation": "Keep the file untracked and verify it only contains local or secret-managed values."
+      },
+      {
+        "severity": "low",
+        "category": "configuration",
+        "ruleId": "local-env-present",
+        "title": "Local environment file present: backend/.env",
+        "description": "A local environment file exists on disk. The audit intentionally reports its presence without exposing values.",
+        "file": "backend/.env",
+        "remediation": "Keep the file untracked and verify it only contains local or secret-managed values."
+      }
+    ],
+    "counts": {
+      "medium": 81,
+      "high": 26,
+      "low": 7
+    }
+  },
+  "runtime": null,
+  "findings": [
+    {
+      "severity": "high",
+      "category": "architecture",
+      "ruleId": "giant-react-component",
+      "title": "Large React surface detected (1125 lines)",
+      "description": "This React page/component exceeds the configured maintainability threshold.",
+      "file": "frontend/src/components/ItemManagement.tsx",
+      "line": 1,
+      "evidence": "lines=1125",
+      "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+    },
+    {
+      "severity": "high",
+      "category": "architecture",
+      "ruleId": "giant-react-component",
+      "title": "Large React surface detected (1611 lines)",
+      "description": "This React page/component exceeds the configured maintainability threshold.",
+      "file": "frontend/src/pages/Items.tsx",
+      "line": 1,
+      "evidence": "lines=1611",
+      "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+    },
+    {
+      "severity": "high",
+      "category": "architecture",
+      "ruleId": "giant-react-component",
+      "title": "Large React surface detected (1697 lines)",
+      "description": "This React page/component exceeds the configured maintainability threshold.",
+      "file": "frontend/src/components/Stocktaking.tsx",
+      "line": 1,
+      "evidence": "lines=1697",
+      "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+    },
+    {
+      "severity": "high",
+      "category": "architecture",
+      "ruleId": "giant-react-component",
+      "title": "Large React surface detected (1761 lines)",
+      "description": "This React page/component exceeds the configured maintainability threshold.",
+      "file": "frontend/src/pages/StocktakingView.tsx",
+      "line": 1,
+      "evidence": "lines=1761",
+      "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+    },
+    {
+      "severity": "high",
+      "category": "architecture",
+      "ruleId": "giant-react-component",
+      "title": "Large React surface detected (1880 lines)",
+      "description": "This React page/component exceeds the configured maintainability threshold.",
+      "file": "frontend/src/components/Statement.tsx",
+      "line": 1,
+      "evidence": "lines=1880",
+      "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+    },
+    {
+      "severity": "high",
+      "category": "architecture",
+      "ruleId": "giant-react-component",
+      "title": "Large React surface detected (4381 lines)",
+      "description": "This React page/component exceeds the configured maintainability threshold.",
+      "file": "frontend/src/pages/OperationsView.tsx",
+      "line": 1,
+      "evidence": "lines=4381",
+      "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+    },
+    {
+      "severity": "high",
+      "category": "architecture",
+      "ruleId": "giant-react-component",
+      "title": "Large React surface detected (4382 lines)",
+      "description": "This React page/component exceeds the configured maintainability threshold.",
+      "file": "frontend/src/components/DailyOperations.tsx",
+      "line": 1,
+      "evidence": "lines=4382",
+      "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+    },
+    {
+      "severity": "high",
+      "category": "architecture",
+      "ruleId": "giant-react-component",
+      "title": "Large React surface detected (956 lines)",
+      "description": "This React page/component exceeds the configured maintainability threshold.",
+      "file": "frontend/src/components/Settings.tsx",
+      "line": 1,
+      "evidence": "lines=956",
+      "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+    },
+    {
+      "severity": "high",
+      "category": "architecture",
+      "ruleId": "duplicate-large-surface",
+      "title": "Large React surfaces appear substantially duplicated",
+      "description": "Two large files share a high proportion of normalized lines, suggesting duplicated product logic or forked UI.",
+      "file": "frontend/src/components/BackupCenter.tsx",
+      "line": 1,
+      "evidence": "frontend/src/components/BackupCenter.tsx <-> frontend/src/pages/BackupCenterView.tsx; similarity=1.00",
+      "remediation": "Converge the shared behavior into a common module or clearly separate the responsibilities of the duplicated views."
+    },
+    {
+      "severity": "high",
+      "category": "architecture",
+      "ruleId": "duplicate-large-surface",
+      "title": "Large React surfaces appear substantially duplicated",
+      "description": "Two large files share a high proportion of normalized lines, suggesting duplicated product logic or forked UI.",
+      "file": "frontend/src/components/DailyOperations.tsx",
+      "line": 1,
+      "evidence": "frontend/src/components/DailyOperations.tsx <-> frontend/src/pages/OperationsView.tsx; similarity=1.00",
+      "remediation": "Converge the shared behavior into a common module or clearly separate the responsibilities of the duplicated views."
+    },
+    {
+      "severity": "high",
+      "category": "architecture",
+      "ruleId": "duplicate-large-surface",
+      "title": "Large React surfaces appear substantially duplicated",
+      "description": "Two large files share a high proportion of normalized lines, suggesting duplicated product logic or forked UI.",
+      "file": "frontend/src/components/OpeningBalancePage.tsx",
+      "line": 1,
+      "evidence": "frontend/src/components/OpeningBalancePage.tsx <-> frontend/src/pages/OpeningBalanceView.tsx; similarity=0.99",
+      "remediation": "Converge the shared behavior into a common module or clearly separate the responsibilities of the duplicated views."
+    },
+    {
+      "severity": "high",
+      "category": "architecture",
+      "ruleId": "duplicate-large-surface",
+      "title": "Large React surfaces appear substantially duplicated",
+      "description": "Two large files share a high proportion of normalized lines, suggesting duplicated product logic or forked UI.",
+      "file": "frontend/src/components/Stocktaking.tsx",
+      "line": 1,
+      "evidence": "frontend/src/components/Stocktaking.tsx <-> frontend/src/pages/StocktakingView.tsx; similarity=0.95",
+      "remediation": "Converge the shared behavior into a common module or clearly separate the responsibilities of the duplicated views."
+    },
+    {
+      "severity": "high",
+      "category": "supply-chain",
+      "ruleId": "npm-audit-vulnerabilities",
+      "title": "npm audit reported 1 high vulnerabilities in frontend",
+      "description": "Installed dependencies include reported security vulnerabilities.",
+      "evidence": "workspace=frontend; severity=high; count=1",
+      "remediation": "Review npm-audit.json and remediate or explicitly accept the vulnerable packages."
+    },
+    {
+      "severity": "high",
+      "category": "supply-chain",
+      "ruleId": "npm-audit-vulnerabilities",
+      "title": "npm audit reported 1 high vulnerabilities in root",
+      "description": "Installed dependencies include reported security vulnerabilities.",
+      "evidence": "workspace=root; severity=high; count=1",
+      "remediation": "Review npm-audit.json and remediate or explicitly accept the vulnerable packages."
+    },
+    {
+      "severity": "high",
+      "category": "security",
+      "ruleId": "hardcoded-secret",
+      "title": "Tracked file contains a hardcoded secret-like assignment",
+      "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+      "file": "docker-compose.prod.yml",
+      "line": 11,
+      "evidence": "POSTGRES_PASSWORD: [REDACTED]",
+      "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+    },
+    {
+      "severity": "high",
+      "category": "security",
+      "ruleId": "hardcoded-secret",
+      "title": "Tracked file contains a hardcoded secret-like assignment",
+      "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+      "file": "docker-compose.prod.yml",
+      "line": 24,
+      "evidence": "DATABASE_URL: [REDACTED]",
+      "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+    },
+    {
+      "severity": "high",
+      "category": "security",
+      "ruleId": "hardcoded-secret",
+      "title": "Tracked file contains a hardcoded secret-like assignment",
+      "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+      "file": "docker-compose.yml",
+      "line": 11,
+      "evidence": "POSTGRES_PASSWORD: [REDACTED]",
+      "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+    },
+    {
+      "severity": "high",
+      "category": "security",
+      "ruleId": "hardcoded-secret",
+      "title": "Tracked file contains a hardcoded secret-like assignment",
+      "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+      "file": "docker-compose.yml",
+      "line": 23,
+      "evidence": "DATABASE_URL: [REDACTED]",
+      "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+    },
+    {
+      "severity": "high",
+      "category": "security",
+      "ruleId": "hardcoded-secret",
+      "title": "Tracked file contains a hardcoded secret-like assignment",
+      "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+      "file": "docker-compose.yml",
+      "line": 24,
+      "evidence": "JWT_SECRET: [REDACTED]",
+      "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+    },
+    {
+      "severity": "high",
+      "category": "security",
+      "ruleId": "hardcoded-secret",
+      "title": "Tracked file contains a hardcoded secret-like assignment",
+      "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+      "file": "docker-compose.yml",
+      "line": 25,
+      "evidence": "RESET_TOKEN: [REDACTED]",
+      "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+    },
+    {
+      "severity": "high",
+      "category": "security",
+      "ruleId": "hardcoded-secret",
+      "title": "Tracked file contains a hardcoded secret-like assignment",
+      "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+      "file": "docker-compose.yml",
+      "line": 26,
+      "evidence": "BACKUP_ENCRYPTION_SECRET: [REDACTED]",
+      "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+    },
+    {
+      "severity": "high",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 12 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "backend/src/backup/backup.service.ts",
+      "line": 1,
+      "evidence": "anyUsages=12",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "high",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 13 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "frontend/src/components/UnifiedIAM.tsx",
+      "line": 1,
+      "evidence": "anyUsages=13",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "high",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 15 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "frontend/src/store/useInventoryStore.ts",
+      "line": 1,
+      "evidence": "anyUsages=15",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "high",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 18 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "backend/src/reports/report.service.ts",
+      "line": 1,
+      "evidence": "anyUsages=18",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "high",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 19 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "backend/src/backup/backup.controller.ts",
+      "line": 1,
+      "evidence": "anyUsages=19",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "medium",
+      "category": "architecture",
+      "ruleId": "giant-react-component",
+      "title": "Large React surface detected (598 lines)",
+      "description": "This React page/component exceeds the configured maintainability threshold.",
+      "file": "frontend/src/components/ItemForm.tsx",
+      "line": 1,
+      "evidence": "lines=598",
+      "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+    },
+    {
+      "severity": "medium",
+      "category": "architecture",
+      "ruleId": "giant-react-component",
+      "title": "Large React surface detected (618 lines)",
+      "description": "This React page/component exceeds the configured maintainability threshold.",
+      "file": "frontend/src/pages/OpeningBalanceView.tsx",
+      "line": 1,
+      "evidence": "lines=618",
+      "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+    },
+    {
+      "severity": "medium",
+      "category": "architecture",
+      "ruleId": "giant-react-component",
+      "title": "Large React surface detected (620 lines)",
+      "description": "This React page/component exceeds the configured maintainability threshold.",
+      "file": "frontend/src/components/OpeningBalancePage.tsx",
+      "line": 1,
+      "evidence": "lines=620",
+      "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+    },
+    {
+      "severity": "medium",
+      "category": "architecture",
+      "ruleId": "giant-react-component",
+      "title": "Large React surface detected (695 lines)",
+      "description": "This React page/component exceeds the configured maintainability threshold.",
+      "file": "frontend/src/components/BackupCenter.tsx",
+      "line": 1,
+      "evidence": "lines=695",
+      "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+    },
+    {
+      "severity": "medium",
+      "category": "architecture",
+      "ruleId": "giant-react-component",
+      "title": "Large React surface detected (697 lines)",
+      "description": "This React page/component exceeds the configured maintainability threshold.",
+      "file": "frontend/src/pages/BackupCenterView.tsx",
+      "line": 1,
+      "evidence": "lines=697",
+      "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+    },
+    {
+      "severity": "medium",
+      "category": "architecture",
+      "ruleId": "giant-react-component",
+      "title": "Large React surface detected (786 lines)",
+      "description": "This React page/component exceeds the configured maintainability threshold.",
+      "file": "frontend/src/App.tsx",
+      "line": 1,
+      "evidence": "lines=786",
+      "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+    },
+    {
+      "severity": "medium",
+      "category": "architecture",
+      "ruleId": "giant-react-component",
+      "title": "Large React surface detected (796 lines)",
+      "description": "This React page/component exceeds the configured maintainability threshold.",
+      "file": "frontend/src/components/UnifiedIAM.tsx",
+      "line": 1,
+      "evidence": "lines=796",
+      "remediation": "Split the surface into focused sections, extract hooks, and isolate side-effects from rendering."
+    },
+    {
+      "severity": "medium",
+      "category": "tooling",
+      "ruleId": "lint-pipeline-missing",
+      "title": "Lint pipeline is not configured end-to-end",
+      "description": "The repo currently lacks a complete lint command and ESLint configuration for the main workspaces.",
+      "evidence": "hasLintScript=false; hasEslintConfig=false",
+      "remediation": "Add a lint script and a shared ESLint configuration so audit quality gates are enforceable."
+    },
+    {
+      "severity": "medium",
+      "category": "auditability",
+      "ruleId": "mutation-without-audit-trace",
+      "title": "Mutation-heavy service lacks obvious audit logging",
+      "description": "This backend service performs create/update/delete operations without an obvious audit trail call.",
+      "file": "backend/src/backup/backup.service.ts",
+      "line": 1,
+      "evidence": "mutations=30",
+      "remediation": "Review whether these mutations should emit structured audit records for ERP traceability."
+    },
+    {
+      "severity": "medium",
+      "category": "auditability",
+      "ruleId": "mutation-without-audit-trace",
+      "title": "Mutation-heavy service lacks obvious audit logging",
+      "description": "This backend service performs create/update/delete operations without an obvious audit trail call.",
+      "file": "backend/src/monitoring/monitoring.service.ts",
+      "line": 1,
+      "evidence": "mutations=3",
+      "remediation": "Review whether these mutations should emit structured audit records for ERP traceability."
+    },
+    {
+      "severity": "medium",
+      "category": "auditability",
+      "ruleId": "mutation-without-audit-trace",
+      "title": "Mutation-heavy service lacks obvious audit logging",
+      "description": "This backend service performs create/update/delete operations without an obvious audit trail call.",
+      "file": "backend/src/theme/theme.service.ts",
+      "line": 1,
+      "evidence": "mutations=1",
+      "remediation": "Review whether these mutations should emit structured audit records for ERP traceability."
+    },
+    {
+      "severity": "medium",
+      "category": "auditability",
+      "ruleId": "mutation-without-audit-trace",
+      "title": "Mutation-heavy service lacks obvious audit logging",
+      "description": "This backend service performs create/update/delete operations without an obvious audit trail call.",
+      "file": "backend/src/transaction/transaction.service.ts",
+      "line": 1,
+      "evidence": "mutations=12",
+      "remediation": "Review whether these mutations should emit structured audit records for ERP traceability."
+    },
+    {
+      "severity": "medium",
+      "category": "supply-chain",
+      "ruleId": "npm-audit-vulnerabilities",
+      "title": "npm audit reported 4 moderate vulnerabilities in frontend",
+      "description": "Installed dependencies include reported security vulnerabilities.",
+      "evidence": "workspace=frontend; severity=moderate; count=4",
+      "remediation": "Review npm-audit.json and remediate or explicitly accept the vulnerable packages."
+    },
+    {
+      "severity": "medium",
+      "category": "supply-chain",
+      "ruleId": "npm-audit-vulnerabilities",
+      "title": "npm audit reported 5 moderate vulnerabilities in backend",
+      "description": "Installed dependencies include reported security vulnerabilities.",
+      "evidence": "workspace=backend; severity=moderate; count=5",
+      "remediation": "Review npm-audit.json and remediate or explicitly accept the vulnerable packages."
+    },
+    {
+      "severity": "medium",
+      "category": "supply-chain",
+      "ruleId": "npm-audit-vulnerabilities",
+      "title": "npm audit reported 7 moderate vulnerabilities in root",
+      "description": "Installed dependencies include reported security vulnerabilities.",
+      "evidence": "workspace=root; severity=moderate; count=7",
+      "remediation": "Review npm-audit.json and remediate or explicitly accept the vulnerable packages."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "sensitive-console-logging",
+      "title": "Sensitive-flow console logging detected",
+      "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+      "file": "backend/prisma/seed.ts",
+      "line": 65,
+      "evidence": "console.warn('[Seed] Ignoring weak ADMIN_PASSWORD value and enforcing enterprise default password.');",
+      "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "sensitive-console-logging",
+      "title": "Sensitive-flow console logging detected",
+      "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+      "file": "backend/prisma/seed.ts",
+      "line": 165,
+      "evidence": "console.log(`Seeded default RBAC roles and users (superadmin, manager, viewer) with password: ${defaultPassword}`);",
+      "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "sensitive-console-logging",
+      "title": "Sensitive-flow console logging detected",
+      "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+      "file": "backend/src/auth/auth.service.ts",
+      "line": 205,
+      "evidence": "console.warn('[Auth Service] SuperAdmin password synchronized from ADMIN_PASSWORD.');",
+      "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "sensitive-console-logging",
+      "title": "Sensitive-flow console logging detected",
+      "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+      "file": "backend/src/auth/auth.service.ts",
+      "line": 224,
+      "evidence": "console.error('[Auth Service] SuperAdmin role not found!');",
+      "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "sensitive-console-logging",
+      "title": "Sensitive-flow console logging detected",
+      "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+      "file": "backend/src/auth/auth.service.ts",
+      "line": 280,
+      "evidence": "console.log('[Auth Service] SuperAdmin seeded successfully!');",
+      "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "sensitive-console-logging",
+      "title": "Sensitive-flow console logging detected",
+      "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+      "file": "backend/src/auth/auth.service.ts",
+      "line": 303,
+      "evidence": "console.log(`[Auth Service] Login attempt for username/email: ${normalized || '<empty>'}`);",
+      "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "sensitive-console-logging",
+      "title": "Sensitive-flow console logging detected",
+      "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+      "file": "backend/src/auth/auth.service.ts",
+      "line": 309,
+      "evidence": "console.warn('[Auth Service] ensureDefaultAdmin skipped due to runtime error:', seedError?.message || seedError);",
+      "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "sensitive-console-logging",
+      "title": "Sensitive-flow console logging detected",
+      "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+      "file": "backend/src/auth/auth.service.ts",
+      "line": 328,
+      "evidence": "console.error('[Auth Service] Failed to load user during login:', queryError?.message || queryError);",
+      "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "sensitive-console-logging",
+      "title": "Sensitive-flow console logging detected",
+      "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+      "file": "backend/src/auth/auth.service.ts",
+      "line": 354,
+      "evidence": "console.warn('[Auth Service] Failed to reset expired lockout metadata:', resetError?.message || resetError);",
+      "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "sensitive-console-logging",
+      "title": "Sensitive-flow console logging detected",
+      "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+      "file": "backend/src/auth/auth.service.ts",
+      "line": 389,
+      "evidence": "console.warn('[Auth Service] Failed to update failedAttempts/lockout metadata:', attemptsUpdateError?.message || attemptsUpdateError);",
+      "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "sensitive-console-logging",
+      "title": "Sensitive-flow console logging detected",
+      "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+      "file": "backend/src/auth/auth.service.ts",
+      "line": 428,
+      "evidence": "console.warn('[Auth Service] Post-auth user metadata update skipped:', postAuthUpdateError?.message || postAuthUpdateError);",
+      "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "sensitive-console-logging",
+      "title": "Sensitive-flow console logging detected",
+      "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+      "file": "backend/src/auth/auth.service.ts",
+      "line": 456,
+      "evidence": "console.error('[Auth Service] JWT signing failed:', jwtError?.message || jwtError);",
+      "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "sensitive-console-logging",
+      "title": "Sensitive-flow console logging detected",
+      "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+      "file": "backend/src/main.ts",
+      "line": 241,
+      "evidence": "console.log(`\\n[Auth Monitor] [Backend Entry] Incoming: ${req.method} ${req.url}`);",
+      "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "sensitive-console-logging",
+      "title": "Sensitive-flow console logging detected",
+      "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+      "file": "backend/src/main.ts",
+      "line": 242,
+      "evidence": "console.log(` [Auth Monitor] IP: ${extractClientIp(req)}`);",
+      "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "sensitive-console-logging",
+      "title": "Sensitive-flow console logging detected",
+      "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+      "file": "frontend/src/App.tsx",
+      "line": 483,
+      "evidence": "console.log('[App] LOGIN SUCCESS:', { username: user?.username, role: user?.role, id: user?.id, redirectTo, permissions: user?.permissions });",
+      "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "sensitive-console-logging",
+      "title": "Sensitive-flow console logging detected",
+      "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+      "file": "frontend/src/components/Settings.tsx",
+      "line": 401,
+      "evidence": "console.log('[DEBUG] System Reset Started - Code:', resetModal.confirmationCode);",
+      "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "sensitive-console-logging",
+      "title": "Sensitive-flow console logging detected",
+      "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+      "file": "frontend/src/components/Settings.tsx",
+      "line": 423,
+      "evidence": "console.log('[DEBUG] Redirecting to /login');",
+      "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "sensitive-console-logging",
+      "title": "Sensitive-flow console logging detected",
+      "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+      "file": "frontend/src/components/Settings.tsx",
+      "line": 430,
+      "evidence": "console.error('[DEBUG] Reset Error:', error);",
+      "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "sensitive-console-logging",
+      "title": "Sensitive-flow console logging detected",
+      "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+      "file": "frontend/src/hooks/useAppBootstrap.ts",
+      "line": 169,
+      "evidence": "console.error('[useAppBootstrap] Session restore failed:', result.error);",
+      "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "sensitive-console-logging",
+      "title": "Sensitive-flow console logging detected",
+      "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+      "file": "frontend/src/hooks/useAppBootstrap.ts",
+      "line": 194,
+      "evidence": "console.error('[useAppBootstrap] Session restore failed:', error);",
+      "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "sensitive-console-logging",
+      "title": "Sensitive-flow console logging detected",
+      "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+      "file": "frontend/src/services/authService.ts",
+      "line": 25,
+      "evidence": "console.log('[authService] Login request:', { username });",
+      "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "sensitive-console-logging",
+      "title": "Sensitive-flow console logging detected",
+      "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+      "file": "frontend/src/services/authService.ts",
+      "line": 36,
+      "evidence": "console.log('[authService] Login successful:', {",
+      "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "sensitive-console-logging",
+      "title": "Sensitive-flow console logging detected",
+      "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+      "file": "frontend/src/services/authService.ts",
+      "line": 44,
+      "evidence": "console.error('[authService] Login failed:', {",
+      "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "sensitive-console-logging",
+      "title": "Sensitive-flow console logging detected",
+      "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+      "file": "frontend/src/services/authService.ts",
+      "line": 58,
+      "evidence": "console.error('[authService] Reset login attempts failed:', {",
+      "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "sensitive-console-logging",
+      "title": "Sensitive-flow console logging detected",
+      "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+      "file": "frontend/src/services/authSession.ts",
+      "line": 57,
+      "evidence": "console.error('[authSession] Failed to parse auth user:', error);",
+      "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "sensitive-console-logging",
+      "title": "Sensitive-flow console logging detected",
+      "description": "A console statement appears inside an auth, login, token, password, cookie, or session-related flow.",
+      "file": "frontend/src/services/authSession.ts",
+      "line": 71,
+      "evidence": "console.error('[authSession] Failed to store auth user:', error);",
+      "remediation": "Route security-sensitive diagnostics through structured logging with redaction, or remove them in production paths."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "hardcoded-secret",
+      "title": "Tracked file contains a hardcoded secret-like assignment",
+      "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+      "file": "scripts/audit/Invoke-SurgicalAudit.ps1",
+      "line": 138,
+      "evidence": "POSTGRES_PASSWORD: [REDACTED]",
+      "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "hardcoded-secret",
+      "title": "Tracked file contains a hardcoded secret-like assignment",
+      "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+      "file": "scripts/audit/Invoke-SurgicalAudit.ps1",
+      "line": 143,
+      "evidence": "DATABASE_URL: [REDACTED]",
+      "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "hardcoded-secret",
+      "title": "Tracked file contains a hardcoded secret-like assignment",
+      "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+      "file": "scripts/audit/Invoke-SurgicalAudit.ps1",
+      "line": 144,
+      "evidence": "JWT_SECRET: [REDACTED]",
+      "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "hardcoded-secret",
+      "title": "Tracked file contains a hardcoded secret-like assignment",
+      "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+      "file": "scripts/audit/Invoke-SurgicalAudit.ps1",
+      "line": 145,
+      "evidence": "RESET_TOKEN: [REDACTED]",
+      "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "hardcoded-secret",
+      "title": "Tracked file contains a hardcoded secret-like assignment",
+      "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+      "file": "scripts/audit/Invoke-SurgicalAudit.ps1",
+      "line": 146,
+      "evidence": "BACKUP_ENCRYPTION_SECRET: [REDACTED]",
+      "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "hardcoded-secret",
+      "title": "Tracked file contains a hardcoded secret-like assignment",
+      "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+      "file": "scripts/audit/Invoke-SurgicalAudit.ps1",
+      "line": 147,
+      "evidence": "METRICS_AUTH_TOKEN: [REDACTED]",
+      "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "hardcoded-secret",
+      "title": "Tracked file contains a hardcoded secret-like assignment",
+      "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+      "file": "scripts/audit/Invoke-SurgicalAudit.ps1",
+      "line": 151,
+      "evidence": "ADMIN_PASSWORD: [REDACTED]",
+      "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "hardcoded-secret",
+      "title": "Tracked file contains a hardcoded secret-like assignment",
+      "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+      "file": "scripts/audit/tests/analyzers.test.mjs",
+      "line": 19,
+      "evidence": "const redacted = redactSensitiveValue('JWT_SECRET: [REDACTED], config);",
+      "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "hardcoded-secret",
+      "title": "Tracked file contains a hardcoded secret-like assignment",
+      "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+      "file": "scripts/audit/tests/analyzers.test.mjs",
+      "line": 20,
+      "evidence": "assert.equal(redacted, 'JWT_SECRET: [REDACTED]",
+      "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "hardcoded-secret",
+      "title": "Tracked file contains a hardcoded secret-like assignment",
+      "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+      "file": "start-mzs-erp-safe.ps1",
+      "line": 686,
+      "evidence": "DATABASE_URL = [REDACTED]",
+      "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "hardcoded-secret",
+      "title": "Tracked file contains a hardcoded secret-like assignment",
+      "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+      "file": "start-mzs-erp-safe.ps1",
+      "line": 688,
+      "evidence": "JWT_SECRET = [REDACTED]",
+      "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "hardcoded-secret",
+      "title": "Tracked file contains a hardcoded secret-like assignment",
+      "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+      "file": "start-mzs-erp-safe.ps1",
+      "line": 689,
+      "evidence": "BACKUP_ENCRYPTION_SECRET = [REDACTED]",
+      "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "hardcoded-secret",
+      "title": "Tracked file contains a hardcoded secret-like assignment",
+      "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+      "file": "start-mzs-erp-safe.ps1",
+      "line": 691,
+      "evidence": "METRICS_AUTH_TOKEN = [REDACTED]",
+      "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "hardcoded-secret",
+      "title": "Tracked file contains a hardcoded secret-like assignment",
+      "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+      "file": "start-mzs-erp-safe.ps1",
+      "line": 694,
+      "evidence": "ADMIN_PASSWORD = [REDACTED]",
+      "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "hardcoded-secret",
+      "title": "Tracked file contains a hardcoded secret-like assignment",
+      "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+      "file": "start-mzs-erp-safe.ps1",
+      "line": 1013,
+      "evidence": "DATABASE_URL = [REDACTED]",
+      "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "hardcoded-secret",
+      "title": "Tracked file contains a hardcoded secret-like assignment",
+      "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+      "file": "start-mzs-erp-safe.ps1",
+      "line": 1015,
+      "evidence": "JWT_SECRET = [REDACTED]",
+      "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "hardcoded-secret",
+      "title": "Tracked file contains a hardcoded secret-like assignment",
+      "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+      "file": "start-mzs-erp-safe.ps1",
+      "line": 1016,
+      "evidence": "BACKUP_ENCRYPTION_SECRET = [REDACTED]",
+      "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+    },
+    {
+      "severity": "medium",
+      "category": "security",
+      "ruleId": "hardcoded-secret",
+      "title": "Tracked file contains a hardcoded secret-like assignment",
+      "description": "The file appears to embed a secret or credential directly in tracked source/configuration.",
+      "file": "start-mzs-erp-safe.ps1",
+      "line": 1018,
+      "evidence": "METRICS_AUTH_TOKEN = [REDACTED]",
+      "remediation": "Move the value to secret management or a non-tracked runtime environment file."
+    },
+    {
+      "severity": "medium",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 10 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "backend/src/item/item.controller.ts",
+      "line": 1,
+      "evidence": "anyUsages=10",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "medium",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 10 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "backend/src/users/users.controller.ts",
+      "line": 1,
+      "evidence": "anyUsages=10",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "medium",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 4 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "backend/src/transaction/transaction.service.ts",
+      "line": 1,
+      "evidence": "anyUsages=4",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "medium",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 4 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "backend/src/unloading-rule/unloading-rule.controller.ts",
+      "line": 1,
+      "evidence": "anyUsages=4",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "medium",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 4 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "frontend/src/components/Settings.tsx",
+      "line": 1,
+      "evidence": "anyUsages=4",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "medium",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 4 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "frontend/src/modules/settings/components/AuditLogs.tsx",
+      "line": 1,
+      "evidence": "anyUsages=4",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "medium",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 4 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "frontend/src/services/mutationQueueService.ts",
+      "line": 1,
+      "evidence": "anyUsages=4",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "medium",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 4 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "frontend/src/services/unloadingRulesService.ts",
+      "line": 1,
+      "evidence": "anyUsages=4",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "medium",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 5 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "frontend/src/components/ItemForm.tsx",
+      "line": 1,
+      "evidence": "anyUsages=5",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "medium",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 5 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "frontend/src/hooks/useOfflineSync.ts",
+      "line": 1,
+      "evidence": "anyUsages=5",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "medium",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 5 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "frontend/src/pages/Items.tsx",
+      "line": 1,
+      "evidence": "anyUsages=5",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "medium",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 6 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "backend/src/auth/jwt-auth.guard.ts",
+      "line": 1,
+      "evidence": "anyUsages=6",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "medium",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 6 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "backend/src/item/item.service.ts",
+      "line": 1,
+      "evidence": "anyUsages=6",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "medium",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 6 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "frontend/src/services/toastService.ts",
+      "line": 1,
+      "evidence": "anyUsages=6",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "medium",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 7 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "frontend/src/components/BackupCenter.tsx",
+      "line": 1,
+      "evidence": "anyUsages=7",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "medium",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 7 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "frontend/src/components/DailyOperations.tsx",
+      "line": 1,
+      "evidence": "anyUsages=7",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "medium",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 7 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "frontend/src/pages/BackupCenterView.tsx",
+      "line": 1,
+      "evidence": "anyUsages=7",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "medium",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 7 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "frontend/src/pages/OperationsView.tsx",
+      "line": 1,
+      "evidence": "anyUsages=7",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "medium",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 7 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "frontend/src/services/transactionsService.ts",
+      "line": 1,
+      "evidence": "anyUsages=7",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "medium",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 8 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "backend/src/auth/auth.service.ts",
+      "line": 1,
+      "evidence": "anyUsages=8",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "medium",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 8 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "frontend/src/pages/Operations.test.tsx",
+      "line": 1,
+      "evidence": "anyUsages=8",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "medium",
+      "category": "type-safety",
+      "ruleId": "any-hotspot",
+      "title": "Type safety hotspot: 8 any-casts/usages",
+      "description": "This file relies heavily on any, reducing type safety and audit confidence.",
+      "file": "frontend/src/pages/Reports.tsx",
+      "line": 1,
+      "evidence": "anyUsages=8",
+      "remediation": "Replace broad any usage with DTOs, generics, discriminated unions, or unknown with narrowing."
+    },
+    {
+      "severity": "low",
+      "category": "authorization",
+      "ruleId": "missing-endpoint-permission",
+      "title": "Authenticated endpoint has no explicit permission or role decorator",
+      "description": "The endpoint relies on authentication only and does not declare endpoint-level RBAC metadata.",
+      "file": "backend/src/app-bootstrap/app-bootstrap.controller.ts",
+      "line": 10,
+      "evidence": "GET /app/bootstrap",
+      "remediation": "Add @Permissions or @Roles, or document why any authenticated user should access this route."
+    },
+    {
+      "severity": "low",
+      "category": "authorization",
+      "ruleId": "missing-endpoint-permission",
+      "title": "Authenticated endpoint has no explicit permission or role decorator",
+      "description": "The endpoint relies on authentication only and does not declare endpoint-level RBAC metadata.",
+      "file": "backend/src/auth/auth.controller.ts",
+      "line": 71,
+      "evidence": "POST /auth/reset-attempts",
+      "remediation": "Add @Permissions or @Roles, or document why any authenticated user should access this route."
+    },
+    {
+      "severity": "low",
+      "category": "authorization",
+      "ruleId": "missing-endpoint-permission",
+      "title": "Authenticated endpoint has no explicit permission or role decorator",
+      "description": "The endpoint relies on authentication only and does not declare endpoint-level RBAC metadata.",
+      "file": "backend/src/auth/auth.controller.ts",
+      "line": 98,
+      "evidence": "GET /auth/me",
+      "remediation": "Add @Permissions or @Roles, or document why any authenticated user should access this route."
+    },
+    {
+      "severity": "low",
+      "category": "authorization",
+      "ruleId": "missing-endpoint-permission",
+      "title": "Authenticated endpoint has no explicit permission or role decorator",
+      "description": "The endpoint relies on authentication only and does not declare endpoint-level RBAC metadata.",
+      "file": "backend/src/unloading-rule/unloading-rule.controller.ts",
+      "line": 33,
+      "evidence": "GET /unloading-rules",
+      "remediation": "Add @Permissions or @Roles, or document why any authenticated user should access this route."
+    },
+    {
+      "severity": "low",
+      "category": "authorization",
+      "ruleId": "missing-endpoint-permission",
+      "title": "Authenticated endpoint has no explicit permission or role decorator",
+      "description": "The endpoint relies on authentication only and does not declare endpoint-level RBAC metadata.",
+      "file": "backend/src/users/users.controller.ts",
+      "line": 34,
+      "evidence": "GET /users/permissions/me",
+      "remediation": "Add @Permissions or @Roles, or document why any authenticated user should access this route."
+    },
+    {
+      "severity": "low",
+      "category": "configuration",
+      "ruleId": "local-env-present",
+      "title": "Local environment file present: .env",
+      "description": "A local environment file exists on disk. The audit intentionally reports its presence without exposing values.",
+      "file": ".env",
+      "remediation": "Keep the file untracked and verify it only contains local or secret-managed values."
+    },
+    {
+      "severity": "low",
+      "category": "configuration",
+      "ruleId": "local-env-present",
+      "title": "Local environment file present: backend/.env",
+      "description": "A local environment file exists on disk. The audit intentionally reports its presence without exposing values.",
+      "file": "backend/.env",
+      "remediation": "Keep the file untracked and verify it only contains local or secret-managed values."
+    }
+  ],
+  "exitCode": 1
+}

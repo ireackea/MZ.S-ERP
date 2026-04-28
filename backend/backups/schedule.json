@@ -1,16 +1,18 @@
 {
   "enabled": true,
-  "frequency": "daily",
+  "frequency": "weekly",
   "hour": 2,
   "minute": 0,
-  "dayOfWeek": 0,
+  "dayOfWeek": 1,
   "dayOfMonth": 1,
-  "retentionDays": 30,
+  "retentionDays": 14,
   "storageTargets": [
     "local"
   ],
   "encryptionEnabled": true,
-  "lastRunAt": "2026-04-23T00:00:04.338Z",
-  "lastRunKey": "daily:2026-4-23",
-  "updatedAt": "2026-04-23T00:00:25.902Z"
+  "restorePinHash": "981bac0bdc567a5d2cb7c984ef0e32e3523d65586518e08221a2186c5a274f79",
+  "restorePinSaltBase64": "vor+pF3v5I3tvUGhhu4yMg==",
+  "lastRunAt": "2026-04-27T00:00:16.054Z",
+  "lastRunKey": "weekly:2026-4-27",
+  "updatedAt": "2026-04-27T00:00:19.430Z"
 }

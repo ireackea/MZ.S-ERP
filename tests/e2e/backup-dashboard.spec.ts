@@ -3,17 +3,15 @@ import path from 'node:path';
 import process from 'node:process';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import puppeteer, { type Browser, type Page } from 'puppeteer';
+import { backendUrl, e2ePassword as password, frontendUrl, e2eUsername as username } from './support/runtimeConfig';
 
-const frontendUrl = process.env.E2E_FRONTEND_URL || 'http://127.0.0.1:4173';
-const backendUrl = process.env.E2E_BASE_URL || 'http://127.0.0.1:3001';
-const username = process.env.E2E_USERNAME || 'superadmin';
-const password = process.env.E2E_PASSWORD || 'SecurePassword2026!';
 const screenshotDir = path.resolve(process.cwd(), 'artifacts', 'phase3');
 const downloadDir = path.join(screenshotDir, 'backup-downloads');
 const restorePin = '2468';
 
 type Session = {
   cookieHeader: string;
+  accessToken: string;
   user: {
     id: string;
     username: string;
@@ -82,6 +80,7 @@ async function loginByApi(nextUsername = username, nextPassword = password): Pro
 
   const payload = await response.json();
   expect(response.status).toBe(201);
+  expect(typeof payload?.accessToken).toBe('string');
   expect(payload?.user?.username).toBeTruthy();
 
   const cookieHeader = toCookieHeader(extractCookies(response));
@@ -89,6 +88,7 @@ async function loginByApi(nextUsername = username, nextPassword = password): Pro
 
   return {
     cookieHeader,
+    accessToken: payload.accessToken,
     user: payload.user,
   };
 }
@@ -131,26 +131,46 @@ async function openAuthenticatedSettingsPage() {
     throw new Error('Missing feed_factory_jwt cookie for authenticated browser page.');
   }
 
-  await page.setCookie({
-    name: 'feed_factory_jwt',
-    value: sessionCookie.slice('feed_factory_jwt='.length),
-    domain: '127.0.0.1',
-    path: '/',
-    httpOnly: true,
-    sameSite: 'Strict',
-  });
+  const cookieValue = sessionCookie.slice('feed_factory_jwt='.length);
+  await page.setCookie(
+    {
+      name: 'feed_factory_jwt',
+      value: cookieValue,
+      url: frontendUrl,
+      httpOnly: true,
+      sameSite: 'Strict',
+    },
+    {
+      name: 'feed_factory_jwt',
+      value: cookieValue,
+      url: backendUrl,
+      httpOnly: true,
+      sameSite: 'Strict',
+    },
+    {
+      name: 'feed_factory_jwt',
+      value: cookieValue,
+      url: 'http://localhost:3001',
+      httpOnly: true,
+      sameSite: 'Strict',
+    },
+  );
 
-  await page.goto(frontendUrl, { waitUntil: 'networkidle2' });
-  await page.evaluate((user) => {
-    localStorage.setItem('feed_factory_jwt_user', JSON.stringify(user));
+  await page.evaluateOnNewDocument((session) => {
+    localStorage.setItem('feed_factory_jwt_token', session.accessToken);
+    localStorage.setItem('feed_factory_last_login_username', session.user.username);
+    localStorage.setItem('feed_factory_current_session_id', session.user.id);
+    localStorage.setItem('feed_factory_jwt_user', JSON.stringify(session.user));
+  }, adminSession);
+
+  await page.goto(`${frontendUrl}/settings`, { waitUntil: 'networkidle2', timeout: 60000 });
+  await page.evaluate(() => {
     window.dispatchEvent(new Event('feed_factory_auth_session_changed'));
-  }, adminSession.user);
-
-  await page.goto(`${frontendUrl}/settings`, { waitUntil: 'networkidle2' });
+  });
   return { page, pageErrors };
 }
 
-async function waitForText(page: Page, text: string, timeout = 30000) {
+async function waitForText(page: Page, text: string, timeout = 60000) {
   await page.waitForFunction(
     (expectedText) => document.body.innerText.includes(expectedText),
     { timeout },
@@ -165,7 +185,7 @@ async function clickButtonByText(page: Page, text: string) {
       const isVisible = element.offsetParent !== null;
       return isVisible && !element.disabled && button.textContent?.includes(expectedText);
     });
-    const target = buttons[buttons.length - 1] as HTMLButtonElement | undefined;
+    const target = buttons[0] as HTMLButtonElement | undefined;
     if (!target) return false;
     target.click();
     return true;

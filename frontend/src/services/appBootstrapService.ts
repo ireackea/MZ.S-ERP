@@ -18,7 +18,7 @@ export type AppBootstrapSession = {
 };
 
 export type AppBootstrapPayload = {
-  session: AppBootstrapSession;
+  session: AppBootstrapSession | null;
   resolvedPermissions: string[];
   referenceData: {
     categories: string[];

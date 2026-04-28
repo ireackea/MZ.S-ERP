@@ -1,8 +1,8 @@
 import { Controller, Get, Req, UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
 import { AppBootstrapService } from './app-bootstrap.service';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(OptionalJwtAuthGuard)
 @Controller('app')
 export class AppBootstrapController {
   constructor(private readonly appBootstrapService: AppBootstrapService) {}

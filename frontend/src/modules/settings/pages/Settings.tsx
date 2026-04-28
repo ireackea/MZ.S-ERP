@@ -53,9 +53,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   auditLogs = [],
   currentUser,
 }) => {
-  const { hasPermission } = usePermissions();
-  const role = String(currentUser?.role || '').trim().toLowerCase();
-  const isPrivileged = role === 'admin' || role === 'superadmin' || (currentUser?.permissions || []).includes('*');
+  const { hasPermission, permissions } = usePermissions();
   const tabs = useMemo(() => ([
     { key: 'general' as const, label: 'الإعدادات العامة', permission: 'settings.view.general', icon: Settings2 },
     { key: 'reference-data' as const, label: 'الأقسام ووحدات القياس', permission: 'settings.view.general', icon: Package },
@@ -70,7 +68,11 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     { key: 'theme' as const, label: 'الثيم واللغة', permission: 'settings.view.localization', icon: Globe2 },
   ]), []);
 
-  const visibleTabs = isPrivileged ? tabs : tabs.filter((tab) => hasPermission(tab.permission));
+  const visibleTabs = tabs.filter((tab) => hasPermission(tab.permission));
+  const grantedPermissionsPreview = useMemo(
+    () => permissions.slice().sort().slice(0, 8),
+    [permissions],
+  );
   const [activeTab, setActiveTab] = useState<SettingsTabKey>(visibleTabs[0]?.key || 'general');
 
   useEffect(() => {
@@ -84,23 +86,23 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   const renderTab = () => {
     switch (resolvedActiveTab) {
       case 'general':
-        return <GeneralSettings settings={settings} onUpdateSettings={onUpdateSettings} forceAccess={isPrivileged} />;
+        return <GeneralSettings settings={settings} onUpdateSettings={onUpdateSettings} />;
       case 'reference-data':
-        return <ReferenceDataSettings forceAccess={isPrivileged} />;
+        return <ReferenceDataSettings />;
       case 'unloading-rules':
-        return <UnloadingRulesSettings forceAccess={isPrivileged} />;
+        return <UnloadingRulesSettings />;
       case 'users':
         return <UsersAndRoles />;
       case 'permissions':
-        return <PermissionsMatrix forceAccess={isPrivileged} />;
+        return <PermissionsMatrix />;
       case 'backup':
         return <BackupAndRestore currentUser={currentUser} />;
       case 'reset':
         return <SystemReset />;
       case 'audit':
-        return <AuditLogs forceAccess={isPrivileged} />;
+        return <AuditLogs />;
       case 'offline':
-        return <OfflineSettings forceAccess={isPrivileged} />;
+        return <OfflineSettings />;
       case 'printing':
         return (
           <PrintingTemplates
@@ -108,18 +110,31 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
             onUpdateReportConfig={onUpdateReportConfig}
             openingBalanceReportConfig={openingBalanceReportConfig}
             onUpdateOpeningBalanceReportConfig={onUpdateOpeningBalanceReportConfig}
-            forceAccess={isPrivileged}
           />
         );
       case 'theme':
-        return <ThemeAndLocalization forceAccess={isPrivileged} />;
+        return <ThemeAndLocalization />;
       default:
         return null;
     }
   };
 
-  if (!isPrivileged && !hasPermission('settings.view') && visibleTabs.length === 0) {
-    return <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">ليس لديك أي صلاحية للوصول إلى قسم الإعدادات.</div>;
+  if (visibleTabs.length === 0) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
+        <div className="text-base font-black">ليس لديك أي صلاحية للوصول إلى قسم الإعدادات.</div>
+        <div className="mt-2 text-sm">لا توجد أي تبويبات إعدادات مفعّلة لحسابك الحالي.</div>
+        <div className="mt-3 text-xs leading-6">
+          <div>الصلاحيات النموذجية للوصول: <code>settings.view.general</code> أو <code>settings.view.users</code> أو <code>settings.view.backup</code>.</div>
+          <div>عدد الصلاحيات الممنوحة حاليًا: <strong>{permissions.length}</strong></div>
+          {grantedPermissionsPreview.length > 0 ? (
+            <div className="mt-1 break-all">{grantedPermissionsPreview.join(' | ')}</div>
+          ) : (
+            <div className="mt-1">لا توجد صلاحيات في الجلسة الحالية.</div>
+          )}
+        </div>
+      </div>
+    );
   }
 
   return (

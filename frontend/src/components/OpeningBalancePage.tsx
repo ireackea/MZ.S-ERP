@@ -4,7 +4,6 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DownloadCloud, RefreshCw, UploadCloud } from 'lucide-react';
-import * as XLSX from 'xlsx';
 
 import { useToast } from '@hooks/useToast';
 import {
@@ -12,6 +11,7 @@ import {
   setOpeningBalance,
   type OpeningBalancePayload,
 } from '@services/openingBalanceService';
+import { exportRowsToExcel, readFirstWorksheetRows } from '../utils/excelWorkbook';
 import type { ReportColumnConfig } from '../types';
 import { useInventoryStore, type OpeningBalanceStoreRow } from '../store/useInventoryStore';
 
@@ -31,9 +31,18 @@ const mergeColumns = (
 ): ReportColumnConfig[] => {
   if (!incoming || incoming.length === 0) return base;
   const allowed = new Set(base.map((column) => column.key));
-  const normalized = incoming.filter((column) => allowed.has(column.key));
-  const missing = base.filter((column) => !normalized.find((entry) => entry.key === column.key));
-  return [...normalized, ...missing];
+
+  // لماذا: نُزيل التكرارات من incoming أولاً بـ Map لضمان مفتاح واحد لكل عمود.
+  // إذا احتوت البيانات المخزّنة على مفاتيح مكررة (من حفظ سابق معطوب) يُصحَّح
+  // الوضع تلقائياً عند أول تحميل، مما يمنع duplicate key warnings في React.
+  const deduped = [...new Map(
+    incoming
+      .filter((column) => allowed.has(column.key))
+      .map((column) => [column.key, column])
+  ).values()];
+
+  const missing = base.filter((column) => !deduped.find((entry) => entry.key === column.key));
+  return [...deduped, ...missing];
 };
 
 interface OpeningBalancePageProps {
@@ -64,6 +73,10 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
   );
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // لماذا: tableKey يتغيّر عند انتهاء تحميل البيانات من الخادم ليجبر React
+  // على إعادة mount الصفوف، مما يجعل حقول defaultValue تعكس القيم الحديثة.
+  const [tableKey, setTableKey] = useState(0);
+  const prevLoadingRef = useRef(false);
 
   const visibleColumns = useMemo(
     () => localColumnConfig.filter((column) => column.isVisible),
@@ -192,6 +205,16 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
     setLocalColumnConfig(mergeColumns(DEFAULT_COLUMNS, columnConfig));
   }, [columnConfig]);
 
+  // لماذا: نرصد انتقال openingBalancesLoading من true → false لنعرف متى وصلت
+  // بيانات جديدة من الخادم. عند ذلك نزيد tableKey لإجبار React على إعادة mount
+  // صفوف الجدول فتعكس حقول defaultValue القيم الجديدة.
+  useEffect(() => {
+    if (prevLoadingRef.current && !openingBalancesLoading) {
+      setTableKey((k) => k + 1);
+    }
+    prevLoadingRef.current = openingBalancesLoading;
+  }, [openingBalancesLoading]);
+
   useEffect(() => {
     void loadAll();
   }, [loadAll]);
@@ -237,7 +260,7 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
     }
   };
 
-  const handleExportTemplate = () => {
+  const handleExportTemplate = async () => {
     const template = normalizedInventoryItems.map((item) => ({
       'اسم الصنف': item.name ?? '',
       'المعرف العام (publicId / الكود)': item.code ?? item.publicId ?? item.id,
@@ -248,19 +271,15 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
     }));
 
     const headerOrder = ['اسم الصنف', 'المعرف العام (publicId / الكود)', 'الوحدة', 'الفئة', 'الكمية', 'التكلفة'];
-    const worksheet = XLSX.utils.json_to_sheet(template, { header: headerOrder });
-    worksheet['!cols'] = [
-      { wch: 30 },
-      { wch: 28 },
-      { wch: 12 },
-      { wch: 18 },
-      { wch: 10 },
-      { wch: 12 },
-    ];
-
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Opening Balance Template');
-    XLSX.writeFile(workbook, 'Opening_Balance_Template.xlsx');
+    void exportRowsToExcel({
+      rows: template,
+      sheetName: 'Opening Balance Template',
+      fileName: 'Opening_Balance_Template.xlsx',
+      headerOrder,
+      columnWidths: [30, 28, 12, 18, 10, 12],
+    }).catch(() => {
+      showToast('تعذر تصدير قالب Excel.', 'error');
+    });
   };
 
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -275,10 +294,7 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
     setErrorDetails(null);
 
     try {
-      const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: 'array' });
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const json = XLSX.utils.sheet_to_json<any>(worksheet);
+      const json = await readFirstWorksheetRows(file);
 
       if (!json.length) {
         showToast('الملف فارغ، لا توجد بيانات للاستيراد.', 'error');
@@ -349,7 +365,7 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
 
       const allErrors = [...errors, ...backendErrors];
       setErrorDetails(allErrors.length ? allErrors.join('\n') : null);
-      await loadOpeningBalances(year);
+      await loadOpeningBalances(year, { force: true });
     } catch (error: any) {
       showToast('فشل استيراد الملف.', 'error');
       const responseMessage = error?.response?.data?.message;
@@ -455,7 +471,7 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
             </label>
 
             <button
-              onClick={() => void loadOpeningBalances(year)}
+              onClick={() => void loadOpeningBalances(year, { force: true })}
               className="bg-slate-100 text-slate-700 px-3 py-2 rounded border border-slate-300 hover:bg-slate-200 flex items-center gap-1"
             >
               <RefreshCw size={14} /> تحديث
@@ -534,9 +550,12 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
                   ))}
                 </tr>
               </thead>
-              <tbody>
+              <tbody key={tableKey}>
                 {sortedRows.map((row) => (
-                  <tr key={row.id} className="border-b last:border-b-0">
+                  // لماذا: المفتاح الطبيعي لصف الرصيد الافتتاحي هو (itemId + السنة المالية).
+                  // كل صنف يظهر مرة واحدة بالحد الأقصى لكل سنة، مما يضمن عدم تكرار المفاتيح
+                  // حتى لو أُعيد تعيين row.id الرقمي عبر دورات تحميل مختلفة.
+                  <tr key={`ob_${row.itemId}_${row.financialYear}`} className="border-b last:border-b-0">
                     {visibleColumns.map((column) => {
                       const meta = getItemMeta(row);
 

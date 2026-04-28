@@ -30,6 +30,7 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
 }) => {
   const exportSheetsToExcel = useInventoryStore((state) => state.exportSheetsToExcel);
   const exportElementToPdf = useInventoryStore((state) => state.exportElementToPdf);
+  const storeCategories = useInventoryStore((state) => state.categories);
   // Filters
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
   const [startDate, setStartDate] = useState(() => {
@@ -44,6 +45,7 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
   // UI State
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [dropdownHeight, setDropdownHeight] = useState(240);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const reportContainerRef = useRef<HTMLDivElement | null>(null);
@@ -184,7 +186,31 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
     setSelectedItemIds(newSet);
   };
 
-  const filteredItems = items.filter(i => i.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  // Build ordered category list: store order first, then any extra categories from items
+  const orderedCategories = [
+    ...storeCategories,
+    ...items.map(i => i.category).filter(c => !storeCategories.includes(c)),
+  ].filter((c, idx, arr) => arr.indexOf(c) === idx);
+
+  // Filter items by search term
+  const filteredItems = items.filter(i =>
+    i.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    i.category.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // Group filtered items by category in store order
+  const groupedItems: { category: string; items: typeof items }[] = orderedCategories
+    .map(cat => ({ category: cat, items: filteredItems.filter(i => i.category === cat) }))
+    .filter(g => g.items.length > 0);
+
+  const toggleCategory = (category: string) => {
+    const catIds = items.filter(i => i.category === category).map(i => i.id);
+    const allSelected = catIds.every(id => selectedItemIds.has(id));
+    const newSet = new Set(selectedItemIds);
+    if (allSelected) catIds.forEach(id => newSet.delete(id));
+    else catIds.forEach(id => newSet.add(id));
+    setSelectedItemIds(newSet);
+  };
 
   // Formatter
   const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
@@ -311,6 +337,9 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
             </div>
 
             {isDropdownOpen && (
+              <>
+              {/* Transparent overlay — closes dropdown on outside click */}
+              <div className="fixed inset-0 z-40" onClick={() => setIsDropdownOpen(false)} />
               <div className="absolute z-50 w-full mt-2 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">
                 <div className="p-2 border-b border-slate-100 bg-slate-50">
                   <div className="relative">
@@ -325,7 +354,8 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
                     />
                   </div>
                 </div>
-                <div className="max-h-60 overflow-y-auto custom-scrollbar p-1">
+                <div className="overflow-y-auto custom-scrollbar p-1" style={{ maxHeight: dropdownHeight }}>
+                  {/* Select All */}
                   <div
                     className="flex items-center gap-2 p-2 hover:bg-blue-50 rounded-lg cursor-pointer border-b border-dashed border-slate-100 mb-1"
                     onClick={() => {
@@ -333,30 +363,73 @@ const StockCardReport: React.FC<StockCardReportProps> = ({
                       else setSelectedItemIds(new Set(items.map(i => i.id)));
                     }}
                   >
+                    <div className={`${selectedItemIds.size === items.length ? 'text-blue-600' : 'text-slate-400'}`}>
+                      {selectedItemIds.size === items.length ? <CheckSquare size={15} /> : <Square size={15} />}
+                    </div>
                     <span className="text-blue-600 font-bold text-xs">
                       {selectedItemIds.size === items.length ? 'إلغاء تحديد الكل' : 'تحديد الكل'}
                     </span>
+                    <span className="text-slate-400 text-[10px] mr-auto">{items.length} صنف</span>
                   </div>
-                  {filteredItems.map(item => (
-                    <div
-                      key={item.id}
-                      className={`flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg cursor-pointer transition ${selectedItemIds.has(item.id) ? 'bg-blue-50' : ''}`}
-                      onClick={() => toggleSelection(item.id)}
-                    >
-                      <div className={`text-slate-400 ${selectedItemIds.has(item.id) ? 'text-blue-600' : ''}`}>
-                        {selectedItemIds.has(item.id) ? <CheckSquare size={16} /> : <Square size={16} />}
+
+                  {/* Grouped by category */}
+                  {groupedItems.map(({ category, items: catItems }) => {
+                    const catIds = catItems.map(i => i.id);
+                    const allSelected = catIds.every(id => selectedItemIds.has(id));
+                    const someSelected = catIds.some(id => selectedItemIds.has(id));
+                    return (
+                      <div key={category} className="mb-1">
+                        {/* Category header */}
+                        <div
+                          className="flex items-center gap-2 px-2 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer sticky top-0 z-10"
+                          onClick={() => toggleCategory(category)}
+                        >
+                          <div className={allSelected ? 'text-blue-600' : someSelected ? 'text-blue-400' : 'text-slate-400'}>
+                            {allSelected ? <CheckSquare size={14} /> : someSelected ? <CheckSquare size={14} /> : <Square size={14} />}
+                          </div>
+                          <span className="text-xs font-bold text-slate-600 flex-1">{category}</span>
+                          <span className="text-[10px] text-slate-400 bg-white px-1.5 py-0.5 rounded-full">
+                            {catIds.filter(id => selectedItemIds.has(id)).length}/{catItems.length}
+                          </span>
+                        </div>
+                        {/* Items in category */}
+                        {catItems.map(item => (
+                          <div
+                            key={item.id}
+                            className={`flex items-center gap-3 py-1.5 px-3 hover:bg-slate-50 rounded-lg cursor-pointer transition ${selectedItemIds.has(item.id) ? 'bg-blue-50' : ''}`}
+                            onClick={() => toggleSelection(item.id)}
+                          >
+                            <div className={`shrink-0 ${selectedItemIds.has(item.id) ? 'text-blue-600' : 'text-slate-300'}`}>
+                              {selectedItemIds.has(item.id) ? <CheckSquare size={14} /> : <Square size={14} />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-slate-700 truncate">{item.name}</p>
+                              {item.code && <p className="text-[10px] text-slate-400">{item.code}</p>}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-bold text-slate-700">{item.name}</p>
-                        <p className="text-[10px] text-slate-400">{item.code || 'بدون كود'} | {item.category}</p>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
-                <div className="p-2 bg-slate-50 border-t border-slate-100 text-center">
+                <div className="p-2 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setDropdownHeight(h => Math.max(120, h - 80)); }}
+                      className="w-6 h-6 flex items-center justify-center rounded border border-slate-300 text-slate-500 hover:bg-slate-200 text-sm font-bold leading-none"
+                      title="تصغير القائمة"
+                    >−</button>
+                    <span className="text-[10px] text-slate-400 w-12 text-center">{dropdownHeight}px</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setDropdownHeight(h => Math.min(600, h + 80)); }}
+                      className="w-6 h-6 flex items-center justify-center rounded border border-slate-300 text-slate-500 hover:bg-slate-200 text-sm font-bold leading-none"
+                      title="تكبير القائمة"
+                    >+</button>
+                  </div>
                   <button onClick={() => setIsDropdownOpen(false)} className="text-xs font-bold text-blue-600 hover:underline">إغلاق القائمة</button>
                 </div>
               </div>
+              </>
             )}
           </div>
 

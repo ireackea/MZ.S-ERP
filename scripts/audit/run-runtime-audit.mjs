@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   ensureDir,
   loadAuditConfig,
@@ -70,7 +70,7 @@ async function loadSocketClient(projectRoot) {
       path.join(projectRoot, 'frontend/node_modules'),
     ],
   });
-  return import(resolved);
+  return import(pathToFileURL(resolved).href);
 }
 
 async function trySocketConnection({ projectRoot, baseUrl, namespace, socketPath, origin }) {

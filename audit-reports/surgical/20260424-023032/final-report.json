@@ -1,0 +1,99 @@
+{
+  "generatedAt": "2026-04-24T00:31:26.690Z",
+  "mode": "runtime",
+  "score": 75,
+  "counts": {
+    "critical": 1,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "info": 0
+  },
+  "verdict": {
+    "decision": "RED",
+    "exitCode": 2,
+    "summary": "Critical findings were detected."
+  },
+  "inventory": null,
+  "static": null,
+  "runtime": {
+    "stage": "runtime",
+    "generatedAt": "2026-04-24T00:31:14.088Z",
+    "backendBaseUrl": "http://localhost:33233",
+    "allowedOrigin": "http://localhost:34742",
+    "checks": [
+      {
+        "name": "health-endpoint",
+        "ok": true,
+        "status": 200,
+        "payloadStatus": "healthy"
+      },
+      {
+        "name": "metrics-auth-without-token",
+        "ok": true,
+        "status": 401
+      },
+      {
+        "name": "metrics-auth-with-token",
+        "ok": true,
+        "status": 200
+      },
+      {
+        "name": "cors-allowed-origin",
+        "ok": true,
+        "header": "http://localhost:34742"
+      },
+      {
+        "name": "cors-denied-origin",
+        "ok": true,
+        "header": "",
+        "status": 500
+      },
+      {
+        "name": "protected-endpoint-without-session",
+        "ok": true,
+        "status": 401
+      },
+      {
+        "name": "auth-cookie-flags",
+        "ok": true,
+        "status": 201,
+        "cookie": "feed_factory_jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyOTRhNTRhNC1iMGExLTRmZmEtYWM1Mi0wZTIwMzNkNjIwNWUiLCJ1c2VybmFtZSI6InN1cGVyYWRtaW4iLCJyb2xlIjoiU3VwZXJBZG1pbiIsInBlcm1pc3Npb25zIjpbIioiXSwibmFtZSI6IlN5c3RlbSBTdXBlckFkbWluIiwic2lkIjoiNmNmMzU3YWItNjgzNi00ZTFmLTgyODItMDg0YzRiZjRhOThhIiwiaWF0IjoxNzc2OTkwNjczLCJleHAiOjE3NzcwNzcwNzN9.KcUnZUVk7QZTgN7I_Y6Ep8m-gyqsl-KMKhwBf8jblc0; Max-Age=86400; Path=/; Expires=Sat, 25 Apr 2026 00:31:13 GMT; HttpOnly; SameSite=Strict"
+      },
+      {
+        "name": "socket-rejects-anonymous-connection",
+        "ok": false,
+        "connected": true
+      },
+      {
+        "name": "socket-rejects-disallowed-origin",
+        "ok": true,
+        "connected": false,
+        "error": "websocket error"
+      }
+    ],
+    "findings": [
+      {
+        "severity": "critical",
+        "category": "runtime",
+        "ruleId": "socket-anonymous-connect",
+        "title": "Socket.IO namespace accepted an anonymous connection",
+        "description": "The runtime websocket probe connected successfully without presenting credentials.",
+        "evidence": "/realtime via /socket.io",
+        "remediation": "Authenticate the Socket.IO handshake before accepting realtime clients."
+      }
+    ]
+  },
+  "findings": [
+    {
+      "severity": "critical",
+      "category": "runtime",
+      "ruleId": "socket-anonymous-connect",
+      "title": "Socket.IO namespace accepted an anonymous connection",
+      "description": "The runtime websocket probe connected successfully without presenting credentials.",
+      "evidence": "/realtime via /socket.io",
+      "remediation": "Authenticate the Socket.IO handshake before accepting realtime clients."
+    }
+  ],
+  "exitCode": 2
+}

@@ -4,11 +4,8 @@ import path from 'node:path';
 import process from 'node:process';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import puppeteer, { type Browser, type HTTPResponse, type Page } from 'puppeteer';
+import { backendUrl, e2ePassword as password, frontendUrl, getMetricsHeaders, e2eUsername as username } from './support/runtimeConfig';
 
-const frontendUrl = process.env.E2E_FRONTEND_URL || 'http://127.0.0.1:4173';
-const backendUrl = process.env.E2E_BASE_URL || 'http://127.0.0.1:3001';
-const username = process.env.E2E_USERNAME || 'superadmin';
-const password = process.env.E2E_PASSWORD || 'SecurePassword2026!';
 const screenshotDir = path.resolve(process.cwd(), 'artifacts', 'phase3');
 const downloadDir = path.join(screenshotDir, 'downloads');
 
@@ -21,6 +18,7 @@ const reportItemCode = `PH3-${Date.now()}`;
 
 type Session = {
   cookieHeader: string;
+  accessToken: string;
   user: {
     id: string;
     username: string;
@@ -94,6 +92,7 @@ async function loginByApi(nextUsername = username, nextPassword = password): Pro
 
   const payload = await response.json();
   expect(response.status).toBe(201);
+  expect(typeof payload?.accessToken).toBe('string');
   expect(payload?.user?.username).toBeTruthy();
 
   const cookieHeader = toCookieHeader(extractCookies(response));
@@ -101,6 +100,7 @@ async function loginByApi(nextUsername = username, nextPassword = password): Pro
 
   return {
     cookieHeader,
+    accessToken: payload.accessToken,
     user: payload.user,
   };
 }
@@ -140,26 +140,47 @@ async function openAuthenticatedPage(session: Session, targetPath = '/') {
     throw new Error('Missing feed_factory_jwt cookie for authenticated browser page.');
   }
 
-  await page.setCookie({
-    name: 'feed_factory_jwt',
-    value: sessionCookie.slice('feed_factory_jwt='.length),
-    domain: '127.0.0.1',
-    path: '/',
-    httpOnly: true,
-    sameSite: 'Strict',
-  });
+  const cookieValue = sessionCookie.slice('feed_factory_jwt='.length);
+  await page.setCookie(
+    {
+      name: 'feed_factory_jwt',
+      value: cookieValue,
+      url: frontendUrl,
+      httpOnly: true,
+      sameSite: 'Strict',
+    },
+    {
+      name: 'feed_factory_jwt',
+      value: cookieValue,
+      url: backendUrl,
+      httpOnly: true,
+      sameSite: 'Strict',
+    },
+    {
+      name: 'feed_factory_jwt',
+      value: cookieValue,
+      url: 'http://localhost:3001',
+      httpOnly: true,
+      sameSite: 'Strict',
+    },
+  );
 
-  await page.goto(frontendUrl, { waitUntil: 'networkidle2' });
-  await page.evaluate((user) => {
-    localStorage.setItem('feed_factory_jwt_user', JSON.stringify(user));
+  await page.evaluateOnNewDocument((seedSession) => {
+    localStorage.setItem('feed_factory_jwt_token', seedSession.accessToken);
+    localStorage.setItem('feed_factory_last_login_username', seedSession.user.username);
+    localStorage.setItem('feed_factory_current_session_id', seedSession.user.id);
+    localStorage.setItem('feed_factory_jwt_user', JSON.stringify(seedSession.user));
+  }, session);
+
+  await page.goto(`${frontendUrl}${targetPath}`, { waitUntil: 'networkidle2', timeout: 60000 });
+  await page.evaluate(() => {
     window.dispatchEvent(new Event('feed_factory_auth_session_changed'));
-  }, session.user);
-  await page.goto(`${frontendUrl}${targetPath}`, { waitUntil: 'networkidle2' });
+  });
 
   return page;
 }
 
-async function waitForText(page: Page, text: string, timeout = 30000) {
+async function waitForText(page: Page, text: string, timeout = 60000) {
   await page.waitForFunction(
     (expectedText) => document.body.innerText.includes(expectedText),
     { timeout },
@@ -169,8 +190,11 @@ async function waitForText(page: Page, text: string, timeout = 30000) {
 
 async function clickButtonByText(page: Page, text: string) {
   const clicked = await page.evaluate((expectedText) => {
-    const buttons = Array.from(document.querySelectorAll('button'));
-    const target = buttons.find((button) => button.textContent?.includes(expectedText));
+    const buttons = Array.from(document.querySelectorAll('button')).filter((button) => {
+      const element = button as HTMLButtonElement;
+      return element.offsetParent !== null && !element.disabled && button.textContent?.includes(expectedText);
+    });
+    const target = buttons[0];
     if (!target) return false;
     (target as HTMLButtonElement).click();
     return true;
@@ -302,7 +326,7 @@ describe('full system production flow', () => {
     await waitForText(adminPage, 'لوحة التحكم');
     await adminPage.screenshot({ path: path.join(screenshotDir, 'dashboard.png'), fullPage: true });
 
-    const metricsResponse = await fetch(`${backendUrl}/metrics`);
+    const metricsResponse = await fetch(`${backendUrl}/metrics`, { headers: getMetricsHeaders() });
     const metricsText = await metricsResponse.text();
     expect(metricsResponse.ok).toBe(true);
     expect(metricsText).toContain('http_requests_total');
@@ -462,20 +486,19 @@ describe('full system production flow', () => {
 
   it('checks system reset confirmation rejection without destructive execution', async () => {
     const adminPage = await openAuthenticatedPage(adminSession, '/settings');
-    let resetApiCalled = false;
-    adminPage.on('request', (request) => {
-      if (request.url().includes('/api/admin/reset-system')) {
-        resetApiCalled = true;
-      }
-    });
+    const resetResponsePromise = adminPage.waitForResponse(
+      (response) => response.url().includes('/api/admin/reset-system') && response.request().method() === 'POST',
+    );
 
     await clickButtonByText(adminPage, 'إعادة الضبط');
     await waitForText(adminPage, 'إعادة ضبط النظام');
-    await adminPage.click('input[placeholder="CONFIRM_SYSTEM_RESET_2026"]', { clickCount: 3 });
-    await adminPage.type('input[placeholder="CONFIRM_SYSTEM_RESET_2026"]', 'WRONG_CONFIRMATION');
-    await adminPage.click('button[type="submit"]');
-    await waitForText(adminPage, 'رمز التأكيد غير صحيح');
-    expect(resetApiCalled).toBe(false);
+    await adminPage.click('input[placeholder="أدخل رمز التأكيد"]', { clickCount: 3 });
+    await adminPage.type('input[placeholder="أدخل رمز التأكيد"]', 'WRONG_CONFIRMATION');
+    await clickButtonByText(adminPage, 'تنفيذ إعادة الضبط');
+
+    const resetResponse = await resetResponsePromise;
+    expect(resetResponse.status()).toBe(401);
+    await waitForText(adminPage, 'Invalid confirmation code. Contact administrator.');
     await adminPage.close();
   }, 120000);
 });

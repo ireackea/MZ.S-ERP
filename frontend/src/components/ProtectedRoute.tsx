@@ -13,13 +13,13 @@ interface ProtectedRouteProps {
 
 const notAuthenticatedFallback = (
   <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 text-yellow-800 font-bold">
-    Please log in to access this page.
+    يرجى تسجيل الدخول للوصول إلى هذه الصفحة.
   </div>
 );
 
 const defaultFallback = (
   <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-red-800 font-bold">
-    You do not have permission to access this page.
+    ليس لديك صلاحية للوصول إلى هذه الصفحة.
   </div>
 );
 

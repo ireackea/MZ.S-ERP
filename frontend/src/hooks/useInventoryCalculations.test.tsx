@@ -39,4 +39,36 @@ describe('useInventoryCalculations', () => {
     expect(status?.isBelowMin).toBe(true);
     expect(status?.isBelowOrder).toBe(true);
   });
+
+  it('treats equality with minLimit as below-min for shared inventory status logic', () => {
+    const items: Item[] = [
+      {
+        id: 'it-2',
+        name: 'Item 2',
+        code: 'I2',
+        category: 'مواد خام' as Item['category'],
+        unit: 'كيلوجرام' as Item['unit'],
+        minLimit: 5,
+        maxLimit: 100,
+        currentStock: 5,
+        tags: [],
+      },
+    ];
+
+    const openingQuantities = new Map<string, number>([['it-2', 5]]);
+
+    const { result } = renderHook(() =>
+      useInventoryCalculations({
+        items,
+        openingQuantities,
+        transactions: [],
+      })
+    );
+
+    const status = result.current.stockStatusMap.get('it-2');
+    expect(status).toBeDefined();
+    expect(status?.balance).toBe(5);
+    expect(status?.isBelowMin).toBe(true);
+    expect(status?.isBelowOrder).toBe(false);
+  });
 });

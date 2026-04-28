@@ -20,8 +20,8 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { clearLegacyInventoryBootstrapState, useInventoryStore } from './store/useInventoryStore';
 import { Transaction, Partner, Order, User, Tag, SystemSettings, OperationAppearance, ReportColumnConfig, Formula, AuditLog } from './types';
 import { v4 as uuidv4 } from 'uuid';
-import { ensureAuthCredentialsSeeded, logout, provisionInitialAdmin } from './services/authController';
-import { clearAllAuthData, setAuthUser } from '@services/authService';
+import { provisionInitialAdmin } from './services/authController';
+import { clearAllAuthData, logout, setAuthUser } from '@services/authService';
 import { filterByDataScope, getIamConfig, hasPermission, logUserActivity, normalizeUsers, upsertCurrentSession } from './services/iamService';
 import { isInboundOperationType, isOutboundOperationType } from './utils/operationTypes';
 import { recordBootstrapRenderCommit } from '@utils/bootstrapMetrics';
@@ -184,7 +184,6 @@ const AppContent = () => {
   useEffect(() => {
     setPartners(getPartners());
     setOrders(getOrders());
-    void ensureAuthCredentialsSeeded(useInventoryStore.getState().users);
     setTags(getTags());
     setAppearance(getAppearanceSettings());
     setAuditLogs([]);
@@ -519,7 +518,7 @@ const AppContent = () => {
     }
     setInventoryRouteReady(false);
     setCurrentUser(undefined);
-    logout();
+    void logout();
   };
 
   // ENTERPRISE FIX: Show EnterpriseLoading until auth is ready
@@ -614,7 +613,7 @@ const AppContent = () => {
   if (!currentUser) {
     return (
       <Suspense fallback={<RouteLoadingFallback />}>
-        <LoginV2 users={users} onAuthenticated={handleAuthenticated} />
+        <LoginV2 onAuthenticated={handleAuthenticated} />
       </Suspense>
     );
   }

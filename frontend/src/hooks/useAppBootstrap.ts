@@ -18,7 +18,7 @@ type UseAppBootstrapOptions = {
 type RestoredSessionResult =
   | {
       outcome: 'success';
-      payload: AppBootstrapSessionResultPayload;
+      payload: AuthenticatedBootstrapPayload;
     }
   | {
       outcome: 'anonymous';
@@ -28,11 +28,9 @@ type RestoredSessionResult =
       error: unknown;
     };
 
-type AppBootstrapSessionResultPayload = AppBootstrapSessionPayload & {
-  unloadingRules: AppBootstrapPayload['unloadingRules'];
+type AuthenticatedBootstrapPayload = Omit<AppBootstrapPayload, 'session'> & {
+  session: AppBootstrapSession;
 };
-
-type AppBootstrapSessionPayload = Omit<AppBootstrapPayload, 'unloadingRules'>;
 
 type AuthenticatedShellResult = {
   outcome: 'success' | 'failed';
@@ -55,6 +53,12 @@ const restoreSessionOnce = async (): Promise<RestoredSessionResult> => {
     restoreSessionPromise = (async () => {
       try {
         const payload = await getAppBootstrap();
+        if (!payload.session) {
+          const result: RestoredSessionResult = { outcome: 'anonymous' };
+          restoreSessionResult = result;
+          return result;
+        }
+
         let bootstrappedRules = payload.unloadingRules || [];
 
         if (bootstrappedRules.length === 0) {
@@ -69,6 +73,7 @@ const restoreSessionOnce = async (): Promise<RestoredSessionResult> => {
           outcome: 'success',
           payload: {
             ...payload,
+            session: payload.session,
             unloadingRules: bootstrappedRules,
           },
         };

@@ -1,9 +1,9 @@
 import React from 'react';
 import { render, waitFor } from '@testing-library/react';
+import { screen } from '@testing-library/dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppBootstrapPayload } from '@services/appBootstrapService';
 import type { User } from '../types';
-import { useAppBootstrap } from './useAppBootstrap';
 
 const mockedModules = vi.hoisted(() => ({
   mockGetAppBootstrap: vi.fn<() => Promise<AppBootstrapPayload>>(),
@@ -105,31 +105,36 @@ const bootstrapPayload: AppBootstrapPayload = {
   },
 };
 
-const Harness = () => {
-  const [currentUser, setCurrentUser] = React.useState<User | undefined>(undefined);
-  const [authReady, setAuthReady] = React.useState(false);
-  const [inventoryRouteReady, setInventoryRouteReady] = React.useState(false);
+const createHarness = async () => {
+  const { useAppBootstrap } = await import('./useAppBootstrap');
 
-  useAppBootstrap({
-    currentUser,
-    authReady,
-    setCurrentUser,
-    setAuthReady,
-    setInventoryRouteReady,
-  });
+  return function Harness() {
+    const [currentUser, setCurrentUser] = React.useState<User | undefined>(undefined);
+    const [authReady, setAuthReady] = React.useState(false);
+    const [inventoryRouteReady, setInventoryRouteReady] = React.useState(false);
 
-  return (
-    <div>
-      {authReady ? 'auth-ready' : 'auth-pending'}
-      {inventoryRouteReady ? ' route-ready' : ' route-pending'}
-      {currentUser?.username ? ` ${currentUser.username}` : ''}
-    </div>
-  );
+    useAppBootstrap({
+      currentUser,
+      authReady,
+      setCurrentUser,
+      setAuthReady,
+      setInventoryRouteReady,
+    });
+
+    return (
+      <div>
+        {authReady ? 'auth-ready' : 'auth-pending'}
+        {inventoryRouteReady ? ' route-ready' : ' route-pending'}
+        {currentUser?.username ? ` ${currentUser.username}` : ''}
+      </div>
+    );
+  };
 };
 
 describe('useAppBootstrap', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.resetModules();
 
     mockStoreState = {
       setReferenceData: mockSetReferenceData,
@@ -149,6 +154,8 @@ describe('useAppBootstrap', () => {
   });
 
   it('deduplicates session restore and authenticated shell under StrictMode', async () => {
+    const Harness = await createHarness();
+
     render(
       <React.StrictMode>
         <Harness />
@@ -184,5 +191,30 @@ describe('useAppBootstrap', () => {
     );
     expect(mockClearAllAuthData).not.toHaveBeenCalled();
     expect(mockMigrateLegacyUnloadingRules).not.toHaveBeenCalled();
+  });
+
+  it('treats an anonymous bootstrap payload as an unauthenticated shell without backend errors', async () => {
+    const Harness = await createHarness();
+
+    mockGetAppBootstrap.mockResolvedValue({
+      ...bootstrapPayload,
+      session: null,
+      resolvedPermissions: [],
+    });
+
+    render(<Harness />);
+
+    await waitFor(() => {
+      expect(mockGetAppBootstrap).toHaveBeenCalledTimes(1);
+      expect(screen.getByText(/auth-ready/)).toBeInTheDocument();
+    });
+
+    expect(mockLoadInventoryCore).not.toHaveBeenCalled();
+    expect(mockLoadTransactions).not.toHaveBeenCalled();
+    expect(mockLoadUsersAndRoles).not.toHaveBeenCalled();
+    expect(mockSetReferenceData).not.toHaveBeenCalled();
+    expect(mockSetUnloadingRules).not.toHaveBeenCalled();
+    expect(mockSetAuthUser).not.toHaveBeenCalled();
+    expect(mockClearAllAuthData).toHaveBeenCalledTimes(1);
   });
 });

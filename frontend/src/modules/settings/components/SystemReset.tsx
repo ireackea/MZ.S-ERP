@@ -2,17 +2,22 @@
 import React, { useState } from 'react';
 import { AlertTriangle, ShieldAlert } from 'lucide-react';
 import { usePermissions } from '@hooks/usePermissions';
+import { useSession } from '@hooks/useSession';
 import { toast } from '@services/toastService';
 import { systemResetService } from '@services/systemResetService';
 
 // SECURITY FIX: 2026-03-28 - Removed forceAccess prop entirely
 const SystemReset: React.FC = () => {
   const { hasPermission } = usePermissions();
+  const { data: session } = useSession();
   const [confirmationCode, setConfirmationCode] = useState('');
   const [loading, setLoading] = useState(false);
+  const canViewReset = hasPermission('settings.view.reset');
+  const isSuperAdmin = String(session?.user?.role || '').toLowerCase() === 'superadmin';
+  const canExecuteReset = hasPermission('admin.reset_system') && isSuperAdmin;
 
   // SECURITY FIX: 2026-03-28 - Only permission check, no bypass
-  if (!hasPermission('settings.view.reset')) {
+  if (!canViewReset) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
         <div className="mb-2 flex items-center gap-2 font-bold"><ShieldAlert size={18} />لا تملك صلاحية عرض إعادة الضبط</div>
@@ -27,8 +32,10 @@ const SystemReset: React.FC = () => {
     try {
       const response = await systemResetService.performCompleteSystemReset(confirmationCode.trim());
       toast.success(response.message);
-    } catch (error: any) {
-      toast.error(error?.message || 'تعذر تنفيذ إعادة الضبط.');
+      setConfirmationCode('');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'تعذر تنفيذ إعادة الضبط.';
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -53,8 +60,13 @@ const SystemReset: React.FC = () => {
           autoComplete="off"
         />
       </label>
+      {!canExecuteReset && (
+        <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          لا يمكن تنفيذ إعادة الضبط إلا بدور <code>SuperAdmin</code> مع الصلاحية <code>admin.reset_system</code>.
+        </div>
+      )}
       <div className="mt-5 flex justify-end">
-        <button type="submit" disabled={loading || !confirmationCode.trim()} className="rounded-2xl bg-red-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-60">
+        <button type="submit" disabled={loading || !confirmationCode.trim() || !canExecuteReset} className="rounded-2xl bg-red-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-60">
           {loading ? 'جارٍ التنفيذ...' : 'تنفيذ إعادة الضبط'}
         </button>
       </div>

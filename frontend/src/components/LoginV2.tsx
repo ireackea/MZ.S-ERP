@@ -1,18 +1,10 @@
 // ENTERPRISE FIX: Phase 0 - Stabilization & UTF-8 Lockdown - 2026-03-05
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Eye, EyeOff, Loader2, Lock, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { login, resetLoginAttempts, type AuthLoginResponse } from '@services/authService';
-
-type LoginUser = {
-  id?: string;
-  username?: string;
-  name?: string;
-  role?: string;
-};
+import { login, type AuthLoginResponse } from '@services/authService';
 
 interface LoginV2Props {
-  users?: LoginUser[];
   onAuthenticated?: (user: AuthLoginResponse['user'], redirectTo: string) => void;
 }
 
@@ -56,7 +48,7 @@ const resolveErrorStatus = (error: unknown) => {
   return typeof status === 'number' ? status : null;
 };
 
-const LoginV2: React.FC<LoginV2Props> = ({ users = [], onAuthenticated }) => {
+const LoginV2: React.FC<LoginV2Props> = ({ onAuthenticated }) => {
   const navigate = useNavigate();
 
   const [username, setUsername] = useState('');
@@ -64,7 +56,6 @@ const LoginV2: React.FC<LoginV2Props> = ({ users = [], onAuthenticated }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
-  const [isResettingAttempts, setIsResettingAttempts] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -78,19 +69,6 @@ const LoginV2: React.FC<LoginV2Props> = ({ users = [], onAuthenticated }) => {
     setNotice(null);
     setValidationErrors({});
   }, [username, password]);
-
-  const demoUsers = useMemo(() => {
-    const seen = new Set<string>();
-    return users
-      .filter((user) => user.username)
-      .filter((user) => {
-        const key = String(user.role || user.username);
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .slice(0, 4);
-  }, [users]);
 
   const validateForm = () => {
     const nextErrors: { username?: string; password?: string } = {};
@@ -147,34 +125,6 @@ const LoginV2: React.FC<LoginV2Props> = ({ users = [], onAuthenticated }) => {
     await submitLogin();
   };
 
-  const handleResetAttempts = async () => {
-    const normalizedUsername = username.trim();
-    if (!normalizedUsername) {
-      setValidationErrors((prev) => ({ ...prev, username: 'اسم المستخدم أو البريد الإلكتروني مطلوب.' }));
-      return;
-    }
-
-    setIsResettingAttempts(true);
-    try {
-      const result = await resetLoginAttempts(normalizedUsername);
-      setError(null);
-      setErrorStatus(null);
-      setNotice(result.message || 'تمت إعادة ضبط المحاولات. يمكنك تسجيل الدخول من جديد.');
-    } catch (resetError) {
-      setErrorStatus(resolveErrorStatus(resetError));
-      setError(resolveErrorMessage(resetError));
-    } finally {
-      setIsResettingAttempts(false);
-    }
-  };
-
-  const handleDemoLogin = (user: LoginUser) => {
-    setUsername(String(user.username || ''));
-    setPassword('password123');
-    setError(null);
-    setValidationErrors({});
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 px-4 py-10" dir="rtl">
       <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-5xl items-center justify-center">
@@ -223,28 +173,23 @@ const LoginV2: React.FC<LoginV2Props> = ({ users = [], onAuthenticated }) => {
                   <div className="space-y-3 rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm leading-7 text-red-100">
                     <div>{error}</div>
                     {errorStatus === 429 && (
-                      <div className="flex flex-wrap gap-2">
+                      <>
+                        <div className="text-xs text-red-100/85">
+                          تمت حماية مسار إعادة الضبط من الخادم ولا يمكن تنفيذه من شاشة الدخول العامة. انتظر قليلًا ثم أعد المحاولة أو تواصل مع مدير النظام إذا استمرت الحالة.
+                        </div>
+                        <div className="flex flex-wrap gap-2">
                         {username.trim() && password && (
                           <button
                             type="button"
                             onClick={handleRetryLogin}
-                            disabled={isLoading || isResettingAttempts}
+                            disabled={isLoading}
                             className="inline-flex items-center justify-center rounded-xl border border-red-300/40 bg-white/10 px-4 py-2 text-sm font-bold text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             إعادة المحاولة
                           </button>
                         )}
-                        {username.trim() && (
-                          <button
-                            type="button"
-                            onClick={handleResetAttempts}
-                            disabled={isLoading || isResettingAttempts}
-                            className="inline-flex items-center justify-center rounded-xl border border-amber-300/40 bg-amber-500/10 px-4 py-2 text-sm font-bold text-amber-50 transition hover:bg-amber-500/15 disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {isResettingAttempts ? 'جارٍ إعادة الضبط...' : 'إعادة ضبط المحاولات'}
-                          </button>
-                        )}
-                      </div>
+                        </div>
+                      </>
                     )}
                   </div>
                 )}
@@ -329,24 +274,6 @@ const LoginV2: React.FC<LoginV2Props> = ({ users = [], onAuthenticated }) => {
                 </button>
               </form>
 
-              {demoUsers.length > 0 && (
-                <div className="mt-8 space-y-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-                  <p className="text-sm font-semibold text-slate-200">تعبئة سريعة للحسابات التجريبية</p>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {demoUsers.map((user) => (
-                      <button
-                        key={`${user.username}-${user.role}`}
-                        type="button"
-                        onClick={() => handleDemoLogin(user)}
-                        className="rounded-xl border border-slate-700 px-3 py-2 text-right text-sm text-slate-200 transition hover:border-emerald-500 hover:bg-emerald-500/10"
-                      >
-                        <span className="block font-semibold">{user.name || user.username}</span>
-                        <span className="block text-xs text-slate-400">{user.role || 'user'}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>

@@ -63,7 +63,7 @@ function Invoke-NativeCommandSafely {
   $previousErrorActionPreference = $ErrorActionPreference
   try {
     $global:ErrorActionPreference = 'Continue'
-    & $Command
+    $null = & $Command
     return $LASTEXITCODE
   }
   finally {
@@ -116,50 +116,65 @@ try {
     $backendPort = Get-Random -Minimum 33001 -Maximum 33999
     $postgresPort = Get-Random -Minimum 35433 -Maximum 35999
     $frontendPort = Get-Random -Minimum 34173 -Maximum 34999
-    $backendBaseUrl = "http://127.0.0.1:$backendPort"
-    $allowedOrigin = "http://127.0.0.1:$frontendPort"
+    $backendBaseUrl = "http://localhost:$backendPort"
+    $allowedOrigin = "http://localhost:$frontendPort"
     $metricsToken = [guid]::NewGuid().ToString("N")
     $jwtSecret = "audit-jwt-" + [guid]::NewGuid().ToString("N")
     $resetToken = "audit-reset-" + [guid]::NewGuid().ToString("N")
     $backupSecret = "audit-backup-" + [guid]::NewGuid().ToString("N")
     $databasePassword = "AuditRuntimePass2026!"
     $adminPassword = "AuditSuperAdmin2026!"
+    $auditEnvPath = Join-Path $runDir "docker-compose.audit.env"
     $overridePath = Join-Path $runDir "docker-compose.audit.override.yml"
     $logsPath = Join-Path $runDir "logs\docker-compose.log"
+
+    $auditEnvContent = @"
+  AUDIT_POSTGRES_PASSWORD=$databasePassword
+  AUDIT_DATABASE_URL=postgresql://feedfactory:$databasePassword@postgres:5432/feed_factory_db
+  AUDIT_JWT_SECRET=$jwtSecret
+  AUDIT_SYSTEM_RESET_TOKEN=$resetToken
+  AUDIT_BACKUP_ENCRYPTION_SECRET=$backupSecret
+  AUDIT_METRICS_AUTH_TOKEN=$metricsToken
+  AUDIT_ALLOWED_ORIGIN=$allowedOrigin
+  AUDIT_ADMIN_PASSWORD=$adminPassword
+  "@
 
     $overrideContent = @"
 services:
   postgres:
-    ports:
+    ports: !override
       - "${postgresPort}:5432"
     environment:
       POSTGRES_DB: feed_factory_db
       POSTGRES_USER: feedfactory
-      POSTGRES_PASSWORD: $databasePassword
+      POSTGRES_PASSWORD: ${AUDIT_POSTGRES_PASSWORD}
   backend:
-    ports:
+    ports: !override
       - "${backendPort}:3001"
     environment:
-      DATABASE_URL: postgresql://feedfactory:$databasePassword@postgres:5432/feed_factory_db
-      JWT_SECRET: $jwtSecret
-      RESET_TOKEN: $resetToken
-      BACKUP_ENCRYPTION_SECRET: $backupSecret
-      METRICS_AUTH_TOKEN: $metricsToken
-      CORS_ORIGINS: $allowedOrigin
-      ALLOWED_ORIGINS: $allowedOrigin
+      DATABASE_URL: ${AUDIT_DATABASE_URL}
+      JWT_SECRET: ${AUDIT_JWT_SECRET}
+      SYSTEM_RESET_TOKEN: ${AUDIT_SYSTEM_RESET_TOKEN}
+      BACKUP_ENCRYPTION_SECRET: ${AUDIT_BACKUP_ENCRYPTION_SECRET}
+      METRICS_AUTH_TOKEN: ${AUDIT_METRICS_AUTH_TOKEN}
+      CORS_ORIGINS: ${AUDIT_ALLOWED_ORIGIN}
+      ALLOWED_ORIGINS: ${AUDIT_ALLOWED_ORIGIN}
       AUTH_COOKIE_SECURE: "false"
-      ADMIN_PASSWORD: $adminPassword
+      ADMIN_PASSWORD: ${AUDIT_ADMIN_PASSWORD}
       NODE_ENV: production
 "@
 
     if (-not $runtimeFailureMessage) {
+      Set-Content -Path $auditEnvPath -Value $auditEnvContent -Encoding UTF8
       Set-Content -Path $overridePath -Value $overrideContent -Encoding UTF8
       $projectRootUri = New-Object System.Uri(($projectRoot.TrimEnd('\') + '\'))
+      $auditEnvUri = New-Object System.Uri($auditEnvPath)
       $overrideUri = New-Object System.Uri($overridePath)
+      $auditEnvPathRelative = $projectRootUri.MakeRelativeUri($auditEnvUri).ToString()
       $overridePathRelative = $projectRootUri.MakeRelativeUri($overrideUri).ToString()
 
       try {
-        $composeUpExitCode = Invoke-NativeCommandSafely { docker compose -p $composeProject -f $composeFileRelative -f $overridePathRelative up -d --build postgres backend 2>&1 | Tee-Object -FilePath $logsPath }
+        $composeUpExitCode = Invoke-NativeCommandSafely { docker compose --env-file $auditEnvPathRelative -p $composeProject -f $composeFileRelative -f $overridePathRelative up -d --build postgres backend 2>&1 | Tee-Object -FilePath $logsPath }
         if ($composeUpExitCode -ne 0) {
           $runtimeFailureMessage = "Failed to start temporary docker runtime environment."
           $runtimeFailureEvidence = "Inspect logs/docker-compose.log for compose startup details."
@@ -183,7 +198,7 @@ services:
       }
       finally {
         if (-not $KeepRuntimeArtifacts) {
-          [void](Invoke-NativeCommandSafely { docker compose -p $composeProject -f $composeFileRelative -f $overridePathRelative down -v --remove-orphans 2>&1 | Tee-Object -FilePath $logsPath -Append })
+          [void](Invoke-NativeCommandSafely { docker compose --env-file $auditEnvPathRelative -p $composeProject -f $composeFileRelative -f $overridePathRelative down -v --remove-orphans 2>&1 | Tee-Object -FilePath $logsPath -Append })
         }
       }
     }

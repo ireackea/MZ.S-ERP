@@ -6,9 +6,9 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: feed_factory_db
-      POSTGRES_USER: feedfactory
-      POSTGRES_PASSWORD: SecurePassword2026!
+      POSTGRES_DB: ${POSTGRES_DB:-feed_factory_db}
+      POSTGRES_USER: ${POSTGRES_USER:-feedfactory}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -21,7 +21,11 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PORT:-3001}
-      DATABASE_URL: postgresql://feedfactory:SecurePassword2026!@postgres:5432/feed_factory_db
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      SYSTEM_RESET_TOKEN: ${SYSTEM_RESET_TOKEN:?SYSTEM_RESET_TOKEN is required}
+      BACKUP_ENCRYPTION_SECRET: ${BACKUP_ENCRYPTION_SECRET:?BACKUP_ENCRYPTION_SECRET is required}
+      METRICS_AUTH_TOKEN: ${METRICS_AUTH_TOKEN:?METRICS_AUTH_TOKEN is required}
       PM2_INSTANCES: ${PM2_INSTANCES:-max}
     restart: unless-stopped
     volumes:
@@ -37,8 +41,8 @@ services:
     command: >
       sh -lc "
       set -e;
-      npx prisma generate;
-      npx prisma migrate deploy;
+      npm run prisma:generate --workspace=backend;
+      npm run prisma:migrate:prod --workspace=backend;
       pm2-runtime /app/backend/dist/main.js --name feedfactory-backend -i ${PM2_INSTANCES:-max} --time
       "
 

@@ -1,0 +1,751 @@
+[
+  {
+    "label": "root",
+    "ok": false,
+    "code": 1,
+    "parsed": {
+      "auditReportVersion": 2,
+      "vulnerabilities": {
+        "@hono/node-server": {
+          "name": "@hono/node-server",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            {
+              "source": 1116281,
+              "name": "@hono/node-server",
+              "dependency": "@hono/node-server",
+              "title": "@hono/node-server: Middleware bypass via repeated slashes in serveStatic",
+              "url": "https://github.com/advisories/GHSA-92pp-h63x-v22m",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-22"
+              ],
+              "cvss": {
+                "score": 5.3,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"
+              },
+              "range": "<1.19.13"
+            }
+          ],
+          "effects": [
+            "@prisma/dev"
+          ],
+          "range": "<1.19.13",
+          "nodes": [
+            "node_modules/@hono/node-server"
+          ],
+          "fixAvailable": {
+            "name": "prisma",
+            "version": "6.19.3",
+            "isSemVerMajor": true
+          }
+        },
+        "@prisma/dev": {
+          "name": "@prisma/dev",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            "@hono/node-server"
+          ],
+          "effects": [
+            "prisma"
+          ],
+          "range": "*",
+          "nodes": [
+            "node_modules/@prisma/dev"
+          ],
+          "fixAvailable": {
+            "name": "prisma",
+            "version": "6.19.3",
+            "isSemVerMajor": true
+          }
+        },
+        "brace-expansion": {
+          "name": "brace-expansion",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            {
+              "source": 1115540,
+              "name": "brace-expansion",
+              "dependency": "brace-expansion",
+              "title": "brace-expansion: Zero-step sequence causes process hang and memory exhaustion",
+              "url": "https://github.com/advisories/GHSA-f886-m6hf-6m8v",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-400"
+              ],
+              "cvss": {
+                "score": 6.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:H"
+              },
+              "range": "<1.1.13"
+            },
+            {
+              "source": 1115541,
+              "name": "brace-expansion",
+              "dependency": "brace-expansion",
+              "title": "brace-expansion: Zero-step sequence causes process hang and memory exhaustion",
+              "url": "https://github.com/advisories/GHSA-f886-m6hf-6m8v",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-400"
+              ],
+              "cvss": {
+                "score": 6.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:H"
+              },
+              "range": ">=2.0.0 <2.0.3"
+            }
+          ],
+          "effects": [],
+          "range": "<1.1.13 || >=2.0.0 <2.0.3",
+          "nodes": [
+            "backend/node_modules/brace-expansion",
+            "frontend/node_modules/brace-expansion",
+            "frontend/node_modules/readdir-glob/node_modules/brace-expansion"
+          ],
+          "fixAvailable": true
+        },
+        "dompurify": {
+          "name": "dompurify",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            {
+              "source": 1116663,
+              "name": "dompurify",
+              "dependency": "dompurify",
+              "title": "DOMPurify's ADD_TAGS function form bypasses FORBID_TAGS due to short-circuit evaluation",
+              "url": "https://github.com/advisories/GHSA-39q2-94rc-95cp",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-783"
+              ],
+              "cvss": {
+                "score": 0,
+                "vectorString": null
+              },
+              "range": "<=3.3.3"
+            },
+            {
+              "source": 1116950,
+              "name": "dompurify",
+              "dependency": "dompurify",
+              "title": "DOMPurify: FORBID_TAGS bypassed by function-based ADD_TAGS predicate (asymmetry with FORBID_ATTR fix)",
+              "url": "https://github.com/advisories/GHSA-h7mw-gpvr-xq4m",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-79",
+                "CWE-183"
+              ],
+              "cvss": {
+                "score": 0,
+                "vectorString": null
+              },
+              "range": "<3.4.0"
+            },
+            {
+              "source": 1116951,
+              "name": "dompurify",
+              "dependency": "dompurify",
+              "title": "DOMPurify has a SAFE_FOR_TEMPLATES bypass in RETURN_DOM mode",
+              "url": "https://github.com/advisories/GHSA-crv5-9vww-q3g8",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-79",
+                "CWE-1289"
+              ],
+              "cvss": {
+                "score": 6.8,
+                "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:N"
+              },
+              "range": ">=1.0.10 <3.4.0"
+            },
+            {
+              "source": 1116952,
+              "name": "dompurify",
+              "dependency": "dompurify",
+              "title": "DOMPurify: Prototype Pollution to XSS Bypass via CUSTOM_ELEMENT_HANDLING Fallback",
+              "url": "https://github.com/advisories/GHSA-v9jr-rg53-9pgp",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-79",
+                "CWE-1321"
+              ],
+              "cvss": {
+                "score": 6.9,
+                "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:C/C:H/I:L/A:N"
+              },
+              "range": ">=3.0.1 <3.4.0"
+            }
+          ],
+          "effects": [],
+          "range": "<=3.3.3",
+          "nodes": [
+            "frontend/node_modules/dompurify"
+          ],
+          "fixAvailable": true
+        },
+        "exceljs": {
+          "name": "exceljs",
+          "severity": "moderate",
+          "isDirect": true,
+          "via": [
+            "uuid"
+          ],
+          "effects": [],
+          "range": ">=3.5.0",
+          "nodes": [
+            "frontend/node_modules/exceljs"
+          ],
+          "fixAvailable": {
+            "name": "exceljs",
+            "version": "3.4.0",
+            "isSemVerMajor": true
+          }
+        },
+        "prisma": {
+          "name": "prisma",
+          "severity": "moderate",
+          "isDirect": true,
+          "via": [
+            "@prisma/dev"
+          ],
+          "effects": [],
+          "range": ">=6.20.0-dev.1",
+          "nodes": [
+            "backend/node_modules/prisma"
+          ],
+          "fixAvailable": {
+            "name": "prisma",
+            "version": "6.19.3",
+            "isSemVerMajor": true
+          }
+        },
+        "uuid": {
+          "name": "uuid",
+          "severity": "moderate",
+          "isDirect": true,
+          "via": [
+            {
+              "source": 1116970,
+              "name": "uuid",
+              "dependency": "uuid",
+              "title": "uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided",
+              "url": "https://github.com/advisories/GHSA-w5hq-g745-h8pq",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-787",
+                "CWE-1285"
+              ],
+              "cvss": {
+                "score": 0,
+                "vectorString": null
+              },
+              "range": "<14.0.0"
+            }
+          ],
+          "effects": [
+            "exceljs"
+          ],
+          "range": "<14.0.0",
+          "nodes": [
+            "frontend/node_modules/exceljs/node_modules/uuid",
+            "node_modules/uuid"
+          ],
+          "fixAvailable": {
+            "name": "uuid",
+            "version": "14.0.0",
+            "isSemVerMajor": true
+          }
+        },
+        "xlsx": {
+          "name": "xlsx",
+          "severity": "high",
+          "isDirect": true,
+          "via": [
+            {
+              "source": 1108110,
+              "name": "xlsx",
+              "dependency": "xlsx",
+              "title": "Prototype Pollution in sheetJS",
+              "url": "https://github.com/advisories/GHSA-4r6h-8v6p-xvw6",
+              "severity": "high",
+              "cwe": [
+                "CWE-1321"
+              ],
+              "cvss": {
+                "score": 7.8,
+                "vectorString": "CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H"
+              },
+              "range": "<0.19.3"
+            },
+            {
+              "source": 1108111,
+              "name": "xlsx",
+              "dependency": "xlsx",
+              "title": "SheetJS Regular Expression Denial of Service (ReDoS)",
+              "url": "https://github.com/advisories/GHSA-5pgg-2g8v-p4x9",
+              "severity": "high",
+              "cwe": [
+                "CWE-1333"
+              ],
+              "cvss": {
+                "score": 7.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+              },
+              "range": "<0.20.2"
+            }
+          ],
+          "effects": [],
+          "range": "*",
+          "nodes": [
+            "frontend/node_modules/xlsx"
+          ],
+          "fixAvailable": false
+        }
+      },
+      "metadata": {
+        "vulnerabilities": {
+          "info": 0,
+          "low": 0,
+          "moderate": 7,
+          "high": 1,
+          "critical": 0,
+          "total": 8
+        },
+        "dependencies": {
+          "prod": 582,
+          "dev": 228,
+          "optional": 70,
+          "peer": 2,
+          "peerOptional": 0,
+          "total": 881
+        }
+      }
+    },
+    "stderr": ""
+  },
+  {
+    "label": "frontend",
+    "ok": false,
+    "code": 1,
+    "parsed": {
+      "auditReportVersion": 2,
+      "vulnerabilities": {
+        "brace-expansion": {
+          "name": "brace-expansion",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            {
+              "source": 1115540,
+              "name": "brace-expansion",
+              "dependency": "brace-expansion",
+              "title": "brace-expansion: Zero-step sequence causes process hang and memory exhaustion",
+              "url": "https://github.com/advisories/GHSA-f886-m6hf-6m8v",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-400"
+              ],
+              "cvss": {
+                "score": 6.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:H"
+              },
+              "range": "<1.1.13"
+            },
+            {
+              "source": 1115541,
+              "name": "brace-expansion",
+              "dependency": "brace-expansion",
+              "title": "brace-expansion: Zero-step sequence causes process hang and memory exhaustion",
+              "url": "https://github.com/advisories/GHSA-f886-m6hf-6m8v",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-400"
+              ],
+              "cvss": {
+                "score": 6.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:H"
+              },
+              "range": ">=2.0.0 <2.0.3"
+            }
+          ],
+          "effects": [],
+          "range": "<1.1.13 || >=2.0.0 <2.0.3",
+          "nodes": [
+            "frontend/node_modules/brace-expansion",
+            "frontend/node_modules/readdir-glob/node_modules/brace-expansion"
+          ],
+          "fixAvailable": true
+        },
+        "dompurify": {
+          "name": "dompurify",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            {
+              "source": 1116663,
+              "name": "dompurify",
+              "dependency": "dompurify",
+              "title": "DOMPurify's ADD_TAGS function form bypasses FORBID_TAGS due to short-circuit evaluation",
+              "url": "https://github.com/advisories/GHSA-39q2-94rc-95cp",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-783"
+              ],
+              "cvss": {
+                "score": 0,
+                "vectorString": null
+              },
+              "range": "<=3.3.3"
+            },
+            {
+              "source": 1116950,
+              "name": "dompurify",
+              "dependency": "dompurify",
+              "title": "DOMPurify: FORBID_TAGS bypassed by function-based ADD_TAGS predicate (asymmetry with FORBID_ATTR fix)",
+              "url": "https://github.com/advisories/GHSA-h7mw-gpvr-xq4m",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-79",
+                "CWE-183"
+              ],
+              "cvss": {
+                "score": 0,
+                "vectorString": null
+              },
+              "range": "<3.4.0"
+            },
+            {
+              "source": 1116951,
+              "name": "dompurify",
+              "dependency": "dompurify",
+              "title": "DOMPurify has a SAFE_FOR_TEMPLATES bypass in RETURN_DOM mode",
+              "url": "https://github.com/advisories/GHSA-crv5-9vww-q3g8",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-79",
+                "CWE-1289"
+              ],
+              "cvss": {
+                "score": 6.8,
+                "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:N"
+              },
+              "range": ">=1.0.10 <3.4.0"
+            },
+            {
+              "source": 1116952,
+              "name": "dompurify",
+              "dependency": "dompurify",
+              "title": "DOMPurify: Prototype Pollution to XSS Bypass via CUSTOM_ELEMENT_HANDLING Fallback",
+              "url": "https://github.com/advisories/GHSA-v9jr-rg53-9pgp",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-79",
+                "CWE-1321"
+              ],
+              "cvss": {
+                "score": 6.9,
+                "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:C/C:H/I:L/A:N"
+              },
+              "range": ">=3.0.1 <3.4.0"
+            }
+          ],
+          "effects": [],
+          "range": "<=3.3.3",
+          "nodes": [
+            "frontend/node_modules/dompurify"
+          ],
+          "fixAvailable": true
+        },
+        "exceljs": {
+          "name": "exceljs",
+          "severity": "moderate",
+          "isDirect": true,
+          "via": [
+            "uuid"
+          ],
+          "effects": [],
+          "range": ">=3.5.0",
+          "nodes": [
+            "frontend/node_modules/exceljs"
+          ],
+          "fixAvailable": {
+            "name": "exceljs",
+            "version": "3.4.0",
+            "isSemVerMajor": true
+          }
+        },
+        "uuid": {
+          "name": "uuid",
+          "severity": "moderate",
+          "isDirect": true,
+          "via": [
+            {
+              "source": 1116970,
+              "name": "uuid",
+              "dependency": "uuid",
+              "title": "uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided",
+              "url": "https://github.com/advisories/GHSA-w5hq-g745-h8pq",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-787",
+                "CWE-1285"
+              ],
+              "cvss": {
+                "score": 0,
+                "vectorString": null
+              },
+              "range": "<14.0.0"
+            }
+          ],
+          "effects": [
+            "exceljs"
+          ],
+          "range": "<14.0.0",
+          "nodes": [
+            "frontend/node_modules/exceljs/node_modules/uuid",
+            "node_modules/uuid"
+          ],
+          "fixAvailable": {
+            "name": "uuid",
+            "version": "14.0.0",
+            "isSemVerMajor": true
+          }
+        },
+        "xlsx": {
+          "name": "xlsx",
+          "severity": "high",
+          "isDirect": true,
+          "via": [
+            {
+              "source": 1108110,
+              "name": "xlsx",
+              "dependency": "xlsx",
+              "title": "Prototype Pollution in sheetJS",
+              "url": "https://github.com/advisories/GHSA-4r6h-8v6p-xvw6",
+              "severity": "high",
+              "cwe": [
+                "CWE-1321"
+              ],
+              "cvss": {
+                "score": 7.8,
+                "vectorString": "CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H"
+              },
+              "range": "<0.19.3"
+            },
+            {
+              "source": 1108111,
+              "name": "xlsx",
+              "dependency": "xlsx",
+              "title": "SheetJS Regular Expression Denial of Service (ReDoS)",
+              "url": "https://github.com/advisories/GHSA-5pgg-2g8v-p4x9",
+              "severity": "high",
+              "cwe": [
+                "CWE-1333"
+              ],
+              "cvss": {
+                "score": 7.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+              },
+              "range": "<0.20.2"
+            }
+          ],
+          "effects": [],
+          "range": "*",
+          "nodes": [
+            "frontend/node_modules/xlsx"
+          ],
+          "fixAvailable": false
+        }
+      },
+      "metadata": {
+        "vulnerabilities": {
+          "info": 0,
+          "low": 0,
+          "moderate": 4,
+          "high": 1,
+          "critical": 0,
+          "total": 5
+        },
+        "dependencies": {
+          "prod": 582,
+          "dev": 228,
+          "optional": 70,
+          "peer": 2,
+          "peerOptional": 0,
+          "total": 881
+        }
+      }
+    },
+    "stderr": ""
+  },
+  {
+    "label": "backend",
+    "ok": false,
+    "code": 1,
+    "parsed": {
+      "auditReportVersion": 2,
+      "vulnerabilities": {
+        "@hono/node-server": {
+          "name": "@hono/node-server",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            {
+              "source": 1116281,
+              "name": "@hono/node-server",
+              "dependency": "@hono/node-server",
+              "title": "@hono/node-server: Middleware bypass via repeated slashes in serveStatic",
+              "url": "https://github.com/advisories/GHSA-92pp-h63x-v22m",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-22"
+              ],
+              "cvss": {
+                "score": 5.3,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"
+              },
+              "range": "<1.19.13"
+            }
+          ],
+          "effects": [
+            "@prisma/dev"
+          ],
+          "range": "<1.19.13",
+          "nodes": [
+            "node_modules/@hono/node-server"
+          ],
+          "fixAvailable": {
+            "name": "prisma",
+            "version": "6.19.3",
+            "isSemVerMajor": true
+          }
+        },
+        "@prisma/dev": {
+          "name": "@prisma/dev",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            "@hono/node-server"
+          ],
+          "effects": [
+            "prisma"
+          ],
+          "range": "*",
+          "nodes": [
+            "node_modules/@prisma/dev"
+          ],
+          "fixAvailable": {
+            "name": "prisma",
+            "version": "6.19.3",
+            "isSemVerMajor": true
+          }
+        },
+        "brace-expansion": {
+          "name": "brace-expansion",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            {
+              "source": 1115540,
+              "name": "brace-expansion",
+              "dependency": "brace-expansion",
+              "title": "brace-expansion: Zero-step sequence causes process hang and memory exhaustion",
+              "url": "https://github.com/advisories/GHSA-f886-m6hf-6m8v",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-400"
+              ],
+              "cvss": {
+                "score": 6.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:H"
+              },
+              "range": "<1.1.13"
+            }
+          ],
+          "effects": [],
+          "range": "<1.1.13",
+          "nodes": [
+            "backend/node_modules/brace-expansion"
+          ],
+          "fixAvailable": true
+        },
+        "prisma": {
+          "name": "prisma",
+          "severity": "moderate",
+          "isDirect": true,
+          "via": [
+            "@prisma/dev"
+          ],
+          "effects": [],
+          "range": ">=6.20.0-dev.1",
+          "nodes": [
+            "backend/node_modules/prisma"
+          ],
+          "fixAvailable": {
+            "name": "prisma",
+            "version": "6.19.3",
+            "isSemVerMajor": true
+          }
+        },
+        "uuid": {
+          "name": "uuid",
+          "severity": "moderate",
+          "isDirect": true,
+          "via": [
+            {
+              "source": 1116970,
+              "name": "uuid",
+              "dependency": "uuid",
+              "title": "uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided",
+              "url": "https://github.com/advisories/GHSA-w5hq-g745-h8pq",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-787",
+                "CWE-1285"
+              ],
+              "cvss": {
+                "score": 0,
+                "vectorString": null
+              },
+              "range": "<14.0.0"
+            }
+          ],
+          "effects": [],
+          "range": "<14.0.0",
+          "nodes": [
+            "node_modules/uuid"
+          ],
+          "fixAvailable": {
+            "name": "uuid",
+            "version": "14.0.0",
+            "isSemVerMajor": true
+          }
+        }
+      },
+      "metadata": {
+        "vulnerabilities": {
+          "info": 0,
+          "low": 0,
+          "moderate": 5,
+          "high": 0,
+          "critical": 0,
+          "total": 5
+        },
+        "dependencies": {
+          "prod": 582,
+          "dev": 228,
+          "optional": 70,
+          "peer": 2,
+          "peerOptional": 0,
+          "total": 881
+        }
+      }
+    },
+    "stderr": ""
+  }
+]

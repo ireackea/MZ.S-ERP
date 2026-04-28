@@ -4,11 +4,23 @@ import * as puppeteer from 'puppeteer';
 import { PrismaService } from '../prisma.service';
 import { GenerateReportDto } from './dto/generate-report.dto';
 import { ReportDto } from './dto/report.dto';
-import { PrintReportDto } from './dto/print-report.dto';
+import { PrintReportDto, RenderHtmlPdfDto } from './dto/print-report.dto';
 
 @Injectable()
 export class ReportService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private resolvePdfMargins(preset?: 'narrow' | 'normal' | 'wide') {
+    if (preset === 'narrow') {
+      return { top: '5mm', bottom: '5mm', left: '5mm', right: '5mm' };
+    }
+
+    if (preset === 'wide') {
+      return { top: '15mm', bottom: '15mm', left: '15mm', right: '15mm' };
+    }
+
+    return { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' };
+  }
 
   private isInboundType(type: string): boolean {
     const lowerType = String(type || '').toLowerCase();
@@ -556,6 +568,33 @@ export class ReportService {
             <span>Page <span class="pageNumber"></span> / <span class="totalPages"></span></span>
           </div>
         `,
+      });
+
+      return Buffer.from(pdf);
+    } finally {
+      await browser.close();
+    }
+  }
+
+  async renderHtmlPdf(dto: RenderHtmlPdfDto): Promise<Buffer> {
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    });
+
+    try {
+      const page = await browser.newPage();
+      await page.setJavaScriptEnabled(false);
+      await page.setContent(dto.html, { waitUntil: 'networkidle0' });
+
+      const pdf = await page.pdf({
+        format: dto.paperSize || 'A4',
+        landscape: dto.orientation === 'landscape',
+        printBackground: dto.printBackground !== false,
+        displayHeaderFooter: false,
+        preferCSSPageSize: true,
+        scale: dto.scale || 1,
+        margin: this.resolvePdfMargins(dto.margins),
       });
 
       return Buffer.from(pdf);

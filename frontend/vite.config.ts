@@ -19,7 +19,7 @@ const monitoringConfig = {
 };
 
 const allowedDevHosts = ['localhost', '127.0.0.1', '.app.github.dev', '.preview.github.dev'];
-const heavyLazyLibraries = ['xlsx', 'exceljs', 'html2pdf.js'] as const;
+const heavyLazyLibraries = ['exceljs', 'html2pdf.js'] as const;
 
 // Try to dynamically import the plugin
 let reactPlugin: (() => PluginOption) | null = null;
@@ -53,11 +53,6 @@ export default defineConfig(({ mode }) => ({
       backendOrigin,
     }),
   },
-
-  esbuild: {
-    charset: 'utf8' as const,
-    legalComments: 'none' as const,
-  } as any,
 
   resolve: {
     alias: {

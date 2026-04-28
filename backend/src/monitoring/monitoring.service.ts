@@ -1,5 +1,6 @@
 // ENTERPRISE FIX: Phase 0 – Critical Security & Encoding Lockdown - 2026-03-13
-import { Injectable, InternalServerErrorException, Logger, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { DatabaseInfrastructureService } from '../database/database-infrastructure.service';
 import { PrismaService } from '../prisma.service';
 import { ClientLogDto } from './dto/client-log.dto';
 import { SystemResetDto } from './dto/system-reset.dto';
@@ -16,28 +17,27 @@ type HealthStatus = {
   };
 };
 
+type ResetAttemptState = {
+  invalidAttempts: number;
+  blockedUntil: number;
+  updatedAt: number;
+};
+
 @Injectable()
 export class MonitoringService {
   private readonly logger = new Logger(MonitoringService.name);
+  private static readonly RESET_MAX_INVALID_ATTEMPTS = 3;
+  private static readonly RESET_BLOCK_WINDOW_MS = 10 * 60 * 1000;
+  private static readonly RESET_ATTEMPT_RETENTION_MS = 24 * 60 * 60 * 1000;
+  private readonly resetAttemptTracker = new Map<string, ResetAttemptState>();
 
-  constructor(private readonly prisma: PrismaService) {}
-
-  private getResetToken(): string {
-    const resetToken = String(process.env.RESET_TOKEN || '').trim();
-    if (!resetToken) {
-      throw new InternalServerErrorException('RESET_TOKEN is not configured.');
-    }
-    return resetToken;
-  }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly databaseInfrastructure: DatabaseInfrastructureService,
+  ) {}
 
   async getHealth(): Promise<HealthStatus> {
-    let dbConnected = false;
-    try {
-      await this.prisma.$queryRawUnsafe('SELECT 1');
-      dbConnected = true;
-    } catch {
-      dbConnected = false;
-    }
+    const dbConnected = await this.databaseInfrastructure.probeConnection();
 
     const mem = process.memoryUsage();
     return {
@@ -79,25 +79,117 @@ export class MonitoringService {
     const token = String(process.env.SYSTEM_RESET_TOKEN || '').trim();
     if (!token || token.length < 16) {
       this.logger.error('SYSTEM_RESET_TOKEN not configured or too short (min 16 chars)');
-      throw new Error('System reset is not properly configured. Set SYSTEM_RESET_TOKEN env var.');
+      throw new Error('إعداد إعادة الضبط غير مكتمل. يرجى ضبط SYSTEM_RESET_TOKEN بطول 16 حرفًا على الأقل.');
     }
     return token;
   }
 
+  private getResetActorKey(user: any): string {
+    const id = String(user?.id || '').trim();
+    if (id) return `id:${id}`;
+
+    const username = String(user?.username || '').trim().toLowerCase();
+    if (username) return `username:${username}`;
+
+    return 'anonymous';
+  }
+
+  private getResetActorLabel(user: any): string {
+    const username = String(user?.username || 'unknown').trim() || 'unknown';
+    const id = String(user?.id || 'unknown').trim() || 'unknown';
+    return `${username} (ID: ${id})`;
+  }
+
+  private pruneResetAttemptTracker(now: number) {
+    for (const [actorKey, state] of this.resetAttemptTracker.entries()) {
+      const stale = state.updatedAt + MonitoringService.RESET_ATTEMPT_RETENTION_MS < now;
+      const expiredBlock = state.blockedUntil > 0 && state.blockedUntil <= now;
+      const idle = state.invalidAttempts <= 0 && state.blockedUntil <= 0;
+      if (stale || (expiredBlock && idle)) {
+        this.resetAttemptTracker.delete(actorKey);
+      }
+    }
+  }
+
+  private assertResetAttemptAllowed(actorKey: string, actorLabel: string, now: number) {
+    const state = this.resetAttemptTracker.get(actorKey);
+    if (!state || state.blockedUntil <= now) return;
+
+    const retryAt = new Date(state.blockedUntil).toISOString();
+    this.logger.warn(`Blocked reset attempt for ${actorLabel}; cooldown until ${retryAt}`);
+    throw new UnauthorizedException({
+      code: 'SYSTEM_RESET_COOLDOWN',
+      message: 'تم إيقاف محاولات إعادة الضبط مؤقتًا بسبب تكرار الإدخال الخاطئ.',
+      retryAt,
+    });
+  }
+
+  private registerInvalidResetAttempt(actorKey: string, now: number): ResetAttemptState {
+    const current = this.resetAttemptTracker.get(actorKey) ?? {
+      invalidAttempts: 0,
+      blockedUntil: 0,
+      updatedAt: now,
+    };
+
+    current.invalidAttempts += 1;
+    current.updatedAt = now;
+
+    if (current.invalidAttempts >= MonitoringService.RESET_MAX_INVALID_ATTEMPTS) {
+      current.blockedUntil = now + MonitoringService.RESET_BLOCK_WINDOW_MS;
+      current.invalidAttempts = 0;
+    }
+
+    this.resetAttemptTracker.set(actorKey, current);
+    return current;
+  }
+
+  private clearResetAttemptState(actorKey: string) {
+    this.resetAttemptTracker.delete(actorKey);
+  }
+
   async performSystemReset(dto: SystemResetDto, user: any) {
-    this.logger.warn(`SYSTEM RESET REQUESTED by user ${user?.username} (ID: ${user?.id})`);
+    const now = Date.now();
+    this.pruneResetAttemptTracker(now);
+
+    const actorKey = this.getResetActorKey(user);
+    const actorLabel = this.getResetActorLabel(user);
+    const actorRole = String(user?.role || '').trim();
+
+    this.logger.warn(`SYSTEM RESET REQUESTED by user ${actorLabel}`);
+
+    // Role check first to avoid confirmation token probing by non-SuperAdmin actors.
+    if (actorRole !== 'SuperAdmin') {
+      this.logger.warn(`Rejected reset attempt by non-SuperAdmin user ${actorLabel} (role: ${actorRole || 'unknown'})`);
+      throw new UnauthorizedException({
+        code: 'SYSTEM_RESET_SUPERADMIN_REQUIRED',
+        message: 'غير مصرح بتنفيذ إعادة الضبط. هذا الإجراء متاح فقط لدور SuperAdmin.',
+      });
+    }
+
+    this.assertResetAttemptAllowed(actorKey, actorLabel, now);
 
     // SECURITY FIX: Strict validation using SYSTEM_RESET_TOKEN from environment
     const expectedToken = this.getSystemResetToken();
     if (dto.confirmationCode !== expectedToken) {
-      this.logger.warn(`Invalid reset attempt by user ${user?.username}`);
-      throw new UnauthorizedException('Invalid confirmation code. Contact administrator.');
+      const state = this.registerInvalidResetAttempt(actorKey, now);
+      const blockedUntil = state.blockedUntil > 0 ? new Date(state.blockedUntil).toISOString() : 'none';
+      this.logger.warn(`Invalid reset attempt by user ${actorLabel}; blockedUntil=${blockedUntil}`);
+
+      if (state.blockedUntil > 0) {
+        throw new UnauthorizedException({
+          code: 'SYSTEM_RESET_COOLDOWN',
+          message: 'تم إيقاف محاولات إعادة الضبط مؤقتًا بسبب تكرار الإدخال الخاطئ.',
+          retryAt: new Date(state.blockedUntil).toISOString(),
+        });
+      }
+
+      throw new UnauthorizedException({
+        code: 'SYSTEM_RESET_INVALID_CODE',
+        message: 'رمز التأكيد غير صحيح. يرجى التواصل مع مدير النظام.',
+      });
     }
 
-    // Role check - Only SuperAdmin can reset
-    if (user.role !== 'SuperAdmin') {
-      throw new UnauthorizedException('Permission Denied: Only SuperAdmin can perform a system reset.');
-    }
+    this.clearResetAttemptState(actorKey);
 
     try {
       this.logger.log('Starting full system reset (Truncating operational tables)...');

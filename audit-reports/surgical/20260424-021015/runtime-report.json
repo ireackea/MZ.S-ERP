@@ -1,0 +1,68 @@
+{
+  "stage": "runtime",
+  "generatedAt": "2026-04-24T00:27:29.904Z",
+  "backendBaseUrl": "http://localhost:33082",
+  "allowedOrigin": "http://localhost:34308",
+  "checks": [
+    {
+      "name": "health-endpoint",
+      "ok": true,
+      "status": 200,
+      "payloadStatus": "healthy"
+    },
+    {
+      "name": "metrics-auth-without-token",
+      "ok": true,
+      "status": 401
+    },
+    {
+      "name": "metrics-auth-with-token",
+      "ok": true,
+      "status": 200
+    },
+    {
+      "name": "cors-allowed-origin",
+      "ok": true,
+      "header": "http://localhost:34308"
+    },
+    {
+      "name": "cors-denied-origin",
+      "ok": true,
+      "header": "",
+      "status": 500
+    },
+    {
+      "name": "protected-endpoint-without-session",
+      "ok": true,
+      "status": 401
+    },
+    {
+      "name": "auth-cookie-flags",
+      "ok": true,
+      "status": 201,
+      "cookie": "feed_factory_jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhMjFlNTkwNS0yNmZiLTQwMmMtYmJkZC05MWY0MWYwODdlZGEiLCJ1c2VybmFtZSI6InN1cGVyYWRtaW4iLCJyb2xlIjoiU3VwZXJBZG1pbiIsInBlcm1pc3Npb25zIjpbIioiXSwibmFtZSI6IlN5c3RlbSBTdXBlckFkbWluIiwic2lkIjoiNjRhYTUyOWQtNjk3MC00Mzg0LWI1ZGItMzI0NjM1YjBlNTg0IiwiaWF0IjoxNzc2OTkwNDQ5LCJleHAiOjE3NzcwNzY4NDl9.98hsuBmYmkJHsZ5AePyvL6T4Zu7-wzp39p66lSs67d4; Max-Age=86400; Path=/; Expires=Sat, 25 Apr 2026 00:27:29 GMT; HttpOnly; SameSite=Strict"
+    },
+    {
+      "name": "socket-rejects-anonymous-connection",
+      "ok": false,
+      "connected": true
+    },
+    {
+      "name": "socket-rejects-disallowed-origin",
+      "ok": true,
+      "connected": false,
+      "error": "websocket error"
+    }
+  ],
+  "findings": [
+    {
+      "severity": "critical",
+      "category": "runtime",
+      "ruleId": "socket-anonymous-connect",
+      "title": "Socket.IO namespace accepted an anonymous connection",
+      "description": "The runtime websocket probe connected successfully without presenting credentials.",
+      "evidence": "/realtime via /socket.io",
+      "remediation": "Authenticate the Socket.IO handshake before accepting realtime clients."
+    }
+  ]
+}

@@ -14,13 +14,14 @@ RUN apt-get update \
 
 COPY package*.json ./
 COPY prisma ./prisma
+COPY prisma.config.ts ./
 COPY nest-cli.json ./
 COPY tsconfig.json ./
 COPY tsconfig.run.json ./
 COPY src ./src
 
 RUN npm ci --only=production=false
-RUN npx prisma generate
+RUN npm run prisma:generate
 RUN npm run build
 
 # Stage 2: Production
@@ -62,9 +63,11 @@ COPY --from=builder --chown=appuser:appgroup /app/dist ./dist
 COPY --from=builder --chown=appuser:appgroup /app/node_modules ./node_modules
 COPY --from=builder --chown=appuser:appgroup /app/package.json ./
 COPY --from=builder --chown=appuser:appgroup /app/prisma ./prisma
+COPY --from=builder --chown=appuser:appgroup /app/prisma.config.ts ./prisma.config.ts
 
-# SECURITY FIX: 2026-03-28 - Create backups directory with proper permissions
-RUN mkdir -p /app/backups && chown -R appuser:appgroup /app/backups
+# SECURITY FIX: 2026-03-28 - Create writable runtime directories for non-root startup
+RUN mkdir -p /app/backups /app/uploads/items \
+  && chown -R appuser:appgroup /app/backups /app/uploads
 
 # SECURITY FIX: 2026-03-28 - Switch to non-root user
 USER appuser
@@ -76,6 +79,6 @@ EXPOSE 3001
 
 # SECURITY FIX: 2026-03-28 - Use prisma migrate deploy instead of db push
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:3001/api/dashboard/stats || exit 1
+  CMD node -e "fetch('http://localhost:3001/api/health').then((response)=>process.exit(response.ok?0:1)).catch(()=>process.exit(1))"
 
-CMD ["sh", "-c", "npx prisma generate && npx prisma migrate deploy && node dist/main.js"]
+CMD ["sh", "-c", "npm run prisma:generate && npm run prisma:migrate:prod && node dist/main.js"]

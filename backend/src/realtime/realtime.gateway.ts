@@ -13,6 +13,7 @@ import {
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
 import type { Server, Socket } from 'socket.io';
+import { AuthService } from '../auth/auth.service';
 import { RealtimeService, RealtimeSyncEvent } from './realtime.service';
 
 // Helper functions for CORS validation (matching main.ts logic)
@@ -77,6 +78,57 @@ function validateWebSocketOrigin(origin: string): boolean {
   return false;
 }
 
+function parseCookieHeader(rawCookieHeader: string | string[] | undefined): Record<string, string> {
+  const headerValue = Array.isArray(rawCookieHeader)
+    ? rawCookieHeader.join('; ')
+    : String(rawCookieHeader || '');
+
+  return headerValue
+    .split(';')
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .reduce<Record<string, string>>((cookies, segment) => {
+      const separatorIndex = segment.indexOf('=');
+      if (separatorIndex <= 0) return cookies;
+
+      const name = segment.slice(0, separatorIndex).trim();
+      const value = segment.slice(separatorIndex + 1).trim();
+      if (!name) return cookies;
+
+      try {
+        cookies[name] = decodeURIComponent(value);
+      } catch {
+        cookies[name] = value;
+      }
+      return cookies;
+    }, {});
+}
+
+function shouldUseSecureSocketCookie(client: Socket): boolean {
+  const explicitSetting = String(process.env.AUTH_COOKIE_SECURE || '').trim().toLowerCase();
+  if (explicitSetting === 'true') return true;
+  if (explicitSetting === 'false') return false;
+
+  const forwardedProto = String(client.handshake.headers['x-forwarded-proto'] || '').toLowerCase();
+  const requestSocket = (client.request as { socket?: { encrypted?: boolean } } | undefined)?.socket;
+  return Boolean(requestSocket?.encrypted) || forwardedProto === 'https';
+}
+
+function extractSocketCookieToken(client: Socket): string {
+  const cookies = parseCookieHeader(client.handshake.headers.cookie);
+  const token = String(cookies.feed_factory_jwt || '').trim();
+  if (!token) return '';
+
+  if (shouldUseSecureSocketCookie(client)) {
+    const forwardedProto = String(client.handshake.headers['x-forwarded-proto'] || '').toLowerCase();
+    const requestSocket = (client.request as { socket?: { encrypted?: boolean } } | undefined)?.socket;
+    const secureTransport = Boolean(requestSocket?.encrypted) || forwardedProto === 'https';
+    if (!secureTransport) return '';
+  }
+
+  return token;
+}
+
 @WebSocketGateway({
   namespace: '/realtime',
   cors: {
@@ -100,10 +152,32 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
   @WebSocketServer()
   server!: Server;
 
-  constructor(private readonly realtimeService: RealtimeService) {}
+  constructor(
+    private readonly realtimeService: RealtimeService,
+    private readonly authService: AuthService,
+  ) {}
 
   afterInit() {
     this.realtimeService.registerGateway(this);
+    this.server.use(async (client, next) => {
+      const cookieToken = extractSocketCookieToken(client);
+
+      if (!cookieToken) {
+        this.logger.warn(`Rejected realtime client without authenticated session: ${client.id}`);
+        next(new Error('Unauthorized'));
+        return;
+      }
+
+      try {
+        client.data.user = await this.authService.verifyToken(cookieToken);
+        next();
+      } catch (error) {
+        this.logger.warn(
+          `Rejected realtime client with invalid session: ${client.id} (${String((error as Error)?.message || error)})`,
+        );
+        next(new Error('Unauthorized'));
+      }
+    });
     this.logger.log('Realtime gateway initialized');
   }
 

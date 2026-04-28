@@ -2,93 +2,22 @@
 // ENTERPRISE FIX: Exact Legacy UI Restoration - 2026-02-27
 // ENTERPRISE FIX: Runtime Recovery Hardening - 2026-02-28
 import apiClient from '@api/client';
+import {
+  AUTH_SESSION_EVENT,
+  clearAllAuthData,
+  getAuthUser,
+  setAuthUser,
+  type AuthSessionUser,
+} from './authSession';
 
-const AUTH_TOKEN_KEY = 'feed_factory_jwt_token';
-const AUTH_USER_KEY = 'feed_factory_jwt_user';
-export const AUTH_SESSION_EVENT = 'feed_factory_auth_session_changed';
-const AUTH_STORAGE_PREFIXES = ['feed_factory_jwt_', 'feed_factory_auth_'];
-const AUTH_STORAGE_KEYS = [
-  'feed_factory_last_login_username',
-  'feed_factory_current_session_id',
-  'feed_factory_last_activity_at',
-];
+export { AUTH_SESSION_EVENT, clearAllAuthData, getAuthUser, setAuthUser } from './authSession';
+export type { AuthSessionUser } from './authSession';
 
 export type AuthLoginResponse = {
-  accessToken: string;
+  accessToken?: string;
   tokenType: 'Bearer';
   expiresIn: string;
-  user: {
-    id: string;
-    username: string;
-    role: string;
-    permissions?: string[];
-    name?: string;
-  };
-};
-
-export type AuthSessionUser = AuthLoginResponse['user'];
-
-const isBearerJwtToken = (value: string | null | undefined) => {
-  const token = String(value || '').trim();
-  return token.includes('.') && token.split('.').length === 3;
-};
-
-const emitSessionChanged = () => {
-  if (typeof window === 'undefined') return;
-  window.dispatchEvent(new Event(AUTH_SESSION_EVENT));
-};
-
-const clearMatchingStorage = (storage: Storage | undefined) => {
-  if (!storage) return;
-
-  for (let index = storage.length - 1; index >= 0; index -= 1) {
-    const key = storage.key(index);
-    if (!key) continue;
-
-    if (
-      AUTH_STORAGE_KEYS.includes(key) ||
-      AUTH_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
-    ) {
-      storage.removeItem(key);
-    }
-  }
-};
-
-export const clearAllAuthData = () => {
-  if (typeof window === 'undefined') return;
-
-  clearMatchingStorage(window.localStorage);
-  clearMatchingStorage(window.sessionStorage);
-  emitSessionChanged();
-};
-
-export const getAuthToken = () => {
-  const token = localStorage.getItem(AUTH_TOKEN_KEY);
-  return isBearerJwtToken(token) ? String(token) : '';
-};
-
-export const getAuthUser = () => {
-  const raw = localStorage.getItem(AUTH_USER_KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch (error) {
-    console.error('[authService] Failed to parse auth user:', error);
-    return null;
-  }
-};
-
-export const setAuthUser = (user: AuthSessionUser | null) => {
-  if (!user) {
-    localStorage.removeItem(AUTH_USER_KEY);
-  } else {
-    try {
-      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
-    } catch (error) {
-      console.error('[authService] Failed to store auth user:', error);
-    }
-  }
-  emitSessionChanged();
+  user: AuthSessionUser;
 };
 
 export const login = async (username: string, password: string): Promise<AuthLoginResponse> => {
@@ -98,15 +27,10 @@ export const login = async (username: string, password: string): Promise<AuthLog
     const response = await apiClient.post<AuthLoginResponse>('/auth/login', { username, password });
     const payload = response.data;
 
-    if (!payload?.accessToken || !payload?.user) {
+    if (!payload?.user) {
       throw new Error('Invalid response from server');
     }
 
-    if (isBearerJwtToken(payload.accessToken)) {
-      localStorage.setItem(AUTH_TOKEN_KEY, payload.accessToken);
-    } else {
-      localStorage.removeItem(AUTH_TOKEN_KEY);
-    }
     setAuthUser(payload.user);
 
     console.log('[authService] Login successful:', {
@@ -140,11 +64,30 @@ export const resetLoginAttempts = async (username: string): Promise<{ success: b
   }
 };
 
-export const logout = () => {
+const redirectToLogin = () => {
+  if (typeof window === 'undefined') return;
+
+  try {
+    if (window.location.pathname !== '/login') {
+      window.history.replaceState(window.history.state, '', '/login');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  } catch {
+    window.location.href = '/login';
+  }
+};
+
+export const logout = async () => {
+  try {
+    await apiClient.post('/auth/logout');
+  } catch (error) {
+    console.error('[authService] Backend logout failed:', error);
+  }
+
   try {
     clearAllAuthData();
     console.log('[authService] User logged out');
-    window.location.href = '/login';
+    redirectToLogin();
   } catch (error) {
     console.error('[authService] Failed to logout:', error);
   }

@@ -1,7 +1,6 @@
 // ENTERPRISE FIX: Phase 2 - Multi-User Sync - Final Completion Pass - 2026-03-02
 // ENTERPRISE FIX: Exact Legacy UI Restoration - 2026-02-27
 import apiClient from '@api/client';
-import { getAuthToken } from './authService';
 
 export type UsersStatusFilter = 'active' | 'locked';
 

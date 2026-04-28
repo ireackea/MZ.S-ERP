@@ -1,13 +1,10 @@
 // ENTERPRISE FIX: Phase 7 - Production Deployment & Monitoring Setup - 2026-03-13
 import { describe, expect, it } from 'vitest';
-
-const baseUrl = process.env.E2E_BASE_URL || 'http://127.0.0.1:3001';
-const username = process.env.E2E_USERNAME || 'superadmin';
-const password = process.env.E2E_PASSWORD || 'SecurePassword2026!';
+import { backendUrl, e2ePassword as password, getMetricsHeaders, e2eUsername as username } from './support/runtimeConfig';
 
 describe('login and monitoring smoke test', () => {
   it('logs in successfully and exposes Prometheus metrics', async () => {
-    const loginResponse = await fetch(`${baseUrl}/api/auth/login`, {
+    const loginResponse = await fetch(`${backendUrl}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
@@ -20,7 +17,7 @@ describe('login and monitoring smoke test', () => {
     expect(String(loginResponse.headers.get('set-cookie') || '')).toContain('SameSite=Strict');
     expect(loginPayload.user?.username).toBeTruthy();
 
-    const metricsResponse = await fetch(`${baseUrl}/metrics`);
+    const metricsResponse = await fetch(`${backendUrl}/metrics`, { headers: getMetricsHeaders() });
     const metricsText = await metricsResponse.text();
 
     expect(metricsResponse.ok).toBe(true);

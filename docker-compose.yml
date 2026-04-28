@@ -6,9 +6,9 @@ services:
     image: postgres:16-alpine
     restart: always
     environment:
-      POSTGRES_DB: feed_factory_db
-      POSTGRES_USER: feedfactory
-      POSTGRES_PASSWORD: SecurePassword2026!
+      POSTGRES_DB: ${POSTGRES_DB:-feed_factory_db}
+      POSTGRES_USER: ${POSTGRES_USER:-feedfactory}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     ports:
       - "5432:5432"
     volumes:
@@ -20,13 +20,14 @@ services:
     depends_on:
       - postgres
     environment:
-      DATABASE_URL: postgresql://feedfactory:SecurePassword2026!@postgres:5432/feed_factory_db
-      JWT_SECRET: phase-0-production-secret-2026
-      RESET_TOKEN: CONFIRM_SYSTEM_RESET_2026
-      BACKUP_ENCRYPTION_SECRET: phase-0-backup-secret-2026
-      ALLOWED_ORIGINS: http://localhost:4173,http://127.0.0.1:4173
-      CORS_ORIGINS: http://localhost:4173,http://127.0.0.1:4173
-      PORT: 3001
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      SYSTEM_RESET_TOKEN: ${SYSTEM_RESET_TOKEN:?SYSTEM_RESET_TOKEN is required}
+      BACKUP_ENCRYPTION_SECRET: ${BACKUP_ENCRYPTION_SECRET:?BACKUP_ENCRYPTION_SECRET is required}
+      METRICS_AUTH_TOKEN: ${METRICS_AUTH_TOKEN:?METRICS_AUTH_TOKEN is required}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:4173,http://127.0.0.1:4173}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4173,http://127.0.0.1:4173}
+      PORT: ${PORT:-3001}
     ports:
       - "3001:3001"
 

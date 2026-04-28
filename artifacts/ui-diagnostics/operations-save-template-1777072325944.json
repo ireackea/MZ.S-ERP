@@ -1,0 +1,15 @@
+{
+  "templateName": "automation-save-template-1777072325944",
+  "appearedAfterSave": true,
+  "persistedAfterReopen": true,
+  "persistedAfterReload": false,
+  "removedAfterCleanup": false,
+  "counts": {
+    "before": 1,
+    "afterSave": 2,
+    "afterReopen": 2,
+    "afterReload": 1,
+    "afterCleanup": 1
+  },
+  "artifactPath": "C:\\Users\\ireac\\Documents\\GitHub\\MZ.S-ERP\\artifacts\\ui-diagnostics\\operations-save-template-1777072325944.json"
+}

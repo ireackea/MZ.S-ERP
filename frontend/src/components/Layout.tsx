@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { User } from '../types';
 import { useOfflineSync } from '../hooks/useOfflineSync';
+import { hasGrantedPermission } from '../services/permissionAliases';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -21,11 +22,28 @@ interface LayoutProps {
   onLogout?: () => void;
 }
 
+const SECTION_PERMISSIONS: Record<string, string> = {
+  dashboard: 'inventory.view.stock',
+  orders: 'sales.view.orders',
+  operations: 'inventory.view.operations',
+  'stock-card': 'inventory.reports.stock_card',
+  reports: 'reports.view',
+  statement: 'inventory.reports.statement',
+  balances: 'inventory.view.stock',
+  'opening-balance': 'inventory.view.opening_balances',
+  partners: 'partners.view',
+  items: 'inventory.view.items',
+  formulation: 'formulation.view',
+  stocktaking: 'inventory.view.stocktaking',
+  settings: 'settings.view',
+  users: 'users.view.management',
+};
+
 const Layout: React.FC<LayoutProps> = ({ children, currentUser, onLogout }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [conflictModalItem, setConflictModalItem] = useState<any>(null);
-  
+
   const location = useLocation();
   const { isOffline, pendingCount } = useOfflineSync();
 
@@ -36,6 +54,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, onLogout }) => {
     window.addEventListener('show-conflict-modal', handleConflictEvent);
     return () => window.removeEventListener('show-conflict-modal', handleConflictEvent);
   }, []);
+
+
 
   const navItems = [
     { to: '/', label: 'لوحة التحكم الرئيسية', icon: LayoutDashboard, section: 'dashboard' },
@@ -56,8 +76,13 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, onLogout }) => {
 
   const canAccess = (section: string): boolean => {
     if (!currentUser) return false;
-    if (currentUser.role === 'admin' || currentUser.role === 'SuperAdmin') return true;
-    return true;
+    const permissions = Array.isArray(currentUser.permissions)
+      ? currentUser.permissions.filter((p): p is string => typeof p === 'string')
+      : [];
+    if (permissions.includes('*')) return true;
+    const permissionId = SECTION_PERMISSIONS[section];
+    if (!permissionId) return true;
+    return hasGrantedPermission(permissions, permissionId);
   };
 
   const visibleNavItems = navItems.filter(item => canAccess(item.section));
@@ -149,12 +174,11 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, onLogout }) => {
                 {/* Profile Dropdown Menu */}
                 {isProfileMenuOpen && (
                   <>
-                    {/* Backdrop for mobile */}
+                    {/* Transparent overlay — closes menu on any outside click */}
                     <div
-                      className="fixed inset-0 z-40 md:hidden"
+                      className="fixed inset-0 z-40"
                       onClick={() => setIsProfileMenuOpen(false)}
                     />
-                    
                     {/* Dropdown Menu */}
                     <div className="absolute left-0 mt-2 w-56 bg-white dark:bg-slate-900 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 py-2 z-50">
                       {/* User Info */}
@@ -187,10 +211,10 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, onLogout }) => {
         </div>
       </main>
 
-      {/* Mobile Overlay */}
+      {/* Sidebar Overlay — closes sidebar when clicking anywhere outside it */}
       {isMobileMenuOpen && (
         <div
-          className="fixed inset-0 bg-black/60 z-40 md:hidden"
+          className="fixed inset-0 bg-black/60 z-40"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}

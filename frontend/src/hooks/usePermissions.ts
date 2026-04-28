@@ -1,55 +1,16 @@
 // ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
 // ENTERPRISE FIX: Phase 2 - Multi-User Sync - Final Completion Pass - 2026-03-02
 import { useCallback, useMemo } from 'react';
+import { hasGrantedPermission } from '@services/permissionAliases';
 import { useSession } from './useSession';
-
-const PERMISSION_ALIASES: Record<string, string[]> = {
-  'users.view.management': ['users.view'],
-  'users.create.management': ['users.create'],
-  'users.update.management': ['users.update'],
-  'users.delete.management': ['users.delete'],
-  'users.export.management': ['users.audit'],
-  'reports.view.general': ['reports.view'],
-  'reports.export.general': ['reports.generate'],
-  'inventory.view.stock': ['items.view', 'transactions.view'],
-  'inventory.create.inbound': ['transactions.create'],
-  'inventory.create.outbound': ['transactions.create'],
-  'inventory.update.pricing': ['transactions.update'],
-  'inventory.delete.transactions': ['transactions.delete'],
-  'settings.view.system': ['theme.view', 'backup.view'],
-  'settings.view': ['settings.view.general'],
-  'settings.view.general': ['settings.view.system'],
-  'settings.view.users': ['users.view.management'],
-  'settings.view.permissions': ['users.view.management'],
-  'settings.view.backup': ['backup.create', 'backup.restore', 'backup.schedule', 'backup.download', 'backup.delete', 'backup.view'],
-  'settings.view.reset': ['admin.reset_system', 'system.reset'],
-  'settings.view.audit': ['users.audit'],
-  'settings.view.offline': ['settings.view.system'],
-  'settings.view.printing': ['settings.view.system'],
-  'settings.view.localization': ['theme.view', 'settings.view.system'],
-};
 
 const normalizePermissions = (permissions: unknown): string[] => {
   if (!Array.isArray(permissions)) return [];
   return [...new Set(permissions.filter((entry): entry is string => typeof entry === 'string'))];
 };
 
-const expandRequestedPermissions = (permission: string): string[] => {
-  const direct = permission.trim();
-  if (!direct) return [];
-  const aliases = PERMISSION_ALIASES[direct] || [];
-  return [...new Set([direct, ...aliases])];
-};
-
-const matchWildcard = (granted: string, requested: string) => {
-  if (!granted.endsWith('.*')) return false;
-  const prefix = granted.slice(0, -2);
-  return requested === prefix || requested.startsWith(`${prefix}.`);
-};
-
 export const usePermissions = () => {
   const { data: session } = useSession();
-  const normalizedRole = String(session?.user?.role || '').trim().toLowerCase();
 
   const normalizedPermissions = useMemo(
     () => normalizePermissions(session?.user?.permissions),
@@ -63,21 +24,16 @@ export const usePermissions = () => {
 
   const permissionState = useMemo(() => {
     const set = new Set(normalizedPermissions);
-    const wildcards = normalizedPermissions.filter((entry) => entry.endsWith('.*'));
-    const isSuper = set.has('*') || normalizedRole === 'admin' || normalizedRole === 'superadmin';
-    return { set, wildcards, isSuper };
-  }, [permissionsKey, normalizedPermissions, normalizedRole]);
+    const isSuper = set.has('*');
+    return { permissions: normalizedPermissions, isSuper };
+  }, [permissionsKey, normalizedPermissions]);
 
   const hasPermission = useCallback(
     (permission: string) => {
       if (!permission) return false;
       if (permissionState.isSuper) return true;
 
-      const requestedList = expandRequestedPermissions(permission);
-      return requestedList.some((requested) => {
-        if (permissionState.set.has(requested)) return true;
-        return permissionState.wildcards.some((granted) => matchWildcard(granted, requested));
-      });
+      return hasGrantedPermission(permissionState.permissions, permission);
     },
     [permissionState],
   );
