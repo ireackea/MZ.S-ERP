@@ -1,8 +1,8 @@
-const CACHE_NAME = 'feedfactory-pwa-v3';
-const DYNAMIC_CACHE = 'feedfactory-api-v3';
+const CACHE_NAME = 'feedfactory-pwa-v4';
+const DYNAMIC_CACHE = 'feedfactory-api-v4';
 const MUTATION_DB_NAME = 'FeedFactoryMutationDB';
 const MUTATION_STORE_NAME = 'mutationQueue';
-const CORE_ASSETS = ['/', '/index.html', '/manifest.json'];
+const CORE_ASSETS = ['/manifest.json'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -36,6 +36,12 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
+
+  // Never serve stale application shell or JS/CSS bundles after a rebuild.
+  if (event.request.mode === 'navigate' || url.pathname === '/' || url.pathname === '/index.html' || url.pathname === '/sw.js' || url.pathname.startsWith('/assets/')) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
 
   // High-Priority Data (Dashboard & Items): Stale-While-Revalidate for instant offline UX
   if ((url.pathname.includes('/api/dashboard') || url.pathname.includes('/api/items')) && event.request.method === 'GET') {

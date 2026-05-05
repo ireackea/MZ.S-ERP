@@ -1,3 +1,11 @@
+# ═══════════════════════════════════════════════════════════════════
+# ⚠️  DANGER: هذا الملف قديم (Legacy) — لا تستخدمه في الإنتاج
+# ═══════════════════════════════════════════════════════════════════
+# السبب: يحتوي على DATABASE_URL=file:./prisma/dev.db (SQLite hardcoded)
+# ويستخدم PM2 بدلاً من Node مباشرةً، ولا ينفّذ prisma migrate.
+#
+# الملف الصحيح للإنتاج: backend/Dockerfile (يستخدمه docker-compose.yml)
+# ═══════════════════════════════════════════════════════════════════
 # // ENTERPRISE FIX: Final One-Click Production Launch v3 - 2026-02-27
 FROM node:20-bookworm-slim
 

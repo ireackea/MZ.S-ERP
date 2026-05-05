@@ -48,6 +48,14 @@ import {
   normalizeStatusFilter,
   type CreateUserFormState,
 } from './unified-iam/shared';
+import {
+  PERMISSIONS_CATALOG,
+  FULL_ACCESS_TOKEN,
+  ALL_PERMISSION_IDS,
+  isPermissionGranted,
+  countGrantedInGroup,
+  type PermissionGroup,
+} from '@services/permissionsCatalog';
 
 type UpdateUserPayload = Parameters<typeof updateUser>[1];
 
@@ -67,6 +75,9 @@ const UnifiedIAM: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'users' | 'matrix' | 'audit'>('users');
   const [selectedRoleId, setSelectedRoleId] = useState('');
   const [matrix, setMatrix] = useState<string[]>([]);
+  // PERMISSIONS MATRIX REBUILD - 2026-04-29: search + collapse state per module
+  const [matrixSearch, setMatrixSearch] = useState('');
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
   // ENTERPRISE FIX: Custom Roles - Phase 2 - 2026-03-02
   const [showRoleModal, setShowRoleModal] = useState(false);
@@ -250,6 +261,70 @@ const UnifiedIAM: React.FC = () => {
       toast.error(getErrorMessage(error, 'فشل حفظ الصلاحيات'));
     }
   };
+
+  // PERMISSIONS MATRIX REBUILD - 2026-04-29
+  const hasFullAccess = matrix.includes(FULL_ACCESS_TOKEN);
+
+  const togglePermission = (permissionId: string) => {
+    setMatrix((prev) => {
+      const next = new Set(prev);
+      if (next.has(permissionId)) next.delete(permissionId);
+      else next.add(permissionId);
+      return Array.from(next);
+    });
+  };
+
+  const toggleGroupWildcard = (group: PermissionGroup) => {
+    setMatrix((prev) => {
+      const next = new Set(prev);
+      if (next.has(group.wildcard)) {
+        next.delete(group.wildcard);
+      } else {
+        next.add(group.wildcard);
+        // إزالة الصلاحيات الفردية ضمن نفس الوحدة لأن wildcard يغطّيها (تجنّب التكرار).
+        group.permissions.forEach((permission) => next.delete(permission.id));
+      }
+      return Array.from(next);
+    });
+  };
+
+  const toggleFullAccess = () => {
+    setMatrix((prev) => (prev.includes(FULL_ACCESS_TOKEN) ? [] : [FULL_ACCESS_TOKEN]));
+  };
+
+  const selectAllInGroup = (group: PermissionGroup, select: boolean) => {
+    setMatrix((prev) => {
+      const next = new Set(prev);
+      if (select) {
+        group.permissions.forEach((permission) => next.add(permission.id));
+      } else {
+        next.delete(group.wildcard);
+        group.permissions.forEach((permission) => next.delete(permission.id));
+      }
+      return Array.from(next);
+    });
+  };
+
+  const filteredGroups = useMemo(() => {
+    const query = matrixSearch.trim().toLowerCase();
+    if (!query) return PERMISSIONS_CATALOG;
+    return PERMISSIONS_CATALOG.map((group) => ({
+      ...group,
+      permissions: group.permissions.filter((permission) =>
+        permission.id.toLowerCase().includes(query)
+        || permission.label.toLowerCase().includes(query)
+        || group.label.toLowerCase().includes(query),
+      ),
+    })).filter((group) => group.permissions.length > 0);
+  }, [matrixSearch]);
+
+  const totalGranted = useMemo(() => {
+    if (hasFullAccess) return ALL_PERMISSION_IDS.length;
+    return ALL_PERMISSION_IDS.filter((permissionId) => isPermissionGranted(matrix, permissionId)).length;
+  }, [matrix, hasFullAccess]);
+
+  const selectedRoleName = roles.find((role) => role.id === selectedRoleId)?.name || '';
+  const isSuperAdminRole = selectedRoleName === 'SuperAdmin';
 
   return (
     <div className="w-full bg-transparent" dir="rtl">
@@ -658,33 +733,140 @@ const UnifiedIAM: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {['users.view', 'users.create', 'users.update', 'users.delete', 'users.lock', 'users.audit',
-                'inventory.view', 'inventory.create', 'inventory.update', 'inventory.delete',
-                'sales.view', 'sales.create', 'sales.update', 'sales.delete',
-                'reports.view', 'reports.export',
-                'settings.view', 'settings.update'
-              ].map((perm) => {
-                const checked = matrix.includes(perm);
+            {/* Matrix Toolbar — search + summary + full-access master toggle */}
+            <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+              <div className="relative flex-1 min-w-[220px]">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  value={matrixSearch}
+                  onChange={(e) => setMatrixSearch(e.target.value)}
+                  placeholder="ابحث عن صلاحية أو وحدة..."
+                  className="w-full rounded-xl border border-slate-200 bg-white pr-9 pl-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+              <div className="text-xs text-slate-600 font-bold">
+                ممنوحة: <span className="text-emerald-700">{totalGranted}</span>
+                <span className="text-slate-400"> / </span>
+                <span className="text-slate-700">{ALL_PERMISSION_IDS.length}</span>
+              </div>
+              <label
+                className={`flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-bold cursor-pointer transition ${
+                  hasFullAccess
+                    ? 'bg-amber-50 border-amber-300 text-amber-800'
+                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}
+                title={isSuperAdminRole
+                  ? 'دور SuperAdmin: صلاحية كاملة دائماً'
+                  : 'صلاحية كاملة (*) — تتطلب صلاحية SuperAdmin من المنفّذ'}
+              >
+                <input
+                  type="checkbox"
+                  checked={hasFullAccess}
+                  onChange={toggleFullAccess}
+                  className="w-4 h-4 accent-amber-600"
+                />
+                صلاحية كاملة (*)
+              </label>
+            </div>
+
+            {/* Grouped permissions by module — wildcard-aware */}
+            <div className="space-y-4">
+              {filteredGroups.map((group) => {
+                const granted = countGrantedInGroup(matrix, group);
+                const groupHasWildcard = matrix.includes(group.wildcard);
+                const allInGroupSelected = granted === group.permissions.length;
+                const collapsed = collapsedGroups[group.key] ?? false;
+                const lockedByFullAccess = hasFullAccess;
+
                 return (
-                  <label
-                    key={perm}
-                    className={`flex items-center gap-3 rounded-xl border px-4 py-3 cursor-pointer transition ${
-                      checked
-                        ? 'bg-emerald-50 border-emerald-200'
-                        : 'bg-slate-50 border-slate-200'
+                  <div
+                    key={group.key}
+                    className={`rounded-2xl border ${
+                      groupHasWildcard || lockedByFullAccess
+                        ? 'border-emerald-300 bg-emerald-50/50'
+                        : 'border-slate-200 bg-white'
                     }`}
                   >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => setMatrix((prev) => (checked ? prev.filter((p) => p !== perm) : [...prev, perm]))}
-                      className="w-4 h-4 accent-emerald-600"
-                    />
-                    <span className="text-sm font-mono text-slate-700">{perm}</span>
-                  </label>
+                    <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => setCollapsedGroups((prev) => ({ ...prev, [group.key]: !collapsed }))}
+                        className="flex items-center gap-2 font-bold text-slate-800"
+                      >
+                        <span className={`inline-block transition-transform ${collapsed ? '' : 'rotate-90'}`}>▸</span>
+                        {group.label}
+                        <span className="text-xs font-mono text-slate-400">({group.key})</span>
+                        <span className="text-xs text-slate-500 font-normal">
+                          {granted} / {group.permissions.length}
+                        </span>
+                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => selectAllInGroup(group, !allInGroupSelected && !groupHasWildcard)}
+                          disabled={lockedByFullAccess}
+                          className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          {allInGroupSelected || groupHasWildcard ? 'إلغاء الكل' : 'تحديد الكل'}
+                        </button>
+                        <label
+                          className={`flex items-center gap-2 rounded-lg border px-3 py-1 text-xs font-bold cursor-pointer transition ${
+                            groupHasWildcard
+                              ? 'bg-emerald-100 border-emerald-300 text-emerald-800'
+                              : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                          } ${lockedByFullAccess ? 'opacity-50 pointer-events-none' : ''}`}
+                          title={`منح كل صلاحيات ${group.label} عبر wildcard ${group.wildcard}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={groupHasWildcard}
+                            onChange={() => toggleGroupWildcard(group)}
+                            className="w-3.5 h-3.5 accent-emerald-600"
+                          />
+                          <span className="font-mono">{group.wildcard}</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {!collapsed && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 p-3">
+                        {group.permissions.map((permission) => {
+                          const grantedDirect = matrix.includes(permission.id);
+                          const grantedEffective = isPermissionGranted(matrix, permission.id);
+                          const lockedByGroup = (groupHasWildcard || lockedByFullAccess) && !grantedDirect;
+                          return (
+                            <label
+                              key={permission.id}
+                              className={`flex items-start gap-3 rounded-xl border px-3 py-2 transition ${
+                                grantedEffective
+                                  ? 'bg-emerald-50 border-emerald-200'
+                                  : 'bg-white border-slate-200'
+                              } ${lockedByGroup ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer hover:bg-slate-50'}`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={grantedEffective}
+                                disabled={lockedByGroup}
+                                onChange={() => togglePermission(permission.id)}
+                                className="w-4 h-4 mt-0.5 accent-emerald-600"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-bold text-slate-800 truncate">{permission.label}</div>
+                                <div className="text-[11px] font-mono text-slate-500 truncate">{permission.id}</div>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
+              {filteredGroups.length === 0 && (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-500">
+                  لا توجد صلاحيات تطابق البحث
+                </div>
+              )}
             </div>
           </motion.div>
         )}

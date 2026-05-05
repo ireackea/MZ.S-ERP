@@ -27,6 +27,7 @@ services:
       METRICS_AUTH_TOKEN: ${METRICS_AUTH_TOKEN:?METRICS_AUTH_TOKEN is required}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:4173,http://127.0.0.1:4173}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4173,http://127.0.0.1:4173}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
       PORT: ${PORT:-3001}
     ports:
       - "3001:3001"

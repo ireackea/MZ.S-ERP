@@ -249,6 +249,10 @@ export class AuditService {
     status: 'SUCCESS' | 'FAILED' = 'SUCCESS',
   ): Promise<void> {
     const prisma = this.getPrisma();
+    // UUID_REGEX: نتحقق من صحة userId قبل حفظه كـ FK لتجنب خطأ constraint
+    // القيم مثل 'system' و'anonymous' تُتجاهل — فقط UUIDs الحقيقية تُحفظ
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const validUserId = userId && UUID_REGEX.test(userId) ? userId : undefined;
     await prisma.auditLog.create({
       data: {
         id: randomUUID(),
@@ -260,6 +264,7 @@ export class AuditService {
         actorRole: 'system',
         status,
         timestamp: new Date(),
+        ...(validUserId ? { userId: validUserId } : {}),
       },
     });
     

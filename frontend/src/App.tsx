@@ -105,6 +105,46 @@ const toAuthSessionUser = (user: User) => ({
   name: String(user.name || user.username || user.email || user.id),
 });
 
+// ENTERPRISE FIX: 2026-04-29 — RBAC role-based default permissions.
+// When the upstream user dataset (e.g. /users response) lacks a permissions
+// array for a built-in role, fall back to a stable client-side default so the
+// freshUser resync never strips access from an authenticated SuperAdmin/Admin
+// session. Mirrors backend DEFAULT_ROLES contract.
+const ROLE_BASED_FALLBACK_PERMISSIONS: Record<string, string[]> = {
+  SuperAdmin: ['*'],
+  superadmin: ['*'],
+  admin: [
+    'users.*',
+    'settings.*',
+    'reports.*',
+    'backup.*',
+    'items.*',
+    'transactions.*',
+    'formulation.*',
+    'opening-balances.*',
+    'theme.*',
+    'monitoring.logs.write',
+  ],
+  Admin: [
+    'users.*',
+    'settings.*',
+    'reports.*',
+    'backup.*',
+    'items.*',
+    'transactions.*',
+    'formulation.*',
+    'opening-balances.*',
+    'theme.*',
+    'monitoring.logs.write',
+  ],
+};
+
+const resolveRoleFallbackPermissions = (role: unknown): string[] | null => {
+  const key = String(role || '').trim();
+  if (!key) return null;
+  return ROLE_BASED_FALLBACK_PERMISSIONS[key] || null;
+};
+
 const toAuthSessionComparisonKey = (user: User | undefined) => JSON.stringify({
   id: user?.id || '',
   username: String(user?.username || user?.email || user?.name || user?.id || ''),
@@ -201,9 +241,35 @@ const AppContent = () => {
   useEffect(() => {
     if (users.length > 0 && currentUser) {
       const freshUser = users.find((user) => user.id === currentUser.id);
-      if (freshUser && toAuthSessionComparisonKey(freshUser) !== toAuthSessionComparisonKey(currentUser)) {
-        setCurrentUser(freshUser);
-        setAuthUser(toAuthSessionUser(freshUser));
+      if (!freshUser) return;
+
+      // ENTERPRISE FIX: 2026-04-29 — Non-destructive permissions resync.
+      // If the freshly loaded user record (from /users) carries an empty or
+      // missing permissions array, never overwrite the live session permissions
+      // with []. Instead, preserve the current session permissions, or — for
+      // built-in roles (SuperAdmin/Admin) — apply the role-based fallback so
+      // the user keeps full intended access. This eliminates the regression
+      // that produced "0 granted permissions" on the Settings page even when
+      // route-level role guards already permitted entry.
+      const freshPermissions = Array.isArray(freshUser.permissions) ? freshUser.permissions : [];
+      const currentPermissions = Array.isArray(currentUser.permissions) ? currentUser.permissions : [];
+      const roleFallback = resolveRoleFallbackPermissions(freshUser.role || currentUser.role);
+
+      const mergedPermissions =
+        freshPermissions.length > 0
+          ? freshPermissions
+          : currentPermissions.length > 0
+            ? currentPermissions
+            : roleFallback || [];
+
+      const reconciledUser: User = {
+        ...freshUser,
+        permissions: mergedPermissions,
+      };
+
+      if (toAuthSessionComparisonKey(reconciledUser) !== toAuthSessionComparisonKey(currentUser)) {
+        setCurrentUser(reconciledUser);
+        setAuthUser(toAuthSessionUser(reconciledUser));
       }
     }
   }, [users, currentUser]);
@@ -487,7 +553,12 @@ const AppContent = () => {
       username: user?.username || 'user',
       role: user?.role || 'User',
       roleId: user?.roleId || 'user',
-      permissions: user?.permissions && user?.permissions?.length > 0 ? user.permissions : (user?.role === 'SuperAdmin' || user?.role === 'admin' ? ['*'] : []),
+      // ENTERPRISE FIX: 2026-04-29 — Use centralized role-based fallback so
+      // SuperAdmin/Admin sessions never start with an empty permissions array.
+      permissions:
+        user?.permissions && user?.permissions?.length > 0
+          ? user.permissions
+          : (resolveRoleFallbackPermissions(user?.role) || []),
       name: user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.username,
       email: user?.email || '',
       firstName: user?.firstName || '',

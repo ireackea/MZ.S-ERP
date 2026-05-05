@@ -153,6 +153,41 @@ export class AuthService {
     }
   }
 
+  // ENTERPRISE FIX: 2026-04-29 — Self-heal RBAC at login.
+  // Mirrors AppBootstrapService self-heal: when the DB role row has empty/missing
+  // permissions JSON for a built-in role, fall back to DEFAULT_ROLES permissions
+  // and trigger a non-blocking DB repair so the next login is consistent.
+  private applyDefaultPermissionsFallback(
+    permissions: string[],
+    role: { id: string; name: string | null } | null | undefined,
+  ): string[] {
+    if (permissions.length > 0 || !role?.name) {
+      return permissions;
+    }
+
+    const defaultsRole = DEFAULT_ROLES.find((entry) => entry.name === role.name);
+    if (!defaultsRole || defaultsRole.permissions.length === 0) {
+      return permissions;
+    }
+
+    console.warn(
+      `[Auth Service] Role "${role.name}" had empty permissions in DB at login – applying defaults.`,
+    );
+    this.prisma.role
+      .update({
+        where: { id: role.id },
+        data: { permissions: JSON.stringify(defaultsRole.permissions) },
+      })
+      .catch((err: any) =>
+        console.warn(
+          '[Auth Service] Non-blocking role-permissions repair failed:',
+          err?.message || err,
+        ),
+      );
+
+    return [...defaultsRole.permissions];
+  }
+
   private async ensureDefaultRoles() {
     for (const role of DEFAULT_ROLES) {
       await this.prisma.role.upsert({
@@ -428,7 +463,13 @@ export class AuthService {
       console.warn('[Auth Service] Post-auth user metadata update skipped:', postAuthUpdateError?.message || postAuthUpdateError);
     }
 
-    const permissions = this.normalizePermissions(user.role?.permissions);
+    // ENTERPRISE FIX: 2026-04-29 — apply default-role self-heal so a fresh login
+    // never returns an empty permissions array for a built-in role with a
+    // corrupted/empty DB permissions JSON (matches AppBootstrapService behavior).
+    const permissions = this.applyDefaultPermissionsFallback(
+      this.normalizePermissions(user.role?.permissions),
+      user.role ? { id: user.role.id, name: user.role.name } : null,
+    );
     const sessionTimeoutMinutes = this.getSessionTimeoutMinutes();
     const sessionExpiresAt = new Date(Date.now() + sessionTimeoutMinutes * 60 * 1000);
     const sessionId = randomUUID();

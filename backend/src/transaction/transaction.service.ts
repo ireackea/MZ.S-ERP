@@ -1,9 +1,12 @@
 // ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
 // ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Legacy Migration Phase 5 - Final Stabilization & Production - 2026-02-27
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma, Transaction as DbTransaction } from '@prisma/client';
 import { createHash, randomUUID } from 'crypto';
+// AuditService: مُضافة لتسجيل جميع عمليات المعاملات المالية (إنشاء/تحديث/حذف)
+// لضمان المساءلة الكاملة (Full Accountability) في بيئات الإنتاج
+import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
@@ -24,9 +27,14 @@ type TxWithItem = DbTransaction & {
 
 @Injectable()
 export class TransactionService {
+  // Logger مُخصص للفئة بدلاً من console.error العام، يتيح تتبع الأخطاء بدقة
+  private readonly logger = new Logger(TransactionService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtimeService: RealtimeService,
+    // AuditService مُحقونة (injected) عبر NestJS DI — لا تُنشأ يدوياً
+    private readonly auditService: AuditService,
   ) {}
 
   private includeItem() {
@@ -480,15 +488,17 @@ export class TransactionService {
     };
   }
 
-  async createOne(dto: CreateTransactionDto) {
-    const result = await this.createMany([dto]);
+  // actorId/actorUsername: تُمرّران من الـ controller لإثراء سجل التدقيق بهوية منفّذ العملية
+  async createOne(dto: CreateTransactionDto, actorId = 'system', actorUsername = 'system') {
+    const result = await this.createMany([dto], actorId, actorUsername);
     if (!result.data.length) {
       throw new BadRequestException('Failed to create transaction');
     }
     return result.data[0];
   }
 
-  async createMany(payload: CreateTransactionDto[]) {
+  // actorId/actorUsername: مُمرّران من الـ controller لنسب العملية لمنفّذها — القيمة الافتراضية 'system' تُستخدم في حالة الميغرةشن والمسارات الداخلية
+  async createMany(payload: CreateTransactionDto[], actorId = 'system', actorUsername = 'system') {
     if (!Array.isArray(payload) || payload.length === 0) {
       return { data: [], total: 0 };
     }
@@ -543,6 +553,16 @@ export class TransactionService {
         'transactions.created',
         { meta: { count: response.total } },
       );
+      // Audit fire-and-forget: لا يعرقل الاستجابة إذا فشل التسجيل — التدقيق عملية جانبية (side-effect)
+      // للمعاملة الواحدة: publicId صريح — للجماعية: معرّف مجمّع bulk-N
+      void this.auditService.logItemAction(
+        actorId,
+        'TRANSACTION_CREATE',
+        'Transaction',
+        response.total === 1 ? (response.data[0]?.id ?? 'unknown') : `bulk-${response.total}`,
+        { count: response.total },
+        actorUsername,
+      ).catch((err) => this.logger.error(`[Audit] TRANSACTION_CREATE failed: ${err?.message}`));
     }
     return response;
   }
@@ -625,7 +645,8 @@ export class TransactionService {
     return response;
   }
 
-  async updateById(id: string, dto: UpdateTransactionDto) {
+  // actorId/actorUsername: تُمرّران من الـ controller لتسجيل منفّذ التحديث في سجل التدقيق
+  async updateById(id: string, dto: UpdateTransactionDto, actorId = 'system', actorUsername = 'system') {
     const identifier = String(id || '').trim();
     if (!identifier) throw new BadRequestException('Transaction id is required');
 
@@ -717,14 +738,25 @@ export class TransactionService {
       'transactions.updated',
       { meta: { id: response.id } },
     );
+    // Audit fire-and-forget: تسجيل تحديث المعاملة مع تفاصيل التغيير للمسار المالي الكامل
+    void this.auditService.logItemAction(
+      actorId,
+      'TRANSACTION_UPDATE',
+      'Transaction',
+      response.id ?? 'unknown',
+      { type: response.type, quantity: response.quantity, itemId: response.itemId },
+      actorUsername,
+    ).catch((err) => this.logger.error(`[Audit] TRANSACTION_UPDATE failed: ${err?.message}`));
     return response;
   }
 
-  async deleteOne(id: string) {
-    return this.deleteMany({ ids: [id] });
+  // actorId/actorUsername تُمرّران للـ deleteMany لتسجيل العملية في سجل التدقيق
+  async deleteOne(id: string, actorId = 'system', actorUsername = 'system') {
+    return this.deleteMany({ ids: [id] }, actorId, actorUsername);
   }
 
-  async deleteMany(dto: DeleteTransactionsDto) {
+  // actorId/actorUsername: مُمرّران من الـ controller لتسجيل منفّذ الحذف
+  async deleteMany(dto: DeleteTransactionsDto, actorId = 'system', actorUsername = 'system') {
     const ids = Array.from(new Set((dto.ids || []).map((id) => String(id || '').trim()).filter(Boolean)));
     if (!ids.length) return { deleted: 0 };
 
@@ -766,6 +798,15 @@ export class TransactionService {
         'transactions.deleted',
         { meta: { count: result } },
       );
+      // Audit fire-and-forget: تسجيل الحذف المالي مع قائمة المعرّفات للمساءلة الكاملة
+      void this.auditService.logItemAction(
+        actorId,
+        'TRANSACTION_DELETE',
+        'Transaction',
+        ids.length === 1 ? ids[0] : `bulk-${ids.length}`,
+        { count: result, ids },
+        actorUsername,
+      ).catch((err) => this.logger.error(`[Audit] TRANSACTION_DELETE failed: ${err?.message}`));
     }
     return { deleted: result };
   }

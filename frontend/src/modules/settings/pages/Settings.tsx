@@ -5,6 +5,7 @@
 import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { DatabaseBackup, FileText, Globe2, LayoutGrid, Package, RefreshCcw, Settings2, Shield, Truck, Users } from 'lucide-react';
 import { usePermissions } from '@hooks/usePermissions';
+import { hasGrantedPermission } from '@services/permissionAliases';
 import type { AuditLog, ReportColumnConfig, SystemSettings, User } from '../../../types';
 
 const GeneralSettings = lazy(() => import('../components/GeneralSettings'));
@@ -43,6 +44,45 @@ type SettingsTabKey =
   | 'printing'
   | 'theme';
 
+const ROLE_BASED_FALLBACK_PERMISSIONS: Record<string, string[]> = {
+  SuperAdmin: ['*'],
+  superadmin: ['*'],
+  Admin: [
+    'users.*',
+    'settings.*',
+    'reports.*',
+    'backup.*',
+    'items.*',
+    'transactions.*',
+    'formulation.*',
+    'opening-balances.*',
+    'theme.*',
+    'monitoring.logs.write',
+  ],
+  admin: [
+    'users.*',
+    'settings.*',
+    'reports.*',
+    'backup.*',
+    'items.*',
+    'transactions.*',
+    'formulation.*',
+    'opening-balances.*',
+    'theme.*',
+    'monitoring.logs.write',
+  ],
+};
+
+const normalizePermissions = (permissions: unknown): string[] => {
+  if (!Array.isArray(permissions)) return [];
+  return [...new Set(permissions.filter((entry): entry is string => typeof entry === 'string'))];
+};
+
+const resolveRoleFallbackPermissions = (role: unknown): string[] => {
+  const key = String(role || '').trim();
+  return key ? ROLE_BASED_FALLBACK_PERMISSIONS[key] || [] : [];
+};
+
 const SettingsPage: React.FC<SettingsPageProps> = ({
   settings,
   onUpdateSettings,
@@ -54,6 +94,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   currentUser,
 }) => {
   const { hasPermission, permissions } = usePermissions();
+
   const tabs = useMemo(() => ([
     { key: 'general' as const, label: 'الإعدادات العامة', permission: 'settings.view.general', icon: Settings2 },
     { key: 'reference-data' as const, label: 'الأقسام ووحدات القياس', permission: 'settings.view.general', icon: Package },
@@ -61,14 +102,19 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     { key: 'users' as const, label: 'المستخدمون والأدوار', permission: 'settings.view.users', icon: Users },
     { key: 'permissions' as const, label: 'مصفوفة الصلاحيات', permission: 'settings.view.permissions', icon: Shield },
     { key: 'backup' as const, label: 'النسخ الاحتياطي', permission: 'settings.view.backup', icon: DatabaseBackup },
-    { key: 'reset' as const, label: 'إعادة الضبط', permission: 'settings.view.reset', icon: RefreshCcw },
+    { key: 'reset' as const, label: 'إعادة الضبط', permission: 'admin.reset_system', icon: RefreshCcw },
     { key: 'audit' as const, label: 'سجلات التدقيق', permission: 'settings.view.audit', icon: FileText },
     { key: 'offline' as const, label: 'إعدادات الأوفلاين', permission: 'settings.view.offline', icon: LayoutGrid },
     { key: 'printing' as const, label: 'قوالب الطباعة', permission: 'settings.view.printing', icon: FileText },
     { key: 'theme' as const, label: 'الثيم واللغة', permission: 'settings.view.localization', icon: Globe2 },
   ]), []);
 
-  const visibleTabs = tabs.filter((tab) => hasPermission(tab.permission));
+  const effectivePermissions = useMemo(() => {
+    const currentUserPermissions = normalizePermissions(currentUser?.permissions);
+    const roleFallback = currentUserPermissions.length > 0 ? [] : resolveRoleFallbackPermissions(currentUser?.role);
+    return [...new Set([...permissions, ...currentUserPermissions, ...roleFallback])];
+  }, [currentUser?.permissions, currentUser?.role, permissions]);
+  const visibleTabs = tabs.filter((tab) => hasPermission(tab.permission) || hasGrantedPermission(effectivePermissions, tab.permission));
   const grantedPermissionsPreview = useMemo(
     () => permissions.slice().sort().slice(0, 8),
     [permissions],
@@ -98,7 +144,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
       case 'backup':
         return <BackupAndRestore currentUser={currentUser} />;
       case 'reset':
-        return <SystemReset />;
+        return <SystemReset currentUser={currentUser} />;
       case 'audit':
         return <AuditLogs />;
       case 'offline':

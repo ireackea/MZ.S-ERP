@@ -10,5 +10,6 @@ import { BackupService } from './backup.service';
   imports: [AuthModule, DatabaseInfrastructureModule],
   controllers: [BackupController],
   providers: [BackupService, BackupGuard, PrismaService],
+  exports: [BackupService],
 })
 export class BackupModule {}

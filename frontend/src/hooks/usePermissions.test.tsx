@@ -69,4 +69,21 @@ describe('usePermissions', () => {
     expect(result.current.hasPermission('settings.view.reset')).toBe(true);
     expect(result.current.hasPermission('admin.reset_system')).toBe(true);
   });
+
+  it('يعالج جلسة SuperAdmin ذات صلاحيات فارغة كصلاحية كاملة', () => {
+    mocks.useSession.mockReturnValue({
+      data: {
+        isAuthenticated: true,
+        user: {
+          role: 'SuperAdmin',
+          permissions: [],
+        },
+      },
+    });
+
+    const { result } = renderHook(() => usePermissions());
+
+    expect(result.current.permissions).toEqual(['*']);
+    expect(result.current.hasPermission('admin.reset_system')).toBe(true);
+  });
 });

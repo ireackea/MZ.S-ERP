@@ -49,6 +49,28 @@ type UserListRecord = Prisma.UserGetPayload<{
 
 type RoleRecord = Prisma.RoleGetPayload<{}>;
 
+// ENTERPRISE FIX: 2026-04-29 — Mirrors auth.service.ts DEFAULT_ROLES and
+// app-bootstrap.service.ts DEFAULT_ROLE_PERMISSIONS for the third self-heal
+// surface (current-user permissions endpoint). Keep all three in sync.
+const USERS_DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
+  SuperAdmin: ['*'],
+  Admin: [
+    'users.*',
+    'settings.*',
+    'reports.*',
+    'backup.*',
+    'items.*',
+    'transactions.*',
+    'formulation.*',
+    'opening-balances.*',
+    'theme.*',
+    'monitoring.logs.write',
+  ],
+  Manager: ['transactions.*', 'reports.view', 'items.view', 'formulation.view', 'opening-balances.view', 'backup.view'],
+  Operator: ['transactions.create', 'transactions.update', 'transactions.delete', 'transactions.view', 'items.view'],
+  Viewer: ['items.view', 'transactions.view', 'reports.view', 'formulation.view', 'opening-balances.view', 'backup.view'],
+};
+
 @Injectable()
 export class UsersService {
   private readonly updates$ = new Subject<{
@@ -89,8 +111,29 @@ export class UsersService {
       where.role = { name: query.role };
     }
 
-    if (query.status === 'active') where.isActive = true;
-    if (query.status === 'locked') where.isActive = false;
+    if (query.status === 'active') {
+      where.isActive = true;
+      // active = isActive AND not currently locked
+      where.AND = [
+        ...((where.AND as Prisma.UserWhereInput[]) ?? []),
+        {
+          OR: [
+            { lockoutUntil: null },
+            { lockoutUntil: { lte: new Date() } },
+          ],
+        },
+      ];
+    }
+    // FIX 2026-04-29 — "locked" must reference active lockoutUntil, not isActive.
+    if (query.status === 'locked') {
+      where.AND = [
+        ...((where.AND as Prisma.UserWhereInput[]) ?? []),
+        { lockoutUntil: { gt: new Date() } },
+      ];
+    }
+    if ((query.status as string) === 'inactive') {
+      where.isActive = false;
+    }
 
     const [total, rows] = await this.prisma.$transaction([
       this.prisma.user.count({ where }),
@@ -292,6 +335,37 @@ export class UsersService {
     const permissions = Array.isArray(principal?.permissions)
       ? principal.permissions.filter((entry: unknown): entry is string => typeof entry === 'string')
       : [];
+
+    // ENTERPRISE FIX: 2026-04-29 — RBAC self-heal at the live permissions endpoint.
+    // If the JWT principal carries an empty permissions array (e.g. legacy token
+    // issued before the login self-heal was deployed), reload from DB and apply
+    // role-based defaults so the UI never sees "0 granted permissions" for a
+    // built-in role. This mirrors AuthService and AppBootstrapService behavior.
+    if (permissions.length === 0 && principal?.id) {
+      const dbUser = await this.prisma.user.findUnique({
+        where: { id: String(principal.id) },
+        include: { role: true },
+      });
+      if (dbUser?.role) {
+        const dbPerms = this.parsePermissions(dbUser.role.permissions);
+        if (dbPerms.length > 0) {
+          return { role: dbUser.role.name, permissions: dbPerms };
+        }
+        const defaults = USERS_DEFAULT_ROLE_PERMISSIONS[dbUser.role.name];
+        if (defaults && defaults.length > 0) {
+          // Non-blocking DB repair so subsequent logins are consistent.
+          this.prisma.role
+            .update({ where: { id: dbUser.role.id }, data: { permissions: JSON.stringify(defaults) } })
+            .catch((err: unknown) =>
+              console.warn(
+                '[UsersService] Non-blocking role-permissions repair failed:',
+                (err as Error)?.message || err,
+              ),
+            );
+          return { role: dbUser.role.name, permissions: [...defaults] };
+        }
+      }
+    }
 
     return {
       role,
@@ -575,6 +649,37 @@ export class UsersService {
 
   async updateRolePermissions(roleId: string, dto: UpdateRolePermissionsDto, actor: ActorContext) {
     const uniquePermissions = [...new Set((dto.permissions || []).map((permission) => String(permission).trim()).filter(Boolean))];
+
+    // SECURITY FIX: 2026-04-29 — Anti-privilege-escalation hardening (OWASP A01).
+    // 1) Only SuperAdmin can grant the global wildcard "*".
+    // 2) Only SuperAdmin can modify the SuperAdmin role permissions.
+    // 3) An actor cannot edit the permissions of their OWN role (self-escalation).
+    const actorRoleNormalized = String(actor.role || '').toLowerCase();
+    const isActorSuper = actorRoleNormalized === 'superadmin';
+
+    const existingRole = await this.prisma.role.findUnique({ where: { id: roleId } });
+    if (!existingRole) {
+      throw new NotFoundException('Role not found');
+    }
+
+    if (existingRole.name.toLowerCase() === 'superadmin' && !isActorSuper) {
+      throw new ForbiddenException('Only SuperAdmin can modify the SuperAdmin role permissions');
+    }
+
+    if (uniquePermissions.includes('*') && !isActorSuper) {
+      throw new ForbiddenException('Only SuperAdmin can grant wildcard (*) permissions');
+    }
+
+    if (!isActorSuper) {
+      const actorRecord = await this.prisma.user.findUnique({
+        where: { id: actor.id },
+        select: { roleId: true },
+      });
+      if (actorRecord?.roleId === roleId) {
+        throw new ForbiddenException('You cannot modify the permissions of your own role');
+      }
+    }
+
     const role = await this.prisma.role.update({
       where: { id: roleId },
       data: {

@@ -49,10 +49,15 @@ export class UsersController {
   }
 
   // ENTERPRISE FIX: Phase 2 - Multi-User Sync & Unified User Management - 2026-03-02
+  // SECURITY FIX: 2026-04-29 — Pass actor context so the service can enforce
+  // wildcard-permission restrictions (OWASP A01: Broken Access Control).
   @Permissions('users.create')
   @Post('roles')
-  async createRole(@Body() dto: { name: string; description?: string; color?: string; permissions?: string[] }) {
-    return this.usersService.createRole(dto);
+  async createRole(
+    @Body() dto: { name: string; description?: string; color?: string; permissions?: string[] },
+    @Req() req: any,
+  ) {
+    return this.usersService.createRole(dto, this.resolveActor(req));
   }
 
   @Permissions('users.update')

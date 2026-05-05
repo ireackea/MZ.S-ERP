@@ -8,6 +8,8 @@ import {
   Post,
   Put,
   Query,
+  // Req مُضاف لاستخراج هوية منفّذ العملية من الـ JWT token وتمريرها لسجل التدقيق
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -40,20 +42,21 @@ export class TransactionController {
 
   @Permissions('transactions.create')
   @Post()
-  async create(@Body() dto: CreateTransactionDto) {
-    return this.transactionService.createOne(dto);
+  async create(@Body() dto: CreateTransactionDto, @Req() req: any) {
+    // req.user محقون من JwtAuthGuard — sub هو userId ويُستخدم في سجل التدقيق
+    return this.transactionService.createOne(dto, req.user?.sub || req.user?.id, req.user?.username);
   }
 
   @Permissions('transactions.create')
   @Post('bulk')
-  async createBulk(@Body() dto: BulkCreateTransactionsDto) {
-    return this.transactionService.createMany(dto.transactions || []);
+  async createBulk(@Body() dto: BulkCreateTransactionsDto, @Req() req: any) {
+    return this.transactionService.createMany(dto.transactions || [], req.user?.sub || req.user?.id, req.user?.username);
   }
 
   @Permissions('transactions.create')
   @Post('bulk-import')
-  async bulkImport(@Body() dto: BulkCreateTransactionsDto) {
-    return this.transactionService.createMany(dto.transactions || []);
+  async bulkImport(@Body() dto: BulkCreateTransactionsDto, @Req() req: any) {
+    return this.transactionService.createMany(dto.transactions || [], req.user?.sub || req.user?.id, req.user?.username);
   }
 
   @Permissions('transactions.migrate')
@@ -65,25 +68,25 @@ export class TransactionController {
 
   @Permissions('transactions.update')
   @Patch(':id')
-  async update(@Param('id') id: string, @Body() dto: UpdateTransactionDto) {
-    return this.transactionService.updateById(id, dto);
+  async update(@Param('id') id: string, @Body() dto: UpdateTransactionDto, @Req() req: any) {
+    return this.transactionService.updateById(id, dto, req.user?.sub || req.user?.id, req.user?.username);
   }
 
   @Permissions('transactions.update')
   @Put(':id')
-  async replace(@Param('id') id: string, @Body() dto: UpdateTransactionDto) {
-    return this.transactionService.updateById(id, dto);
+  async replace(@Param('id') id: string, @Body() dto: UpdateTransactionDto, @Req() req: any) {
+    return this.transactionService.updateById(id, dto, req.user?.sub || req.user?.id, req.user?.username);
   }
 
   @Permissions('transactions.delete')
   @Delete(':id')
-  async deleteById(@Param('id') id: string) {
-    return this.transactionService.deleteOne(id);
+  async deleteById(@Param('id') id: string, @Req() req: any) {
+    return this.transactionService.deleteOne(id, req.user?.sub || req.user?.id, req.user?.username);
   }
 
   @Permissions('transactions.delete')
   @Post('delete')
-  async delete(@Body() dto: DeleteTransactionsDto) {
-    return this.transactionService.deleteMany(dto);
+  async delete(@Body() dto: DeleteTransactionsDto, @Req() req: any) {
+    return this.transactionService.deleteMany(dto, req.user?.sub || req.user?.id, req.user?.username);
   }
 }
