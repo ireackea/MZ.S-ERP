@@ -157,6 +157,13 @@ async function clickButtonByText(page: Page, text: string) {
   expect(clicked).toBe(true);
 }
 
+async function hasVisibleButtonWithExactText(page: Page, text: string) {
+  return page.evaluate((expectedText) => Array.from(document.querySelectorAll('button')).some((button) => {
+    const element = button as HTMLButtonElement;
+    return element.offsetParent !== null && button.textContent?.trim() === expectedText;
+  }), text);
+}
+
 async function assertNoBackupEncodingCorruption(page: Page) {
   const text = await page.evaluate(() => document.body.innerText);
   for (const token of forbiddenBackupTextTokens) {
@@ -195,6 +202,10 @@ describe('settings tabs regression smoke', () => {
     for (const tab of tabs) {
       await clickButtonByText(page, tab.button);
       await waitForText(page, tab.expected);
+      if (tab.button === 'الأقسام ووحدات القياس') {
+        await waitForText(page, 'قواعد التفريغ');
+        expect(await hasVisibleButtonWithExactText(page, 'قواعد التفريغ')).toBe(false);
+      }
       if (tab.button === 'النسخ الاحتياطي') {
         await assertNoBackupEncodingCorruption(page);
       }

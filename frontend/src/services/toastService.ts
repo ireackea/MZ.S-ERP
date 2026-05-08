@@ -36,7 +36,7 @@ const toMessageText = (message: unknown): string => {
 // 2. تجهيز النص للنسخ دون إفساد النص العربي السليم
 // ──────────────────────────────────────────────────────────────
 const hasArabicText = (text: string): boolean => /[\u0600-\u06FF]/.test(text);
-const hasMojibakeSignals = (text: string): boolean => /[ØÙÚÛÃÂ�]/.test(text);
+const hasMojibakeSignals = (text: string): boolean => /[ØÙÚÛÃÂ\uFFFD]/.test(text);
 
 const normalizeForClipboard = (text: string): string => {
 	const safe = text.replace(/\r\n/g, '\n').trim().normalize('NFC');
@@ -46,7 +46,7 @@ const normalizeForClipboard = (text: string): string => {
 	try {
 		const bytes = new Uint8Array(Array.from(safe).map((c) => c.charCodeAt(0) & 0xff));
 		const repaired = new TextDecoder('utf-8', { fatal: false }).decode(bytes).trim().normalize('NFC');
-		if (hasArabicText(repaired) && !repaired.includes('�')) return repaired;
+		if (hasArabicText(repaired) && !repaired.includes('\uFFFD')) return repaired;
 	} catch {}
 
 	return safe;
