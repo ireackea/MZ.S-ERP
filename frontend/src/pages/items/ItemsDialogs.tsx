@@ -1,8 +1,8 @@
 import React, { type FormEvent } from 'react';
-import { FileSpreadsheet, Upload, X } from 'lucide-react';
+import { Upload, X } from 'lucide-react';
+import type { ExcelImportRow } from '@services/itemsService';
 import {
   type BulkEditorForm,
-  type ImportPreviewRow,
   type ItemEditorForm,
   type PendingActionState,
 } from './shared';
@@ -21,8 +21,9 @@ type ItemsDialogsProps = {
   onApplyBulk: () => void;
   onCloseBulk: () => void;
   selectedCount: number;
+  importRows: ExcelImportRow[];
+  importSourceFileName: string;
   importOpen: boolean;
-  importPreview: ImportPreviewRow[];
   isImporting: boolean;
   onCloseImport: () => void;
   onConfirmImport: () => void;
@@ -52,8 +53,9 @@ const ItemsDialogs: React.FC<ItemsDialogsProps> = ({
   onApplyBulk,
   onCloseBulk,
   selectedCount,
+  importRows,
+  importSourceFileName,
   importOpen,
-  importPreview,
   isImporting,
   onCloseImport,
   onConfirmImport,
@@ -132,16 +134,25 @@ const ItemsDialogs: React.FC<ItemsDialogsProps> = ({
 
       {importOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[85vh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5"><div><h3 className="text-xl font-bold text-slate-900">معاينة الاستيراد</h3><p className="text-sm text-slate-500">عدد الأصناف في الملف: {importPreview.length}</p></div><button type="button" onClick={onCloseImport} className="rounded-full border border-slate-300 p-2 text-slate-500"><X size={18} /></button></div>
-            <div className="overflow-x-auto p-6">
-              <table className="min-w-full text-sm">
-                <thead className="bg-slate-100 text-slate-700"><tr><th className="px-3 py-2 text-right">الاسم</th><th className="px-3 py-2 text-right">الكود</th><th className="px-3 py-2 text-right">الباركود</th><th className="px-3 py-2 text-right">الوصف</th><th className="px-3 py-2 text-right">التصنيف</th><th className="px-3 py-2 text-right">الوحدة</th><th className="px-3 py-2 text-right">الكمية</th></tr></thead>
-                <tbody>{importPreview.slice(0, 25).map((item, index) => <tr key={`${item.name}-${index}`} className="border-t border-slate-200"><td className="px-3 py-2">{item.name}</td><td className="px-3 py-2">{item.code || '-'}</td><td className="px-3 py-2">{item.barcode || '-'}</td><td className="px-3 py-2">{item.description || '-'}</td><td className="px-3 py-2">{item.category || '-'}</td><td className="px-3 py-2">{item.unit || '-'}</td><td className="px-3 py-2">{item.currentStock || 0}</td></tr>)}</tbody>
-              </table>
-              {importPreview.length > 25 && <p className="mt-3 text-sm text-slate-500">... و {importPreview.length - 25} صنف إضافي.</p>}
+          <div className="max-h-[88vh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-slate-200 bg-white px-6 py-5">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">تأكيد استيراد الأصناف</h3>
+                <p className="text-sm text-slate-500">{importSourceFileName || 'ملف Excel مرفوع'} - {importRows.length} صف جاهز للإرسال.</p>
+              </div>
+              <button type="button" onClick={onCloseImport} className="rounded-full border border-slate-300 p-2 text-slate-500"><X size={18} /></button>
             </div>
-            <div className="flex justify-end gap-2 border-t border-slate-200 px-6 py-4"><button type="button" onClick={onCloseImport} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700">إلغاء</button><button type="button" onClick={onConfirmImport} disabled={isImporting} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{isImporting ? 'جاري الاستيراد...' : 'تأكيد الاستيراد'}</button></div>
+
+            <div className="space-y-5 p-6">
+              <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-100 text-slate-700"><tr><th className="px-3 py-2 text-right">الصف</th><th className="px-3 py-2 text-right">الاسم</th><th className="px-3 py-2 text-right">الكود</th><th className="px-3 py-2 text-right">الباركود</th><th className="px-3 py-2 text-right">الوصف</th><th className="px-3 py-2 text-right">التصنيف</th><th className="px-3 py-2 text-right">الوحدة</th><th className="px-3 py-2 text-right">وزن العبوة</th><th className="px-3 py-2 text-right">الكمية</th></tr></thead>
+                  <tbody>{importRows.slice(0, 100).map((item, index) => <tr key={`${item.sourceRow || index}-${item.name}-${item.code || ''}`} className="border-t border-slate-200"><td className="px-3 py-2 font-mono text-xs">{item.sourceRow || index + 2}</td><td className="px-3 py-2">{item.name || '-'}</td><td className="px-3 py-2">{item.code || '-'}</td><td className="px-3 py-2">{item.barcode || '-'}</td><td className="px-3 py-2">{item.description || item.englishName || '-'}</td><td className="px-3 py-2">{item.category || '-'}</td><td className="px-3 py-2">{item.unit || '-'}</td><td className="px-3 py-2">{item.packageWeight ?? '-'}</td><td className="px-3 py-2">{item.currentStock ?? 0}</td></tr>)}</tbody>
+                </table>
+                {importRows.length > 100 && <p className="p-3 text-sm text-slate-500">تم عرض أول 100 صف فقط من أصل {importRows.length} صف.</p>}
+              </div>
+            </div>
+            <div className="sticky bottom-0 flex justify-end gap-2 border-t border-slate-200 bg-white px-6 py-4"><button type="button" onClick={onCloseImport} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700">إلغاء</button><button type="button" onClick={onConfirmImport} disabled={isImporting || importRows.length === 0} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{isImporting ? 'جاري الاستيراد...' : 'تأكيد الاستيراد'}</button></div>
           </div>
         </div>
       )}

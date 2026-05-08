@@ -75,6 +75,25 @@ function Test-Command {
     return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
+function Get-PathPreview {
+    $entries = @([Environment]::GetEnvironmentVariable('PATH', 'Process') -split ';' | Where-Object { $_ } | Select-Object -First 8)
+    return ($entries -join '; ')
+}
+
+function Fail-MissingCommand {
+    param([string]$Name)
+
+    $hint = switch ($Name) {
+        'node' { 'Install Node.js 20+ or add the node.exe directory to PATH before using the local launcher. The official Docker launcher does not require host Node.js.' }
+        'npm' { 'Ensure npm is installed with Node.js and available in PATH before using the local launcher.' }
+        'git' { 'Install Git for Windows or add git.exe to PATH.' }
+        default { 'Install the command or add it to PATH.' }
+    }
+
+    # Include a short PATH preview so setup failures are actionable without exposing environment secrets.
+    Fail ("Required command is not available: {0}. {1} PATH preview: {2}" -f $Name, $hint, (Get-PathPreview))
+}
+
 function Get-NodeVersionMajor {
     $nodeVersion = (& node -v).Trim()
     if ($nodeVersion -notmatch '^v(?<major>\d+)') {
@@ -945,7 +964,7 @@ try {
 
     foreach ($tool in @('node', 'npm', 'git')) {
         if (-not (Test-Command $tool)) {
-            Fail ("Required command is not available: {0}" -f $tool)
+            Fail-MissingCommand -Name $tool
         }
     }
 

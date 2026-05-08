@@ -51,6 +51,7 @@ export class ItemService {
           minLimit: item.minLimit,
           maxLimit: item.maxLimit,
           orderLimit: item.orderLimit,
+          packageWeight: item.packageWeight,
           currentStock: item.currentStock,
           description: item.description,
           updatedBy: userId || undefined,
@@ -72,6 +73,7 @@ export class ItemService {
           minLimit: item.minLimit ?? 0,
           maxLimit: item.maxLimit ?? 1000,
           orderLimit: item.orderLimit,
+          packageWeight: item.packageWeight,
           currentStock: item.currentStock ?? 0,
           description: item.description,
           createdBy: userId || undefined,
@@ -136,6 +138,7 @@ export class ItemService {
           minLimit: true,
           maxLimit: true,
           orderLimit: true,
+          packageWeight: true,
           currentStock: true,
           description: true,
           isArchived: true,
@@ -158,6 +161,7 @@ export class ItemService {
       minLimit: row.minLimit == null ? null : Number(row.minLimit),
       maxLimit: row.maxLimit == null ? null : Number(row.maxLimit),
       orderLimit: row.orderLimit == null ? null : Number(row.orderLimit),
+      packageWeight: row.packageWeight == null ? null : Number(row.packageWeight),
       currentStock: row.currentStock == null ? null : Number(row.currentStock),
     }));
 
@@ -184,6 +188,7 @@ export class ItemService {
         minLimit: true,
         maxLimit: true,
         orderLimit: true,
+        packageWeight: true,
         currentStock: true,
         description: true,
         isArchived: true,
@@ -203,6 +208,7 @@ export class ItemService {
       minLimit: row.minLimit == null ? null : Number(row.minLimit),
       maxLimit: row.maxLimit == null ? null : Number(row.maxLimit),
       orderLimit: row.orderLimit == null ? null : Number(row.orderLimit),
+      packageWeight: row.packageWeight == null ? null : Number(row.packageWeight),
       currentStock: row.currentStock == null ? null : Number(row.currentStock),
     }));
   }
@@ -420,59 +426,75 @@ export class ItemService {
       minLimit?: number;
       maxLimit?: number;
       orderLimit?: number;
+      packageWeight?: number;
       currentStock?: number;
+      englishName?: string;
       description?: string;
+      sourceRow?: number;
     }>,
     userId: string,
     actorUsername: string,
   ) {
-    const results = [];
-    const errors = [];
+    const results: Array<{ row: number; publicId: string; name: string; status: string }> = [];
+    const errors: Array<{ row: number; error: string; field: string; message: string; value?: unknown }> = [];
 
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
+    for (let index = 0; index < items.length; index += 1) {
+      const item = items[index];
+      const rowNumber = Number(item.sourceRow || index + 2);
+      const name = String(item.name || '').trim();
+      const category = String(item.category || '').trim();
+      const unit = String(item.unit || '').trim();
+
+      if (!name || !category || !unit) {
+        errors.push({ row: rowNumber, field: 'required', message: 'اسم الصنف والتصنيف ووحدة القياس مطلوبة.', error: 'اسم الصنف والتصنيف ووحدة القياس مطلوبة.' });
+        continue;
+      }
+
       try {
-        if (!item.name || !item.name.trim()) {
-          errors.push({ row: i + 2, error: 'Name is required' });
-          continue;
-        }
-
-        const publicId = `import-${Date.now()}-${i}`;
-        const normalizedCode = item.code?.trim() || null;
-
-        const result = await this.prisma.item.create({
+        const normalizedCode = item.code == null || String(item.code).trim() === '' ? null : String(item.code).trim();
+        const created = await this.prisma.item.create({
           data: {
-            publicId,
+            publicId: `item-${Date.now()}-${index}`,
             code: normalizedCode,
             codeGenerated: normalizedCode ? false : undefined,
-            barcode: item.barcode?.trim() || null,
-            name: item.name.trim(),
-            unit: item.unit?.trim() || 'وحدة',
-            category: item.category?.trim() || 'غير مصنف',
+            barcode: item.barcode ? String(item.barcode).trim() : null,
+            name,
+            unit,
+            category,
             minLimit: item.minLimit ?? 0,
             maxLimit: item.maxLimit ?? 1000,
             orderLimit: item.orderLimit ?? null,
+            packageWeight: item.packageWeight ?? null,
             currentStock: item.currentStock ?? 0,
-            description: item.description?.trim() || null,
-            createdBy: userId,
+            description: String(item.description || item.englishName || '').trim() || null,
+            createdBy: userId || undefined,
           },
         });
-
-        results.push({ row: i + 2, publicId, name: result.name, status: 'success' });
+        results.push({ row: rowNumber, publicId: String(created.publicId), name: created.name, status: 'created' });
       } catch (error: any) {
-        errors.push({ row: i + 2, error: error.message });
+        const message = error?.code === 'P2002'
+          ? 'الصنف مكرر أو يحتوي على كود/باركود مستخدم مسبقًا.'
+          : error?.message || 'فشل استيراد الصف.';
+        errors.push({ row: rowNumber, field: 'row', message, error: message, value: item.name });
       }
     }
 
-    // Audit logging
-    if (results.length > 0) {
+    if (userId && results.length > 0) {
       await this.auditService.logItemAction(
         userId,
-        'CREATE',
+        'IMPORT',
         'Item',
-        results.map(r => r.publicId).join(','),
-        { imported: results.length, failed: errors.length, total: items.length },
+        results.map((row) => row.publicId).join(','),
+        { count: results.length, failed: errors.length, items: results.map((row) => ({ publicId: row.publicId, name: row.name })) },
         actorUsername,
+      );
+    }
+
+    if (results.length > 0) {
+      this.realtimeService.emitSync(
+        ['items', 'dashboard', 'operations', 'formulation', 'stocktaking'],
+        'items.imported',
+        { meta: { count: results.length } },
       );
     }
 

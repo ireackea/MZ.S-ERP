@@ -87,7 +87,8 @@ const ItemsPageContent: React.FC = () => {
   const [barcodeMode, setBarcodeMode] = useState(false);
   const [barcodeInput, setBarcodeInput] = useState('');
   const [importOpen, setImportOpen] = useState(false);
-  const [importPreview, setImportPreview] = useState<ExcelImportRow[]>([]);
+  const [importRows, setImportRows] = useState<ExcelImportRow[]>([]);
+  const [importSourceFileName, setImportSourceFileName] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadItemId, setUploadItemId] = useState('');
@@ -504,9 +505,10 @@ const ItemsPageContent: React.FC = () => {
 
     try {
       const parsedItems = await parseExcelFile(file);
-      setImportPreview(parsedItems);
+      setImportRows(parsedItems);
+      setImportSourceFileName(file.name);
       setImportOpen(true);
-      toast.success(`تم تحميل ${parsedItems.length} صنف للمعاينة`);
+      toast.success(`تم تحميل ${parsedItems.length} صنف من الملف`);
     } catch (importError: any) {
       toast.error(importError?.message || 'فشل قراءة ملف Excel');
     } finally {
@@ -515,19 +517,20 @@ const ItemsPageContent: React.FC = () => {
   };
 
   const handleConfirmImport = async () => {
-    if (!importPreview.length) return;
+    if (!importRows.length) return;
 
     try {
       setIsImporting(true);
-      const result = await bulkImportFromExcel(importPreview);
-      toast.success(`تم استيراد ${result.success} صنف بنجاح، فشل ${result.failed}`);
+      const result = await bulkImportFromExcel(importRows);
+      toast.success(`تم تنفيذ الاستيراد: ${result.success} صف ناجح، ${result.failed} مرفوض`);
 
       if (result.errors.length > 0) {
         toast.warning(`أخطاء: ${result.errors.map((entry) => `صف ${entry.row}: ${entry.error}`).join(', ')}`);
       }
 
       setImportOpen(false);
-      setImportPreview([]);
+      setImportRows([]);
+  setImportSourceFileName('');
       await refreshItemsPage();
       logUserActivity({ userId: actorId, userName: actorName, event: 'data_import', details: `استيراد ${result.success} صنف من Excel` });
     } catch (importError: any) {
@@ -574,7 +577,8 @@ const ItemsPageContent: React.FC = () => {
 
   const closeImportModal = () => {
     setImportOpen(false);
-    setImportPreview([]);
+    setImportRows([]);
+    setImportSourceFileName('');
   };
 
   if (!canView) {
@@ -657,8 +661,9 @@ const ItemsPageContent: React.FC = () => {
         onApplyBulk={() => { void applyBulk(); }}
         onCloseBulk={() => setBulkOpen(false)}
         selectedCount={selected.size}
+        importRows={importRows}
+        importSourceFileName={importSourceFileName}
         importOpen={importOpen}
-        importPreview={importPreview}
         isImporting={isImporting}
         onCloseImport={closeImportModal}
         onConfirmImport={() => { void handleConfirmImport(); }}

@@ -27,6 +27,12 @@ import {
   fetchUnloadingRules,
   updateUnloadingRuleInApi,
 } from '@services/unloadingRulesService';
+import {
+  createCategoryInApi,
+  createUnitInApi,
+  deleteCategoryInApi,
+  deleteUnitInApi,
+} from '@services/referenceDataService';
 import { fetchRoles, fetchUsers, type RoleDto, type UserDto } from '@services/usersService';
 import apiClient from '@api/client';
 import { normalizeUsers } from '../services/iamService';
@@ -200,10 +206,10 @@ type Store = {
   exportSheetsToExcel: (options: { fileName: string; sheets: ExportSheet[] }) => Promise<void>;
   exportPdfReport: (options: { endpoint: string; payload: unknown; fileName: string }) => Promise<void>;
   exportElementToPdf: (options: { element: HTMLElement; fileName: string; jsPdfOptions?: Record<string, unknown> }) => Promise<void>;
-  addUnit: (unit: string) => void;
-  deleteUnit: (unit: string) => void;
-  addCategory: (category: string) => void;
-  deleteCategory: (category: string) => void;
+  addUnit: (unit: string) => Promise<void>;
+  deleteUnit: (unit: string) => Promise<void>;
+  addCategory: (category: string) => Promise<void>;
+  deleteCategory: (category: string) => Promise<void>;
   addItems: (items: Item[], actor?: ActorInfo) => Promise<void>;
   updateItems: (items: Item[], actor?: ActorInfo) => Promise<void>;
   deleteItems: (ids: string[], actor?: ActorInfo) => Promise<void>;
@@ -289,6 +295,7 @@ const dto = (r: ItemDto): Item => ({
   minLimit: n(r.minLimit, 0),
   maxLimit: n(r.maxLimit, 1000),
   orderLimit: r.orderLimit == null ? undefined : n(r.orderLimit, 0),
+  packageWeight: r.packageWeight == null ? undefined : n(r.packageWeight, 0),
   currentStock: n(r.currentStock, 0),
   englishName: r.description || undefined,
   lastUpdated: new Date().toISOString(),
@@ -304,6 +311,7 @@ const syncPayload = (i: Item): SyncItemPayload => ({
   minLimit: n(i.minLimit, 0),
   maxLimit: n(i.maxLimit, 1000),
   orderLimit: i.orderLimit == null ? undefined : n(i.orderLimit, 0),
+  packageWeight: i.packageWeight == null ? undefined : n(i.packageWeight, 0),
   currentStock: n(i.currentStock, 0),
   description: i.englishName || undefined,
 });
@@ -1246,38 +1254,32 @@ export const useInventoryStore = create<Store>()(
         });
       },
 
-      addUnit: (unit) => {
+      addUnit: async (unit) => {
         const normalized = String(unit || '').trim();
         if (!normalized) return;
-        set((state) => {
-          const units = uniqueStrings([...state.units, normalized]);
-          return { units };
-        });
+        const referenceData = await createUnitInApi(normalized);
+        get().setReferenceData(referenceData);
       },
 
-      deleteUnit: (unit) => {
+      deleteUnit: async (unit) => {
         const target = String(unit || '').trim().toLowerCase();
-        set((state) => {
-          const units = state.units.filter((entry) => entry.trim().toLowerCase() !== target);
-          return { units };
-        });
+        if (!target) return;
+        const referenceData = await deleteUnitInApi(unit);
+        get().setReferenceData(referenceData);
       },
 
-      addCategory: (category) => {
+      addCategory: async (category) => {
         const normalized = String(category || '').trim();
         if (!normalized) return;
-        set((state) => {
-          const categories = uniqueStrings([...state.categories, normalized]);
-          return { categories };
-        });
+        const referenceData = await createCategoryInApi(normalized);
+        get().setReferenceData(referenceData);
       },
 
-      deleteCategory: (category) => {
+      deleteCategory: async (category) => {
         const target = String(category || '').trim().toLowerCase();
-        set((state) => {
-          const categories = state.categories.filter((entry) => entry.trim().toLowerCase() !== target);
-          return { categories };
-        });
+        if (!target) return;
+        const referenceData = await deleteCategoryInApi(category);
+        get().setReferenceData(referenceData);
       },
 
       addItems: async (items, actor = DEFAULT_ACTOR) => {

@@ -50,6 +50,13 @@ export class SyncItemDto {
   @IsNumber({ allowNaN: false, allowInfinity: false })
   @Min(0)
   @Max(999999999.999)
+  packageWeight?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  @Min(0)
+  @Max(999999999.999)
   currentStock?: number;
 
   @IsOptional()

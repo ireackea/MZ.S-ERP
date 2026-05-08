@@ -2,12 +2,16 @@ import { createExcelWorkbook } from './exceljs';
 
 const EXCEL_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
-type ExcelPrimitive = string | number | boolean | Date | '';
+export type ExcelPrimitive = string | number | boolean | Date | '';
 export type ExcelRow = Record<string, ExcelPrimitive>;
 type ExcelRowInput = Record<string, unknown>;
-type ExcelSheetRow = ExcelPrimitive[];
+export type ExcelSheetRow = ExcelPrimitive[];
 type ExcelSheetRowInput = unknown[];
 type ExcelSheetColumn = number | { wch?: number } | { width?: number };
+export type ExcelWorkbookSheet = {
+  name: string;
+  rows: ExcelSheetRow[];
+};
 
 const downloadBlob = (blob: Blob, fileName: string) => {
   const url = URL.createObjectURL(blob);
@@ -51,6 +55,19 @@ const normalizeCellValue = (value: unknown): ExcelPrimitive => {
   }
 
   return String(value);
+};
+
+const worksheetToMatrix = (worksheet: any): ExcelSheetRow[] => {
+  const rows: ExcelSheetRow[] = [];
+  worksheet.eachRow({ includeEmpty: false }, (row: any) => {
+    const maxColumnCount = Math.max(row.cellCount, row.actualCellCount);
+    const values: ExcelSheetRow = [];
+    for (let columnIndex = 1; columnIndex <= maxColumnCount; columnIndex += 1) {
+      values.push(normalizeCellValue(row.getCell(columnIndex).value));
+    }
+    rows.push(values);
+  });
+  return rows;
 };
 
 export const exportRowsToExcel = async (params: {
@@ -178,15 +195,25 @@ export const readFirstWorksheetMatrix = async (file: File): Promise<ExcelSheetRo
     throw new Error('لا توجد ورقة عمل داخل ملف Excel.');
   }
 
-  const rows: ExcelSheetRow[] = [];
-  worksheet.eachRow({ includeEmpty: false }, (row) => {
-    const maxColumnCount = Math.max(row.cellCount, row.actualCellCount);
-    const values: ExcelSheetRow = [];
-    for (let columnIndex = 1; columnIndex <= maxColumnCount; columnIndex += 1) {
-      values.push(normalizeCellValue(row.getCell(columnIndex).value));
-    }
-    rows.push(values);
+  return worksheetToMatrix(worksheet);
+};
+
+export const readWorkbookSheets = async (file: File): Promise<ExcelWorkbookSheet[]> => {
+  const workbook = await createExcelWorkbook();
+  const arrayBuffer = await file.arrayBuffer();
+  await workbook.xlsx.load(arrayBuffer);
+
+  const sheets: ExcelWorkbookSheet[] = [];
+  workbook.eachSheet((worksheet) => {
+    sheets.push({
+      name: worksheet.name,
+      rows: worksheetToMatrix(worksheet),
+    });
   });
 
-  return rows;
+  if (!sheets.length) {
+    throw new Error('لا توجد أوراق عمل داخل ملف Excel.');
+  }
+
+  return sheets;
 };

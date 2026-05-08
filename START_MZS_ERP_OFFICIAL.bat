@@ -68,6 +68,7 @@ $script:Options = [ordered]@{
     Help = $false
     TimeoutSeconds = 300
     MonitorIntervalSeconds = 10
+    HealthGraceSeconds = 90
 }
 
 function Show-Help {
@@ -95,6 +96,7 @@ function Show-Help {
     Write-Host '  /doctor         Run preflight/config checks only.'
     Write-Host '  /timeout:N      Startup timeout in seconds, default 300.'
     Write-Host '  /interval:N     Live monitor refresh interval in seconds, default 10.'
+    Write-Host '  /health-grace:N Seconds to wait for Docker health after HTTP readiness, default 90.'
     Write-Host ''
 }
 
@@ -116,6 +118,7 @@ function Initialize-Options {
             '^/doctor$' { $script:Options.Doctor = $true; $script:Options.Monitor = $false; continue }
             '^/timeout:(\d+)$' { $script:Options.TimeoutSeconds = [Math]::Max(30, [int]$Matches[1]); continue }
             '^/interval:(\d+)$' { $script:Options.MonitorIntervalSeconds = [Math]::Max(3, [int]$Matches[1]); continue }
+            '^/health-grace:(\d+)$' { $script:Options.HealthGraceSeconds = [Math]::Max(0, [int]$Matches[1]); continue }
             default { throw "Unknown launcher switch: $arg. Use /help." }
         }
     }
@@ -601,14 +604,76 @@ function Wait-ForPostgres {
 function Assert-HealthySnapshot {
     param([System.Collections.IDictionary]$Snapshot)
 
-    $badServices = @($Snapshot.services | Where-Object { $_.state -ne 'running' -or ($_.health -notin @('healthy', 'none')) })
-    $badEndpoints = @($Snapshot.endpoints | Where-Object { -not $_.ok })
-    if ($badServices.Count -gt 0 -or $badEndpoints.Count -gt 0) {
-        $tail = Invoke-Compose -Arguments @('logs', '--tail', '120') -AllowFailure -Quiet
-        Add-Content -Path $script:LogPath -Value '===== docker compose logs tail =====' -Encoding UTF8
-        Add-Content -Path $script:LogPath -Value $tail.Output -Encoding UTF8
-        throw 'Runtime health verification failed. Review the log tail in the official log file.'
+    $current = $Snapshot
+    $deadline = (Get-Date).AddSeconds([int]$script:Options.HealthGraceSeconds)
+
+    while ($true) {
+        $badServices = @($current.services | Where-Object { $_.state -ne 'running' -or ($_.health -notin @('healthy', 'none')) })
+        $badEndpoints = @($current.endpoints | Where-Object { -not $_.ok })
+
+        if ($badServices.Count -eq 0 -and $badEndpoints.Count -eq 0) {
+            return
+        }
+
+        $onlyWaitingForDockerHealth = $badEndpoints.Count -eq 0 -and $badServices.Count -gt 0 -and @($badServices | Where-Object { $_.state -ne 'running' -or $_.health -ne 'starting' }).Count -eq 0
+        if ($onlyWaitingForDockerHealth -and (Get-Date) -lt $deadline) {
+            # HTTP readiness can be true before Docker's interval-based healthcheck flips to healthy.
+            Write-Log ("Docker health is still starting after HTTP readiness; waiting up to {0}s for healthcheck convergence." -f $script:Options.HealthGraceSeconds) 'WARN'
+            Start-Sleep -Seconds 5
+            $current = Get-StatusSnapshot
+            Save-StatusSnapshot -Snapshot $current
+            continue
+        }
+
+        Add-RuntimeFailureDiagnostics -Snapshot $current -BadServices $badServices -BadEndpoints $badEndpoints
+        $issueSummary = Format-RuntimeIssues -BadServices $badServices -BadEndpoints $badEndpoints
+        throw ("Runtime health verification failed: {0}. Review the log tail in the official log file." -f ($issueSummary -join '; '))
     }
+}
+
+function Format-RuntimeIssues {
+    param(
+        [array]$BadServices,
+        [array]$BadEndpoints
+    )
+
+    $issues = @()
+    foreach ($service in $BadServices) {
+        $issues += ("service {0} state={1} health={2} restarts={3}" -f $service.service, $service.state, $service.health, $service.restartCount)
+    }
+    foreach ($endpoint in $BadEndpoints) {
+        $endpointError = ''
+        if ($endpoint.Contains('error')) { $endpointError = [string]$endpoint['error'] }
+        $detail = if ($endpointError) { $endpointError } else { "HTTP " + $endpoint.status }
+        $issues += ("endpoint {0} failed ({1})" -f $endpoint.name, $detail)
+    }
+    if ($issues.Count -eq 0) { return @('unknown runtime health issue') }
+    return $issues
+}
+
+function Add-RuntimeFailureDiagnostics {
+    param(
+        [System.Collections.IDictionary]$Snapshot,
+        [array]$BadServices,
+        [array]$BadEndpoints
+    )
+
+    Add-Content -Path $script:LogPath -Value '===== runtime health failure summary =====' -Encoding UTF8
+    foreach ($line in (Format-RuntimeIssues -BadServices $BadServices -BadEndpoints $BadEndpoints)) {
+        Add-Content -Path $script:LogPath -Value $line -Encoding UTF8
+    }
+
+    foreach ($service in $BadServices) {
+        $id = Get-ComposeContainerId -Service $service.service
+        if (-not $id) { continue }
+        $inspect = Invoke-Native -FilePath 'docker' -Arguments @('inspect', $id) -AllowFailure -Quiet
+        Add-Content -Path $script:LogPath -Value ("===== docker inspect health: {0} =====" -f $service.service) -Encoding UTF8
+        Add-Content -Path $script:LogPath -Value $inspect.Output -Encoding UTF8
+    }
+
+    $tail = Invoke-Compose -Arguments @('logs', '--tail', '160') -AllowFailure -Quiet
+    Add-Content -Path $script:LogPath -Value '===== docker compose logs tail =====' -Encoding UTF8
+    Add-Content -Path $script:LogPath -Value $tail.Output -Encoding UTF8
 }
 
 function Print-RecentLogs {
@@ -676,6 +741,8 @@ function Start-OfficialStack {
     $snapshot = Get-StatusSnapshot
     Save-StatusSnapshot -Snapshot $snapshot
     Assert-HealthySnapshot -Snapshot $snapshot
+    $snapshot = Get-StatusSnapshot
+    Save-StatusSnapshot -Snapshot $snapshot
 
     Section 'READY'
     Write-Log ('Frontend URL: {0}' -f $script:FrontendUrl) 'OK'

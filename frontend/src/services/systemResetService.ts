@@ -48,7 +48,7 @@ const translateResetError = (code: string | null, message: string | null, retryA
         ? `تم إيقاف محاولات إعادة الضبط مؤقتًا. حاول بعد ${new Date(retryAt).toLocaleString('ar-EG')}.`
         : 'تم إيقاف محاولات إعادة الضبط مؤقتًا. حاول لاحقًا.';
     case 'SYSTEM_RESET_INVALID_CODE':
-      return 'رمز التأكيد غير صحيح. يرجى التواصل مع مدير النظام.';
+      return 'رمز SYSTEM_RESET_TOKEN غير صحيح. أدخل الرمز الثابت الموجود في ملف .env، وليس رمز التحقق المؤقت المعروض في الشاشة.';
     case 'SYSTEM_RESET_INVALID_CHALLENGE':
       return 'رمز التحقق المؤقت غير صالح أو انتهت صلاحيته. يرجى طلب رمز جديد.';
     case 'SYSTEM_RESET_SUPERADMIN_REQUIRED':

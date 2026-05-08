@@ -3,14 +3,13 @@
 // ENTERPRISE FIX: Phase 3 – الاختبار + المراقبة + النشر الرسمي - 2026-03-13
 // ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
 import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
-import { DatabaseBackup, FileText, Globe2, LayoutGrid, Package, RefreshCcw, Settings2, Shield, Truck, Users } from 'lucide-react';
+import { DatabaseBackup, FileText, Globe2, LayoutGrid, Package, RefreshCcw, Settings2, Shield, Users } from 'lucide-react';
 import { usePermissions } from '@hooks/usePermissions';
 import { hasGrantedPermission } from '@services/permissionAliases';
 import type { AuditLog, ReportColumnConfig, SystemSettings, User } from '../../../types';
 
 const GeneralSettings = lazy(() => import('../components/GeneralSettings'));
 const ReferenceDataSettings = lazy(() => import('../components/ReferenceDataSettings'));
-const UnloadingRulesSettings = lazy(() => import('../components/UnloadingRulesSettings'));
 const UsersAndRoles = lazy(() => import('../components/UsersAndRoles'));
 const PermissionsMatrix = lazy(() => import('../components/PermissionsMatrix'));
 const BackupAndRestore = lazy(() => import('../components/BackupAndRestore'));
@@ -34,7 +33,6 @@ interface SettingsPageProps {
 type SettingsTabKey =
   | 'general'
   | 'reference-data'
-  | 'unloading-rules'
   | 'users'
   | 'permissions'
   | 'backup'
@@ -98,7 +96,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   const tabs = useMemo(() => ([
     { key: 'general' as const, label: 'الإعدادات العامة', permission: 'settings.view.general', icon: Settings2 },
     { key: 'reference-data' as const, label: 'الأقسام ووحدات القياس', permission: 'settings.view.general', icon: Package },
-    { key: 'unloading-rules' as const, label: 'قواعد التفريغ', permission: 'settings.view.general', icon: Truck },
     { key: 'users' as const, label: 'المستخدمون والأدوار', permission: 'settings.view.users', icon: Users },
     { key: 'permissions' as const, label: 'مصفوفة الصلاحيات', permission: 'settings.view.permissions', icon: Shield },
     { key: 'backup' as const, label: 'النسخ الاحتياطي', permission: 'settings.view.backup', icon: DatabaseBackup },
@@ -135,8 +132,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
         return <GeneralSettings settings={settings} onUpdateSettings={onUpdateSettings} />;
       case 'reference-data':
         return <ReferenceDataSettings />;
-      case 'unloading-rules':
-        return <UnloadingRulesSettings />;
       case 'users':
         return <UsersAndRoles />;
       case 'permissions':

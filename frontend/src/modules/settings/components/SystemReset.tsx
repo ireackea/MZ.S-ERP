@@ -581,11 +581,11 @@ const SystemReset: React.FC<SystemResetProps> = ({ currentUser }) => {
       </div>
 
       <label className="block space-y-2 text-sm font-bold text-slate-700 dark:text-slate-200">
-        <span className="flex items-center gap-1.5"><KeyRound size={14} /> رمز SYSTEM_RESET_TOKEN</span>
+        <span className="flex items-center gap-1.5"><KeyRound size={14} /> رمز SYSTEM_RESET_TOKEN الثابت من ملف .env</span>
         <input
           value={confirmationCode}
           onChange={(e) => setConfirmationCode(e.target.value)}
-          placeholder="أدخل الرمز الثابت من متغيرات البيئة (16 حرفًا على الأقل)"
+          placeholder="ليس رمز التحقق المؤقت — أدخل قيمة SYSTEM_RESET_TOKEN من .env"
           autoComplete="off"
           className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 font-mono text-sm focus:border-rose-400 focus:outline-none focus:ring-2 focus:ring-rose-400/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
         />

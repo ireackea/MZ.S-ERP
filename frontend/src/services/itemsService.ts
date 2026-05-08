@@ -17,6 +17,7 @@ export interface ItemDto {
   minLimit?: number;
   maxLimit?: number;
   orderLimit?: number;
+  packageWeight?: number | null;
   currentStock?: number;
   description?: string;
   isArchived?: boolean;
@@ -38,6 +39,7 @@ export interface SyncItemPayload {
   minLimit?: number;
   maxLimit?: number;
   orderLimit?: number;
+  packageWeight?: number;
   currentStock?: number;
   description?: string;
 }
@@ -224,6 +226,7 @@ export const generateMissingCodes = async (maxRetries = 3): Promise<GenerateCode
 
 // Phase 5: Bulk Import from Excel (JSON)
 export interface ExcelImportRow {
+  sourceRow?: number;
   name: string;
   code?: string;
   barcode?: string;
@@ -238,17 +241,30 @@ export interface ExcelImportRow {
   description?: string;
 }
 
+export type ItemImportIssue = {
+  row: number;
+  field: string;
+  message: string;
+  value?: unknown;
+  error?: string;
+};
+
 export interface ExcelImportResult {
   success: number;
   failed: number;
   total: number;
   results: Array<{ row: number; publicId: string; name: string; status: string }>;
-  errors: Array<{ row: number; error: string }>;
+  errors: Array<ItemImportIssue & { error: string }>;
 }
+
+const toImportPayload = (items: ExcelImportRow[]) => items.map(({ englishName, description, ...item }) => ({
+  ...item,
+  description: String(description || englishName || '').trim() || undefined,
+}));
 
 export const bulkImportFromExcel = async (items: ExcelImportRow[]): Promise<ExcelImportResult> => {
   try {
-    const response = await apiClient.post('/items/import-excel', { items });
+    const response = await apiClient.post('/items/import-excel', { items: toImportPayload(items) });
     return response.data as ExcelImportResult;
   } catch (error) {
     throw handleApiError(error);
@@ -296,28 +312,30 @@ export const parseExcelFile = async (file: File): Promise<ExcelImportRow[]> => {
     return undefined;
   };
 
-  rows.forEach((rawRow) => {
+  rows.forEach((rawRow, index) => {
     const normalizedRow = Object.entries(rawRow).reduce<Record<string, unknown>>((result, [header, value]) => {
       result[normalizeHeader(header)] = value;
       return result;
     }, {});
 
     const item: ExcelImportRow = {
-      name: readString(normalizedRow, ['name', 'الاسم']),
-      code: readString(normalizedRow, ['code', 'الكود']) || undefined,
+      sourceRow: index + 2,
+      name: readString(normalizedRow, ['name', 'itemname', 'الاسم', 'اسمالصنف', 'الصنف']),
+      code: readString(normalizedRow, ['code', 'itemcode', 'الكود', 'كود', 'كودالصنف']) || undefined,
       barcode: readString(normalizedRow, ['barcode', 'الباركود']) || undefined,
-      englishName: readString(normalizedRow, ['englishname', 'english', 'الاسمالانجليزي']) || undefined,
-      category: readString(normalizedRow, ['category', 'التصنيف']) || undefined,
-      unit: readString(normalizedRow, ['unit', 'الوحدة']) || undefined,
+      englishName: readString(normalizedRow, ['englishname', 'english', 'الاسمالانجليزي', 'الاسمالإنجليزي', 'الاسمالانجليزى', 'الاسمالإنجليزى']) || undefined,
+      category: readString(normalizedRow, ['category', 'التصنيف', 'الفئة', 'القسم']) || undefined,
+      unit: readString(normalizedRow, ['unit', 'الوحدة', 'وحدة', 'وحدةالقياس']) || undefined,
       description: readString(normalizedRow, ['description', 'الوصف']) || undefined,
-      packageWeight: readNumber(normalizedRow, ['packageweight', 'وزنالعبوة']),
+      packageWeight: readNumber(normalizedRow, ['packageweight', 'weight', 'وزنالعبوة', 'وزنالعبوه', 'وزن']),
       minLimit: readNumber(normalizedRow, ['minlimit', 'min', 'الحدالأدنى']) ?? 0,
-      maxLimit: readNumber(normalizedRow, ['maxlimit', 'max', 'الحدالأقصى']) ?? 1000,
-      orderLimit: readNumber(normalizedRow, ['orderlimit', 'order', 'حدالطلب']),
-      currentStock: readNumber(normalizedRow, ['currentstock', 'stock', 'الكمية']) ?? 0,
+      maxLimit: readNumber(normalizedRow, ['maxlimit', 'max', 'الحدالأقصى', 'الحدالأعلى']) ?? 1000,
+      orderLimit: readNumber(normalizedRow, ['orderlimit', 'reorderlimit', 'order', 'حدالطلب', 'حدإعادةالطلب', 'حداعادةالطلب']),
+      currentStock: readNumber(normalizedRow, ['currentstock', 'stock', 'quantity', 'qty', 'الكمية', 'الكميةالحالية', 'الرصيد', 'الرصيدالحالي']) ?? 0,
     };
 
-    if (item.name) {
+    const hasAnyValue = Object.entries(item).some(([key, value]) => key !== 'sourceRow' && String(value ?? '').trim());
+    if (hasAnyValue) {
       items.push(item);
     }
   });

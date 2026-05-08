@@ -91,6 +91,7 @@ export const EXCEL_TEMPLATE_ROWS = [
     description: 'Yellow Corn',
     category: 'مواد خام',
     unit: 'كيلو',
+    packageWeight: 0,
     minLimit: 10,
     maxLimit: 1000,
     orderLimit: 50,
@@ -118,6 +119,7 @@ export const mapItemDtoToItem = (row: ItemDto): Item => ({
   minLimit: n(row.minLimit, 0),
   maxLimit: n(row.maxLimit, 1000),
   orderLimit: row.orderLimit == null ? undefined : n(row.orderLimit, 0),
+  packageWeight: row.packageWeight == null ? undefined : n(row.packageWeight, 0),
   currentStock: n(row.currentStock, 0),
   lastUpdated: row.updatedAt || new Date().toISOString(),
 });

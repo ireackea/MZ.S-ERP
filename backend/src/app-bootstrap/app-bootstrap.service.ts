@@ -1,5 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { ReferenceDataService } from '../reference-data/reference-data.service';
 
 /** Default permissions per built-in role – mirrors auth.service.ts DEFAULT_ROLES */
 const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
@@ -23,7 +24,10 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
 
 @Injectable()
 export class AppBootstrapService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly referenceDataService: ReferenceDataService,
+  ) {}
 
   private hasPermission(permissions: string[], permission: string) {
     if (permissions.includes('*') || permissions.includes(permission)) {
@@ -50,12 +54,6 @@ export class AppBootstrapService {
     } catch {
       return [];
     }
-  }
-
-  private normalizeDistinctValues(rows: Array<{ value: string | null }>) {
-    return rows
-      .map((row) => String(row.value || '').trim())
-      .filter(Boolean);
   }
 
   async getBootstrapPayload(principal: any) {
@@ -99,19 +97,8 @@ export class AppBootstrapService {
       this.hasPermission(resolvedPermissions, 'settings.view.general') ||
       this.hasPermission(resolvedPermissions, 'settings.update.system');
 
-    const [categoryRows, unitRows, unloadingRuleRows, itemsCount, transactionsCount, openingBalancesCount] = await Promise.all([
-      this.prisma.item.findMany({
-        where: { isArchived: false },
-        distinct: ['category'],
-        select: { category: true },
-        orderBy: { category: 'asc' },
-      }),
-      this.prisma.item.findMany({
-        where: { isArchived: false },
-        distinct: ['unit'],
-        select: { unit: true },
-        orderBy: { unit: 'asc' },
-      }),
+    const [referenceData, unloadingRuleRows, itemsCount, transactionsCount, openingBalancesCount] = await Promise.all([
+      this.referenceDataService.findAll(),
       this.prisma.unloadingRule.findMany({
         where: includeInactiveUnloadingRules ? undefined : { isActive: true },
         orderBy: [{ isActive: 'desc' }, { ruleName: 'asc' }, { createdAt: 'asc' }],
@@ -125,10 +112,7 @@ export class AppBootstrapService {
       return {
         session: null,
         resolvedPermissions: [],
-        referenceData: {
-          categories: this.normalizeDistinctValues(categoryRows.map((row) => ({ value: row.category }))),
-          units: this.normalizeDistinctValues(unitRows.map((row) => ({ value: row.unit }))),
-        },
+        referenceData,
         unloadingRules: unloadingRuleRows.map((row) => ({
           id: row.id,
           rule_name: row.ruleName,
@@ -163,10 +147,7 @@ export class AppBootstrapService {
         scope: 'all',
       },
       resolvedPermissions: resolvedPermissions,
-      referenceData: {
-        categories: this.normalizeDistinctValues(categoryRows.map((row) => ({ value: row.category }))),
-        units: this.normalizeDistinctValues(unitRows.map((row) => ({ value: row.unit }))),
-      },
+      referenceData,
       unloadingRules: unloadingRuleRows.map((row) => ({
         id: row.id,
         rule_name: row.ruleName,
