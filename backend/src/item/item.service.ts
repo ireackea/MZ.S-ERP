@@ -2,6 +2,7 @@
 // ENTERPRISE FIX: Phase 4 Audit Logging + Soft Delete Backend + Pagination - Archive Only - 2026-03-27
 // ENTERPRISE FIX: Legacy Migration Phase 5 - Final Stabilization & Production - 2026-02-27
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma.service';
 import { SyncItemDto } from './dto/sync-items.dto';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -22,6 +23,9 @@ export interface PaginatedItemsResult {
   limit: number;
   totalPages: number;
 }
+
+const MAX_BULK_IMPORT_ROWS = 15000;
+const BULK_IMPORT_BATCH_SIZE = 250;
 
 @Injectable()
 export class ItemService {
@@ -438,44 +442,195 @@ export class ItemService {
     const results: Array<{ row: number; publicId: string; name: string; status: string }> = [];
     const errors: Array<{ row: number; error: string; field: string; message: string; value?: unknown }> = [];
 
+    if (!Array.isArray(items)) {
+      throw new BadRequestException('قائمة الأصناف مطلوبة.');
+    }
+
+    if (items.length > MAX_BULK_IMPORT_ROWS) {
+      throw new BadRequestException(`الحد الأقصى للاستيراد هو ${MAX_BULK_IMPORT_ROWS} صف في العملية الواحدة.`);
+    }
+
+    const codeCounts = new Map<string, number>();
+    const barcodeCounts = new Map<string, number>();
+    const normalizeOptionalString = (value: unknown) => {
+      const normalized = String(value ?? '').trim();
+      return normalized || null;
+    };
+    const normalizeLookupKey = (value: unknown) => String(value ?? '').trim().toLowerCase();
+    const readNumber = (value: unknown, fallback: number | null) => {
+      if (value == null || value === '') return fallback;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : Number.NaN;
+    };
+
+    items.forEach((item) => {
+      const code = normalizeLookupKey(item.code);
+      const barcode = normalizeLookupKey(item.barcode);
+      if (code) codeCounts.set(code, (codeCounts.get(code) || 0) + 1);
+      if (barcode) barcodeCounts.set(barcode, (barcodeCounts.get(barcode) || 0) + 1);
+    });
+
+    const uniqueCodes = [...codeCounts.keys()];
+    const uniqueBarcodes = [...barcodeCounts.keys()];
+    const duplicateConditions: any[] = [];
+    if (uniqueCodes.length) duplicateConditions.push({ code: { in: uniqueCodes } });
+    if (uniqueBarcodes.length) duplicateConditions.push({ barcode: { in: uniqueBarcodes } });
+    const existingItems = duplicateConditions.length
+      ? await this.prisma.item.findMany({
+          where: { OR: duplicateConditions },
+          select: { code: true, barcode: true, name: true },
+        })
+      : [];
+    const existingCodes = new Map(existingItems.filter((item) => item.code).map((item) => [normalizeLookupKey(item.code), item.name]));
+    const existingBarcodes = new Map(existingItems.filter((item) => item.barcode).map((item) => [normalizeLookupKey(item.barcode), item.name]));
+
+    const validRows: Array<{
+      rowNumber: number;
+      name: string;
+      code: string | null;
+      barcode: string | null;
+      category: string;
+      unit: string;
+      minLimit: number;
+      maxLimit: number;
+      orderLimit: number | null;
+      packageWeight: number | null;
+      currentStock: number;
+      description: string | null;
+      createdBy?: string;
+    }> = [];
+
     for (let index = 0; index < items.length; index += 1) {
       const item = items[index];
       const rowNumber = Number(item.sourceRow || index + 2);
       const name = String(item.name || '').trim();
       const category = String(item.category || '').trim();
       const unit = String(item.unit || '').trim();
+      const code = normalizeOptionalString(item.code);
+      const barcode = normalizeOptionalString(item.barcode);
+      const codeKey = normalizeLookupKey(code);
+      const barcodeKey = normalizeLookupKey(barcode);
+      const description = String(item.description || item.englishName || '').trim() || null;
+      const minLimit = readNumber(item.minLimit, 0);
+      const maxLimit = readNumber(item.maxLimit, 1000);
+      const orderLimit = readNumber(item.orderLimit, null);
+      const packageWeight = readNumber(item.packageWeight, null);
+      const currentStock = readNumber(item.currentStock, 0);
 
       if (!name || !category || !unit) {
         errors.push({ row: rowNumber, field: 'required', message: 'اسم الصنف والتصنيف ووحدة القياس مطلوبة.', error: 'اسم الصنف والتصنيف ووحدة القياس مطلوبة.' });
         continue;
       }
 
+      const unsafeFormulaField = ([
+        ['name', name, 'اسم الصنف'],
+        ['code', code, 'كود الصنف'],
+        ['barcode', barcode, 'الباركود'],
+        ['category', category, 'القسم'],
+        ['unit', unit, 'وحدة القياس'],
+        ['description', description, 'الوصف'],
+      ] as Array<[string, string | null, string]>).find(([, value]) => value != null && /^[=+\-@]/.test(String(value).trim()));
+      if (unsafeFormulaField) {
+        const message = `${unsafeFormulaField[2]} يبدأ برمز صيغة Excel غير آمن.`;
+        errors.push({ row: rowNumber, field: unsafeFormulaField[0], message, error: message, value: unsafeFormulaField[1] });
+        continue;
+      }
+
+      const numberEntries: Array<[string, number | null, string]> = [
+        ['minLimit', minLimit, 'الحد الأدنى'],
+        ['maxLimit', maxLimit, 'الحد الأعلى'],
+        ['orderLimit', orderLimit, 'حد إعادة الطلب'],
+        ['packageWeight', packageWeight, 'وزن العبوة'],
+        ['currentStock', currentStock, 'الرصيد الحالي'],
+      ];
+      const invalidNumber = numberEntries.find(([, value]) => value != null && (!Number.isFinite(value) || value < 0 || value > 999999999.999));
+      if (invalidNumber) {
+        errors.push({ row: rowNumber, field: invalidNumber[0], message: `${invalidNumber[2]} غير صالح.`, error: `${invalidNumber[2]} غير صالح.`, value: invalidNumber[1] });
+        continue;
+      }
+
+      if ((minLimit ?? 0) > (maxLimit ?? 1000)) {
+        errors.push({ row: rowNumber, field: 'minLimit', message: 'الحد الأدنى أكبر من الحد الأعلى.', error: 'الحد الأدنى أكبر من الحد الأعلى.' });
+        continue;
+      }
+
+      if (codeKey && (codeCounts.get(codeKey) || 0) > 1) {
+        errors.push({ row: rowNumber, field: 'code', message: 'كود مكرر داخل ملف الاستيراد.', error: 'كود مكرر داخل ملف الاستيراد.', value: code });
+        continue;
+      }
+
+      if (barcodeKey && (barcodeCounts.get(barcodeKey) || 0) > 1) {
+        errors.push({ row: rowNumber, field: 'barcode', message: 'باركود مكرر داخل ملف الاستيراد.', error: 'باركود مكرر داخل ملف الاستيراد.', value: barcode });
+        continue;
+      }
+
+      if (codeKey && existingCodes.has(codeKey)) {
+        const message = `الكود مستخدم مسبقًا للصنف: ${existingCodes.get(codeKey)}`;
+        errors.push({ row: rowNumber, field: 'code', message, error: message, value: code });
+        continue;
+      }
+
+      if (barcodeKey && existingBarcodes.has(barcodeKey)) {
+        const message = `الباركود مستخدم مسبقًا للصنف: ${existingBarcodes.get(barcodeKey)}`;
+        errors.push({ row: rowNumber, field: 'barcode', message, error: message, value: barcode });
+        continue;
+      }
+
+      validRows.push({
+        rowNumber,
+        name,
+        code,
+        barcode,
+        category,
+        unit,
+        minLimit: minLimit ?? 0,
+        maxLimit: maxLimit ?? 1000,
+        orderLimit,
+        packageWeight,
+        currentStock: currentStock ?? 0,
+        description,
+        createdBy: userId || undefined,
+      });
+    }
+
+    const createImportRow = (row: (typeof validRows)[number]) => this.prisma.item.create({
+      data: {
+        publicId: `item-${randomUUID()}`,
+        code: row.code,
+        codeGenerated: row.code ? false : undefined,
+        barcode: row.barcode,
+        name: row.name,
+        unit: row.unit,
+        category: row.category,
+        minLimit: row.minLimit,
+        maxLimit: row.maxLimit,
+        orderLimit: row.orderLimit,
+        packageWeight: row.packageWeight,
+        currentStock: row.currentStock,
+        description: row.description,
+        createdBy: row.createdBy,
+      },
+    });
+
+    for (let offset = 0; offset < validRows.length; offset += BULK_IMPORT_BATCH_SIZE) {
+      const batch = validRows.slice(offset, offset + BULK_IMPORT_BATCH_SIZE);
       try {
-        const normalizedCode = item.code == null || String(item.code).trim() === '' ? null : String(item.code).trim();
-        const created = await this.prisma.item.create({
-          data: {
-            publicId: `item-${Date.now()}-${index}`,
-            code: normalizedCode,
-            codeGenerated: normalizedCode ? false : undefined,
-            barcode: item.barcode ? String(item.barcode).trim() : null,
-            name,
-            unit,
-            category,
-            minLimit: item.minLimit ?? 0,
-            maxLimit: item.maxLimit ?? 1000,
-            orderLimit: item.orderLimit ?? null,
-            packageWeight: item.packageWeight ?? null,
-            currentStock: item.currentStock ?? 0,
-            description: String(item.description || item.englishName || '').trim() || null,
-            createdBy: userId || undefined,
-          },
+        const createdItems = await this.prisma.$transaction(batch.map((row) => createImportRow(row)));
+        createdItems.forEach((created, index) => {
+          results.push({ row: batch[index].rowNumber, publicId: String(created.publicId), name: created.name, status: 'created' });
         });
-        results.push({ row: rowNumber, publicId: String(created.publicId), name: created.name, status: 'created' });
-      } catch (error: any) {
-        const message = error?.code === 'P2002'
-          ? 'الصنف مكرر أو يحتوي على كود/باركود مستخدم مسبقًا.'
-          : error?.message || 'فشل استيراد الصف.';
-        errors.push({ row: rowNumber, field: 'row', message, error: message, value: item.name });
+      } catch (batchError: any) {
+        for (const row of batch) {
+          try {
+            const created = await createImportRow(row);
+            results.push({ row: row.rowNumber, publicId: String(created.publicId), name: created.name, status: 'created' });
+          } catch (error: any) {
+            const message = error?.code === 'P2002'
+              ? 'الصنف مكرر أو يحتوي على كود/باركود مستخدم مسبقًا.'
+              : error?.message || batchError?.message || 'فشل استيراد الصف.';
+            errors.push({ row: row.rowNumber, field: 'row', message, error: message, value: row.name });
+          }
+        }
       }
     }
 
@@ -485,7 +640,12 @@ export class ItemService {
         'IMPORT',
         'Item',
         results.map((row) => row.publicId).join(','),
-        { count: results.length, failed: errors.length, items: results.map((row) => ({ publicId: row.publicId, name: row.name })) },
+        {
+          count: results.length,
+          failed: errors.length,
+          items: results.slice(0, 100).map((row) => ({ publicId: row.publicId, name: row.name })),
+          truncated: results.length > 100,
+        },
         actorUsername,
       );
     }

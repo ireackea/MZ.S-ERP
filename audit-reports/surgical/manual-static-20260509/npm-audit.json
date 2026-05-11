@@ -1,0 +1,1343 @@
+[
+  {
+    "label": "root",
+    "ok": false,
+    "code": 1,
+    "parsed": {
+      "auditReportVersion": 2,
+      "vulnerabilities": {
+        "@hono/node-server": {
+          "name": "@hono/node-server",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            {
+              "source": 1116281,
+              "name": "@hono/node-server",
+              "dependency": "@hono/node-server",
+              "title": "@hono/node-server: Middleware bypass via repeated slashes in serveStatic",
+              "url": "https://github.com/advisories/GHSA-92pp-h63x-v22m",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-22"
+              ],
+              "cvss": {
+                "score": 5.3,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"
+              },
+              "range": "<1.19.13"
+            }
+          ],
+          "effects": [
+            "@prisma/dev"
+          ],
+          "range": "<1.19.13",
+          "nodes": [
+            "node_modules/@hono/node-server"
+          ],
+          "fixAvailable": {
+            "name": "prisma",
+            "version": "6.19.3",
+            "isSemVerMajor": true
+          }
+        },
+        "@prisma/dev": {
+          "name": "@prisma/dev",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            "@hono/node-server"
+          ],
+          "effects": [
+            "prisma"
+          ],
+          "range": "*",
+          "nodes": [
+            "node_modules/@prisma/dev"
+          ],
+          "fixAvailable": {
+            "name": "prisma",
+            "version": "6.19.3",
+            "isSemVerMajor": true
+          }
+        },
+        "axios": {
+          "name": "axios",
+          "severity": "high",
+          "isDirect": true,
+          "via": [
+            {
+              "source": 1117574,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios: Authentication Bypass via Prototype Pollution Gadget in `validateStatus` Merge Strategy",
+              "url": "https://github.com/advisories/GHSA-w9j2-pvgh-6h63",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-287",
+                "CWE-1321"
+              ],
+              "cvss": {
+                "score": 4.8,
+                "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:N"
+              },
+              "range": ">=1.0.0 <1.15.1"
+            },
+            {
+              "source": 1117576,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios: Incomplete Fix for CVE-2025-62718 — NO_PROXY Protection Bypassed via RFC 1122 Loopback Subnet (127.0.0.0/8) in Axios 1.15.0",
+              "url": "https://github.com/advisories/GHSA-pmwg-cvhr-8vh7",
+              "severity": "high",
+              "cwe": [
+                "CWE-183",
+                "CWE-441",
+                "CWE-918"
+              ],
+              "cvss": {
+                "score": 7.2,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:L/I:L/A:N"
+              },
+              "range": ">=1.0.0 <1.15.1"
+            },
+            {
+              "source": 1117577,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios: Invisible JSON Response Tampering via Prototype Pollution Gadget in `parseReviver`",
+              "url": "https://github.com/advisories/GHSA-3w6x-2g7m-8v23",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-915",
+                "CWE-1321"
+              ],
+              "cvss": {
+                "score": 6.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:H/A:N"
+              },
+              "range": ">=1.0.0 <1.15.2"
+            },
+            {
+              "source": 1117578,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios has prototype pollution read-side gadgets in HTTP adapter that allow credential injection and request hijacking",
+              "url": "https://github.com/advisories/GHSA-q8qp-cvcw-x6jj",
+              "severity": "high",
+              "cwe": [
+                "CWE-1321"
+              ],
+              "cvss": {
+                "score": 7.4,
+                "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N"
+              },
+              "range": ">=1.0.0 <1.15.2"
+            },
+            {
+              "source": 1117580,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios: Null Byte Injection via Reverse-Encoding in AxiosURLSearchParams",
+              "url": "https://github.com/advisories/GHSA-xhjh-pmcv-23jw",
+              "severity": "low",
+              "cwe": [
+                "CWE-116",
+                "CWE-626"
+              ],
+              "cvss": {
+                "score": 3.7,
+                "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:N"
+              },
+              "range": ">=1.0.0 <1.15.1"
+            },
+            {
+              "source": 1117581,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios: CRLF Injection in multipart/form-data body via unsanitized blob.type in formDataToStream",
+              "url": "https://github.com/advisories/GHSA-445q-vr5w-6q77",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-93"
+              ],
+              "cvss": {
+                "score": 5.3,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N"
+              },
+              "range": ">=1.0.0 <1.15.1"
+            },
+            {
+              "source": 1117583,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios: no_proxy bypass via IP alias allows SSRF",
+              "url": "https://github.com/advisories/GHSA-m7pr-hjqh-92cm",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-918"
+              ],
+              "cvss": {
+                "score": 6.8,
+                "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:C/C:H/I:N/A:N"
+              },
+              "range": ">=1.0.0 <1.15.1"
+            },
+            {
+              "source": 1117585,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios: unbounded recursion in toFormData causes DoS via deeply nested request data",
+              "url": "https://github.com/advisories/GHSA-62hf-57xw-28j9",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-674"
+              ],
+              "cvss": {
+                "score": 7.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+              },
+              "range": ">=1.0.0 <1.15.1"
+            },
+            {
+              "source": 1117587,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios' HTTP adapter-streamed uploads bypass maxBodyLength when maxRedirects: 0",
+              "url": "https://github.com/advisories/GHSA-5c9x-8gcm-mpgx",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-770"
+              ],
+              "cvss": {
+                "score": 5.3,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+              },
+              "range": ">=1.0.0 <1.15.1"
+            },
+            {
+              "source": 1117589,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios: HTTP adapter streamed responses bypass maxContentLength",
+              "url": "https://github.com/advisories/GHSA-vf2m-468p-8v99",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-770"
+              ],
+              "cvss": {
+                "score": 5.3,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+              },
+              "range": ">=1.0.0 <1.15.1"
+            },
+            {
+              "source": 1117591,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios: Prototype Pollution Gadgets - Response Tampering, Data Exfiltration, and Request Hijacking",
+              "url": "https://github.com/advisories/GHSA-pf86-5x62-jrwf",
+              "severity": "high",
+              "cwe": [
+                "CWE-1321"
+              ],
+              "cvss": {
+                "score": 7.4,
+                "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N"
+              },
+              "range": ">=1.0.0 <1.15.1"
+            },
+            {
+              "source": 1117593,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios: Header Injection via Prototype Pollution",
+              "url": "https://github.com/advisories/GHSA-6chq-wfr3-2hj9",
+              "severity": "high",
+              "cwe": [
+                "CWE-113",
+                "CWE-1321"
+              ],
+              "cvss": {
+                "score": 7.4,
+                "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N"
+              },
+              "range": ">=1.0.0 <1.15.1"
+            },
+            {
+              "source": 1117595,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios: XSRF Token Cross-Origin Leakage via Prototype Pollution Gadget in `withXSRFToken` Boolean Coercion",
+              "url": "https://github.com/advisories/GHSA-xx6v-rp6x-q39c",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-183",
+                "CWE-201"
+              ],
+              "cvss": {
+                "score": 5.4,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N"
+              },
+              "range": ">=1.0.0 <1.15.1"
+            }
+          ],
+          "effects": [],
+          "range": "1.0.0 - 1.15.1",
+          "nodes": [
+            "node_modules/axios"
+          ],
+          "fixAvailable": true
+        },
+        "basic-ftp": {
+          "name": "basic-ftp",
+          "severity": "high",
+          "isDirect": false,
+          "via": [
+            {
+              "source": 1117910,
+              "name": "basic-ftp",
+              "dependency": "basic-ftp",
+              "title": "basic-ftp allows a malicious FTP server to cause client-side denial of service via unbounded multiline control response buffering",
+              "url": "https://github.com/advisories/GHSA-rpmf-866q-6p89",
+              "severity": "high",
+              "cwe": [
+                "CWE-400",
+                "CWE-770"
+              ],
+              "cvss": {
+                "score": 7.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+              },
+              "range": "<=5.3.0"
+            }
+          ],
+          "effects": [],
+          "range": "<=5.3.0",
+          "nodes": [
+            "node_modules/basic-ftp"
+          ],
+          "fixAvailable": true
+        },
+        "brace-expansion": {
+          "name": "brace-expansion",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            {
+              "source": 1115540,
+              "name": "brace-expansion",
+              "dependency": "brace-expansion",
+              "title": "brace-expansion: Zero-step sequence causes process hang and memory exhaustion",
+              "url": "https://github.com/advisories/GHSA-f886-m6hf-6m8v",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-400"
+              ],
+              "cvss": {
+                "score": 6.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:H"
+              },
+              "range": "<1.1.13"
+            },
+            {
+              "source": 1115541,
+              "name": "brace-expansion",
+              "dependency": "brace-expansion",
+              "title": "brace-expansion: Zero-step sequence causes process hang and memory exhaustion",
+              "url": "https://github.com/advisories/GHSA-f886-m6hf-6m8v",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-400"
+              ],
+              "cvss": {
+                "score": 6.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:H"
+              },
+              "range": ">=2.0.0 <2.0.3"
+            }
+          ],
+          "effects": [],
+          "range": "<1.1.13 || >=2.0.0 <2.0.3",
+          "nodes": [
+            "backend/node_modules/brace-expansion",
+            "frontend/node_modules/brace-expansion",
+            "frontend/node_modules/readdir-glob/node_modules/brace-expansion"
+          ],
+          "fixAvailable": true
+        },
+        "express-rate-limit": {
+          "name": "express-rate-limit",
+          "severity": "moderate",
+          "isDirect": true,
+          "via": [
+            "ip-address"
+          ],
+          "effects": [],
+          "range": "8.0.1 - 8.5.0",
+          "nodes": [
+            "node_modules/express-rate-limit"
+          ],
+          "fixAvailable": true
+        },
+        "fast-uri": {
+          "name": "fast-uri",
+          "severity": "high",
+          "isDirect": false,
+          "via": [
+            {
+              "source": 1117870,
+              "name": "fast-uri",
+              "dependency": "fast-uri",
+              "title": "fast-uri vulnerable to path traversal via percent-encoded dot segments",
+              "url": "https://github.com/advisories/GHSA-q3j6-qgpj-74h6",
+              "severity": "high",
+              "cwe": [
+                "CWE-22"
+              ],
+              "cvss": {
+                "score": 7.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N"
+              },
+              "range": "<=3.1.0"
+            },
+            {
+              "source": 1117884,
+              "name": "fast-uri",
+              "dependency": "fast-uri",
+              "title": "fast-uri vulnerable to host confusion via percent-encoded authority delimiters",
+              "url": "https://github.com/advisories/GHSA-v39h-62p7-jpjc",
+              "severity": "high",
+              "cwe": [
+                "CWE-436"
+              ],
+              "cvss": {
+                "score": 7.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N"
+              },
+              "range": "<=3.1.1"
+            }
+          ],
+          "effects": [],
+          "range": "<=3.1.1",
+          "nodes": [
+            "node_modules/fast-uri"
+          ],
+          "fixAvailable": true
+        },
+        "hono": {
+          "name": "hono",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            {
+              "source": 1117763,
+              "name": "hono",
+              "dependency": "hono",
+              "title": "Hono: bodyLimit() can be bypassed for chunked / unknown-length requests",
+              "url": "https://github.com/advisories/GHSA-9vqf-7f2p-gf9v",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-400"
+              ],
+              "cvss": {
+                "score": 6.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N"
+              },
+              "range": "<4.12.16"
+            },
+            {
+              "source": 1117764,
+              "name": "hono",
+              "dependency": "hono",
+              "title": "hono/jsx has Unvalidated JSX Tag Names that May Allow HTML Injection",
+              "url": "https://github.com/advisories/GHSA-69xw-7hcm-h432",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-74"
+              ],
+              "cvss": {
+                "score": 4.7,
+                "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:C/C:L/I:L/A:N"
+              },
+              "range": "<4.12.16"
+            },
+            {
+              "source": 1117915,
+              "name": "hono",
+              "dependency": "hono",
+              "title": "Hono has CSS Declaration Injection via Style Object Values in JSX SSR",
+              "url": "https://github.com/advisories/GHSA-qp7p-654g-cw7p",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-74",
+                "CWE-116"
+              ],
+              "cvss": {
+                "score": 4.3,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N"
+              },
+              "range": "<4.12.18"
+            },
+            {
+              "source": 1117916,
+              "name": "hono",
+              "dependency": "hono",
+              "title": "Hono has improper validation of NumericDate claims (exp, nbf, iat) in JWT verify()",
+              "url": "https://github.com/advisories/GHSA-hm8q-7f3q-5f36",
+              "severity": "low",
+              "cwe": [
+                "CWE-1284"
+              ],
+              "cvss": {
+                "score": 3.8,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:L/I:L/A:N"
+              },
+              "range": "<4.12.18"
+            },
+            {
+              "source": 1117919,
+              "name": "hono",
+              "dependency": "hono",
+              "title": "Hono's Cache Middleware ignores Vary: Authorization / Vary: Cookie leading to cross-user cache leakage",
+              "url": "https://github.com/advisories/GHSA-p77w-8qqv-26rm",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-524"
+              ],
+              "cvss": {
+                "score": 5.3,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"
+              },
+              "range": "<4.12.18"
+            }
+          ],
+          "effects": [],
+          "range": "<=4.12.17",
+          "nodes": [
+            "node_modules/hono"
+          ],
+          "fixAvailable": true
+        },
+        "ip-address": {
+          "name": "ip-address",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            {
+              "source": 1117683,
+              "name": "ip-address",
+              "dependency": "ip-address",
+              "title": "ip-address has XSS in Address6 HTML-emitting methods",
+              "url": "https://github.com/advisories/GHSA-v2v4-37r5-5v8g",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-79"
+              ],
+              "cvss": {
+                "score": 0,
+                "vectorString": null
+              },
+              "range": "<=10.1.0"
+            }
+          ],
+          "effects": [
+            "express-rate-limit"
+          ],
+          "range": "<=10.1.0",
+          "nodes": [
+            "node_modules/ip-address"
+          ],
+          "fixAvailable": true
+        },
+        "prisma": {
+          "name": "prisma",
+          "severity": "moderate",
+          "isDirect": true,
+          "via": [
+            "@prisma/dev"
+          ],
+          "effects": [],
+          "range": ">=6.20.0-dev.1",
+          "nodes": [
+            "node_modules/prisma"
+          ],
+          "fixAvailable": {
+            "name": "prisma",
+            "version": "6.19.3",
+            "isSemVerMajor": true
+          }
+        },
+        "uuid": {
+          "name": "uuid",
+          "severity": "moderate",
+          "isDirect": true,
+          "via": [
+            {
+              "source": 1117635,
+              "name": "uuid",
+              "dependency": "uuid",
+              "title": "uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided",
+              "url": "https://github.com/advisories/GHSA-w5hq-g745-h8pq",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-787",
+                "CWE-1285"
+              ],
+              "cvss": {
+                "score": 0,
+                "vectorString": null
+              },
+              "range": ">=13.0.0 <13.0.1"
+            }
+          ],
+          "effects": [],
+          "range": "13.0.0",
+          "nodes": [
+            "node_modules/uuid"
+          ],
+          "fixAvailable": {
+            "name": "uuid",
+            "version": "13.0.2",
+            "isSemVerMajor": false
+          }
+        }
+      },
+      "metadata": {
+        "vulnerabilities": {
+          "info": 0,
+          "low": 0,
+          "moderate": 8,
+          "high": 3,
+          "critical": 0,
+          "total": 11
+        },
+        "dependencies": {
+          "prod": 572,
+          "dev": 216,
+          "optional": 71,
+          "peer": 2,
+          "peerOptional": 0,
+          "total": 860
+        }
+      }
+    },
+    "stderr": "npm notice\nnpm notice New major version of npm available! 10.8.2 -> 11.14.1\nnpm notice Changelog: https://github.com/npm/cli/releases/tag/v11.14.1\nnpm notice To update run: npm install -g npm@11.14.1\nnpm notice\n"
+  },
+  {
+    "label": "frontend",
+    "ok": false,
+    "code": 1,
+    "parsed": {
+      "auditReportVersion": 2,
+      "vulnerabilities": {
+        "axios": {
+          "name": "axios",
+          "severity": "high",
+          "isDirect": true,
+          "via": [
+            {
+              "source": 1117574,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios: Authentication Bypass via Prototype Pollution Gadget in `validateStatus` Merge Strategy",
+              "url": "https://github.com/advisories/GHSA-w9j2-pvgh-6h63",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-287",
+                "CWE-1321"
+              ],
+              "cvss": {
+                "score": 4.8,
+                "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:N"
+              },
+              "range": ">=1.0.0 <1.15.1"
+            },
+            {
+              "source": 1117576,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios: Incomplete Fix for CVE-2025-62718 — NO_PROXY Protection Bypassed via RFC 1122 Loopback Subnet (127.0.0.0/8) in Axios 1.15.0",
+              "url": "https://github.com/advisories/GHSA-pmwg-cvhr-8vh7",
+              "severity": "high",
+              "cwe": [
+                "CWE-183",
+                "CWE-441",
+                "CWE-918"
+              ],
+              "cvss": {
+                "score": 7.2,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:L/I:L/A:N"
+              },
+              "range": ">=1.0.0 <1.15.1"
+            },
+            {
+              "source": 1117577,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios: Invisible JSON Response Tampering via Prototype Pollution Gadget in `parseReviver`",
+              "url": "https://github.com/advisories/GHSA-3w6x-2g7m-8v23",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-915",
+                "CWE-1321"
+              ],
+              "cvss": {
+                "score": 6.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:H/A:N"
+              },
+              "range": ">=1.0.0 <1.15.2"
+            },
+            {
+              "source": 1117578,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios has prototype pollution read-side gadgets in HTTP adapter that allow credential injection and request hijacking",
+              "url": "https://github.com/advisories/GHSA-q8qp-cvcw-x6jj",
+              "severity": "high",
+              "cwe": [
+                "CWE-1321"
+              ],
+              "cvss": {
+                "score": 7.4,
+                "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N"
+              },
+              "range": ">=1.0.0 <1.15.2"
+            },
+            {
+              "source": 1117580,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios: Null Byte Injection via Reverse-Encoding in AxiosURLSearchParams",
+              "url": "https://github.com/advisories/GHSA-xhjh-pmcv-23jw",
+              "severity": "low",
+              "cwe": [
+                "CWE-116",
+                "CWE-626"
+              ],
+              "cvss": {
+                "score": 3.7,
+                "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:N"
+              },
+              "range": ">=1.0.0 <1.15.1"
+            },
+            {
+              "source": 1117581,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios: CRLF Injection in multipart/form-data body via unsanitized blob.type in formDataToStream",
+              "url": "https://github.com/advisories/GHSA-445q-vr5w-6q77",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-93"
+              ],
+              "cvss": {
+                "score": 5.3,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N"
+              },
+              "range": ">=1.0.0 <1.15.1"
+            },
+            {
+              "source": 1117583,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios: no_proxy bypass via IP alias allows SSRF",
+              "url": "https://github.com/advisories/GHSA-m7pr-hjqh-92cm",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-918"
+              ],
+              "cvss": {
+                "score": 6.8,
+                "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:C/C:H/I:N/A:N"
+              },
+              "range": ">=1.0.0 <1.15.1"
+            },
+            {
+              "source": 1117585,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios: unbounded recursion in toFormData causes DoS via deeply nested request data",
+              "url": "https://github.com/advisories/GHSA-62hf-57xw-28j9",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-674"
+              ],
+              "cvss": {
+                "score": 7.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+              },
+              "range": ">=1.0.0 <1.15.1"
+            },
+            {
+              "source": 1117587,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios' HTTP adapter-streamed uploads bypass maxBodyLength when maxRedirects: 0",
+              "url": "https://github.com/advisories/GHSA-5c9x-8gcm-mpgx",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-770"
+              ],
+              "cvss": {
+                "score": 5.3,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+              },
+              "range": ">=1.0.0 <1.15.1"
+            },
+            {
+              "source": 1117589,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios: HTTP adapter streamed responses bypass maxContentLength",
+              "url": "https://github.com/advisories/GHSA-vf2m-468p-8v99",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-770"
+              ],
+              "cvss": {
+                "score": 5.3,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+              },
+              "range": ">=1.0.0 <1.15.1"
+            },
+            {
+              "source": 1117591,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios: Prototype Pollution Gadgets - Response Tampering, Data Exfiltration, and Request Hijacking",
+              "url": "https://github.com/advisories/GHSA-pf86-5x62-jrwf",
+              "severity": "high",
+              "cwe": [
+                "CWE-1321"
+              ],
+              "cvss": {
+                "score": 7.4,
+                "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N"
+              },
+              "range": ">=1.0.0 <1.15.1"
+            },
+            {
+              "source": 1117593,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios: Header Injection via Prototype Pollution",
+              "url": "https://github.com/advisories/GHSA-6chq-wfr3-2hj9",
+              "severity": "high",
+              "cwe": [
+                "CWE-113",
+                "CWE-1321"
+              ],
+              "cvss": {
+                "score": 7.4,
+                "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N"
+              },
+              "range": ">=1.0.0 <1.15.1"
+            },
+            {
+              "source": 1117595,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios: XSRF Token Cross-Origin Leakage via Prototype Pollution Gadget in `withXSRFToken` Boolean Coercion",
+              "url": "https://github.com/advisories/GHSA-xx6v-rp6x-q39c",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-183",
+                "CWE-201"
+              ],
+              "cvss": {
+                "score": 5.4,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N"
+              },
+              "range": ">=1.0.0 <1.15.1"
+            }
+          ],
+          "effects": [],
+          "range": "1.0.0 - 1.15.1",
+          "nodes": [
+            "node_modules/axios"
+          ],
+          "fixAvailable": true
+        },
+        "brace-expansion": {
+          "name": "brace-expansion",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            {
+              "source": 1115540,
+              "name": "brace-expansion",
+              "dependency": "brace-expansion",
+              "title": "brace-expansion: Zero-step sequence causes process hang and memory exhaustion",
+              "url": "https://github.com/advisories/GHSA-f886-m6hf-6m8v",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-400"
+              ],
+              "cvss": {
+                "score": 6.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:H"
+              },
+              "range": "<1.1.13"
+            },
+            {
+              "source": 1115541,
+              "name": "brace-expansion",
+              "dependency": "brace-expansion",
+              "title": "brace-expansion: Zero-step sequence causes process hang and memory exhaustion",
+              "url": "https://github.com/advisories/GHSA-f886-m6hf-6m8v",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-400"
+              ],
+              "cvss": {
+                "score": 6.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:H"
+              },
+              "range": ">=2.0.0 <2.0.3"
+            }
+          ],
+          "effects": [],
+          "range": "<1.1.13 || >=2.0.0 <2.0.3",
+          "nodes": [
+            "frontend/node_modules/brace-expansion",
+            "frontend/node_modules/readdir-glob/node_modules/brace-expansion"
+          ],
+          "fixAvailable": true
+        },
+        "uuid": {
+          "name": "uuid",
+          "severity": "moderate",
+          "isDirect": true,
+          "via": [
+            {
+              "source": 1117635,
+              "name": "uuid",
+              "dependency": "uuid",
+              "title": "uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided",
+              "url": "https://github.com/advisories/GHSA-w5hq-g745-h8pq",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-787",
+                "CWE-1285"
+              ],
+              "cvss": {
+                "score": 0,
+                "vectorString": null
+              },
+              "range": ">=13.0.0 <13.0.1"
+            }
+          ],
+          "effects": [],
+          "range": "13.0.0",
+          "nodes": [
+            "node_modules/uuid"
+          ],
+          "fixAvailable": {
+            "name": "uuid",
+            "version": "13.0.2",
+            "isSemVerMajor": false
+          }
+        }
+      },
+      "metadata": {
+        "vulnerabilities": {
+          "info": 0,
+          "low": 0,
+          "moderate": 2,
+          "high": 1,
+          "critical": 0,
+          "total": 3
+        },
+        "dependencies": {
+          "prod": 572,
+          "dev": 216,
+          "optional": 71,
+          "peer": 2,
+          "peerOptional": 0,
+          "total": 860
+        }
+      }
+    },
+    "stderr": ""
+  },
+  {
+    "label": "backend",
+    "ok": false,
+    "code": 1,
+    "parsed": {
+      "auditReportVersion": 2,
+      "vulnerabilities": {
+        "@hono/node-server": {
+          "name": "@hono/node-server",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            {
+              "source": 1116281,
+              "name": "@hono/node-server",
+              "dependency": "@hono/node-server",
+              "title": "@hono/node-server: Middleware bypass via repeated slashes in serveStatic",
+              "url": "https://github.com/advisories/GHSA-92pp-h63x-v22m",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-22"
+              ],
+              "cvss": {
+                "score": 5.3,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"
+              },
+              "range": "<1.19.13"
+            }
+          ],
+          "effects": [
+            "@prisma/dev"
+          ],
+          "range": "<1.19.13",
+          "nodes": [
+            "node_modules/@hono/node-server"
+          ],
+          "fixAvailable": {
+            "name": "prisma",
+            "version": "6.19.3",
+            "isSemVerMajor": true
+          }
+        },
+        "@prisma/dev": {
+          "name": "@prisma/dev",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            "@hono/node-server"
+          ],
+          "effects": [
+            "prisma"
+          ],
+          "range": "*",
+          "nodes": [
+            "node_modules/@prisma/dev"
+          ],
+          "fixAvailable": {
+            "name": "prisma",
+            "version": "6.19.3",
+            "isSemVerMajor": true
+          }
+        },
+        "basic-ftp": {
+          "name": "basic-ftp",
+          "severity": "high",
+          "isDirect": false,
+          "via": [
+            {
+              "source": 1117910,
+              "name": "basic-ftp",
+              "dependency": "basic-ftp",
+              "title": "basic-ftp allows a malicious FTP server to cause client-side denial of service via unbounded multiline control response buffering",
+              "url": "https://github.com/advisories/GHSA-rpmf-866q-6p89",
+              "severity": "high",
+              "cwe": [
+                "CWE-400",
+                "CWE-770"
+              ],
+              "cvss": {
+                "score": 7.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+              },
+              "range": "<=5.3.0"
+            }
+          ],
+          "effects": [],
+          "range": "<=5.3.0",
+          "nodes": [
+            "node_modules/basic-ftp"
+          ],
+          "fixAvailable": true
+        },
+        "brace-expansion": {
+          "name": "brace-expansion",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            {
+              "source": 1115540,
+              "name": "brace-expansion",
+              "dependency": "brace-expansion",
+              "title": "brace-expansion: Zero-step sequence causes process hang and memory exhaustion",
+              "url": "https://github.com/advisories/GHSA-f886-m6hf-6m8v",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-400"
+              ],
+              "cvss": {
+                "score": 6.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:H"
+              },
+              "range": "<1.1.13"
+            }
+          ],
+          "effects": [],
+          "range": "<1.1.13",
+          "nodes": [
+            "backend/node_modules/brace-expansion"
+          ],
+          "fixAvailable": true
+        },
+        "express-rate-limit": {
+          "name": "express-rate-limit",
+          "severity": "moderate",
+          "isDirect": true,
+          "via": [
+            "ip-address"
+          ],
+          "effects": [],
+          "range": "8.0.1 - 8.5.0",
+          "nodes": [
+            "node_modules/express-rate-limit"
+          ],
+          "fixAvailable": true
+        },
+        "fast-uri": {
+          "name": "fast-uri",
+          "severity": "high",
+          "isDirect": false,
+          "via": [
+            {
+              "source": 1117870,
+              "name": "fast-uri",
+              "dependency": "fast-uri",
+              "title": "fast-uri vulnerable to path traversal via percent-encoded dot segments",
+              "url": "https://github.com/advisories/GHSA-q3j6-qgpj-74h6",
+              "severity": "high",
+              "cwe": [
+                "CWE-22"
+              ],
+              "cvss": {
+                "score": 7.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N"
+              },
+              "range": "<=3.1.0"
+            },
+            {
+              "source": 1117884,
+              "name": "fast-uri",
+              "dependency": "fast-uri",
+              "title": "fast-uri vulnerable to host confusion via percent-encoded authority delimiters",
+              "url": "https://github.com/advisories/GHSA-v39h-62p7-jpjc",
+              "severity": "high",
+              "cwe": [
+                "CWE-436"
+              ],
+              "cvss": {
+                "score": 7.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N"
+              },
+              "range": "<=3.1.1"
+            }
+          ],
+          "effects": [],
+          "range": "<=3.1.1",
+          "nodes": [
+            "node_modules/fast-uri"
+          ],
+          "fixAvailable": true
+        },
+        "hono": {
+          "name": "hono",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            {
+              "source": 1117763,
+              "name": "hono",
+              "dependency": "hono",
+              "title": "Hono: bodyLimit() can be bypassed for chunked / unknown-length requests",
+              "url": "https://github.com/advisories/GHSA-9vqf-7f2p-gf9v",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-400"
+              ],
+              "cvss": {
+                "score": 6.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N"
+              },
+              "range": "<4.12.16"
+            },
+            {
+              "source": 1117764,
+              "name": "hono",
+              "dependency": "hono",
+              "title": "hono/jsx has Unvalidated JSX Tag Names that May Allow HTML Injection",
+              "url": "https://github.com/advisories/GHSA-69xw-7hcm-h432",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-74"
+              ],
+              "cvss": {
+                "score": 4.7,
+                "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:C/C:L/I:L/A:N"
+              },
+              "range": "<4.12.16"
+            },
+            {
+              "source": 1117915,
+              "name": "hono",
+              "dependency": "hono",
+              "title": "Hono has CSS Declaration Injection via Style Object Values in JSX SSR",
+              "url": "https://github.com/advisories/GHSA-qp7p-654g-cw7p",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-74",
+                "CWE-116"
+              ],
+              "cvss": {
+                "score": 4.3,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N"
+              },
+              "range": "<4.12.18"
+            },
+            {
+              "source": 1117916,
+              "name": "hono",
+              "dependency": "hono",
+              "title": "Hono has improper validation of NumericDate claims (exp, nbf, iat) in JWT verify()",
+              "url": "https://github.com/advisories/GHSA-hm8q-7f3q-5f36",
+              "severity": "low",
+              "cwe": [
+                "CWE-1284"
+              ],
+              "cvss": {
+                "score": 3.8,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:L/I:L/A:N"
+              },
+              "range": "<4.12.18"
+            },
+            {
+              "source": 1117919,
+              "name": "hono",
+              "dependency": "hono",
+              "title": "Hono's Cache Middleware ignores Vary: Authorization / Vary: Cookie leading to cross-user cache leakage",
+              "url": "https://github.com/advisories/GHSA-p77w-8qqv-26rm",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-524"
+              ],
+              "cvss": {
+                "score": 5.3,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"
+              },
+              "range": "<4.12.18"
+            }
+          ],
+          "effects": [],
+          "range": "<=4.12.17",
+          "nodes": [
+            "node_modules/hono"
+          ],
+          "fixAvailable": true
+        },
+        "ip-address": {
+          "name": "ip-address",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            {
+              "source": 1117683,
+              "name": "ip-address",
+              "dependency": "ip-address",
+              "title": "ip-address has XSS in Address6 HTML-emitting methods",
+              "url": "https://github.com/advisories/GHSA-v2v4-37r5-5v8g",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-79"
+              ],
+              "cvss": {
+                "score": 0,
+                "vectorString": null
+              },
+              "range": "<=10.1.0"
+            }
+          ],
+          "effects": [
+            "express-rate-limit"
+          ],
+          "range": "<=10.1.0",
+          "nodes": [
+            "node_modules/ip-address"
+          ],
+          "fixAvailable": true
+        },
+        "prisma": {
+          "name": "prisma",
+          "severity": "moderate",
+          "isDirect": true,
+          "via": [
+            "@prisma/dev"
+          ],
+          "effects": [],
+          "range": ">=6.20.0-dev.1",
+          "nodes": [
+            "node_modules/prisma"
+          ],
+          "fixAvailable": {
+            "name": "prisma",
+            "version": "6.19.3",
+            "isSemVerMajor": true
+          }
+        },
+        "uuid": {
+          "name": "uuid",
+          "severity": "moderate",
+          "isDirect": true,
+          "via": [
+            {
+              "source": 1117635,
+              "name": "uuid",
+              "dependency": "uuid",
+              "title": "uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided",
+              "url": "https://github.com/advisories/GHSA-w5hq-g745-h8pq",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-787",
+                "CWE-1285"
+              ],
+              "cvss": {
+                "score": 0,
+                "vectorString": null
+              },
+              "range": ">=13.0.0 <13.0.1"
+            }
+          ],
+          "effects": [],
+          "range": "13.0.0",
+          "nodes": [
+            "node_modules/uuid"
+          ],
+          "fixAvailable": {
+            "name": "uuid",
+            "version": "13.0.2",
+            "isSemVerMajor": false
+          }
+        }
+      },
+      "metadata": {
+        "vulnerabilities": {
+          "info": 0,
+          "low": 0,
+          "moderate": 8,
+          "high": 2,
+          "critical": 0,
+          "total": 10
+        },
+        "dependencies": {
+          "prod": 572,
+          "dev": 216,
+          "optional": 71,
+          "peer": 2,
+          "peerOptional": 0,
+          "total": 860
+        }
+      }
+    },
+    "stderr": ""
+  }
+]

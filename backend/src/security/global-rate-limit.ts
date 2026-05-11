@@ -35,6 +35,9 @@ function isAuthenticatedReadPath(req: Request) {
     '/api/users/roles',
     '/api/formulations',
     '/api/opening-balances',
+    '/api/unloading-rules',
+    '/api/audit/logs',
+    '/api/audit/sessions',
   ].some((candidate) => path === candidate || path.startsWith(`${candidate}/`));
 }
 

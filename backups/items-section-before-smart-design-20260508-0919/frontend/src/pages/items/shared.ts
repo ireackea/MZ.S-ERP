@@ -15,7 +15,6 @@ export type ItemEditorForm = {
   englishName: string;
   category: string;
   unit: string;
-  packageWeight: string;
   minLimit: string;
   maxLimit: string;
   orderLimit: string;
@@ -25,7 +24,6 @@ export type ItemEditorForm = {
 export type BulkEditorForm = {
   category: string;
   unit: string;
-  packageWeight: string;
   minLimit: string;
   maxLimit: string;
   orderLimit: string;
@@ -71,7 +69,6 @@ export const EMPTY_FORM: ItemEditorForm = {
   englishName: '',
   category: '',
   unit: '',
-  packageWeight: '',
   minLimit: '0',
   maxLimit: '1000',
   orderLimit: '',
@@ -81,7 +78,6 @@ export const EMPTY_FORM: ItemEditorForm = {
 export const EMPTY_BULK_FORM: BulkEditorForm = {
   category: '',
   unit: '',
-  packageWeight: '',
   minLimit: '',
   maxLimit: '',
   orderLimit: '',

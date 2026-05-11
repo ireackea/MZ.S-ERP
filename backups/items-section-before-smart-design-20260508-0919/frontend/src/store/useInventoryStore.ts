@@ -667,7 +667,6 @@ const openingBalanceSyncInFlight = new Map<number, Promise<OpeningBalanceSyncRes
 // مما رصدناه كـ 13 req/min على /api/users. النمط مطابق لـ openingBalanceSyncInFlight.
 type UsersAndRolesResult = { users: ReturnType<typeof mapUserDto>[]; roles: ReturnType<typeof mapRoleDto>[] };
 let usersAndRolesInFlight: Promise<UsersAndRolesResult> | null = null;
-let unloadingRulesInFlight: Promise<UnloadingRule[]> | null = null;
 
 const syncUsersAndRolesFromServer = async (): Promise<UsersAndRolesResult> => {
   if (usersAndRolesInFlight) return usersAndRolesInFlight;
@@ -688,20 +687,6 @@ const syncUsersAndRolesFromServer = async (): Promise<UsersAndRolesResult> => {
   })();
 
   return usersAndRolesInFlight;
-};
-
-const syncUnloadingRulesFromServer = async (): Promise<UnloadingRule[]> => {
-  if (unloadingRulesInFlight) return unloadingRulesInFlight;
-
-  unloadingRulesInFlight = (async () => {
-    try {
-      return await fetchUnloadingRules();
-    } finally {
-      unloadingRulesInFlight = null;
-    }
-  })();
-
-  return unloadingRulesInFlight;
 };
 
 const shouldReload = (loadedAt: number | null, options?: LoaderOptions) => {
@@ -922,7 +907,7 @@ export const useInventoryStore = create<Store>()(
 
         set({ syncing: true, error: null });
         try {
-          const unloadingRules = await syncUnloadingRulesFromServer();
+          const unloadingRules = await fetchUnloadingRules();
           const loadedAt = Date.now();
           set({
             unloadingRules: normalizeUnloadingRulesCollection(unloadingRules),
@@ -947,7 +932,6 @@ export const useInventoryStore = create<Store>()(
         const shouldLoadUsers = target === 'all' || target === 'users';
         const shouldLoadFormulas = target === 'all' || target === 'formulas';
         const shouldLoadUnloadingRules = target === 'all' || target === 'unloadingRules';
-        const shouldFetchUnloadingRules = shouldLoadUnloadingRules && shouldReload(get().unloadingRulesLoadedAt, { staleMs: DEFAULT_LOADER_STALE_MS });
 
         // لماذا: دمجنا syncUsersFromServer + syncRolesFromServer في syncUsersAndRolesFromServer
         // الواحدة لتشترك في الـ single-flight guard وتُصدر طلبَي HTTP معًا في Promise.all
@@ -964,7 +948,7 @@ export const useInventoryStore = create<Store>()(
             ? syncUsersAndRolesFromServer()
             : Promise.resolve(null),
           shouldLoadFormulas ? syncFormulasFromServer() : Promise.resolve(null),
-          shouldFetchUnloadingRules ? syncUnloadingRulesFromServer() : Promise.resolve(null),
+          shouldLoadUnloadingRules ? fetchUnloadingRules() : Promise.resolve(null),
         ]);
 
         const current = get();
@@ -992,7 +976,7 @@ export const useInventoryStore = create<Store>()(
         const nextFormulas = shouldLoadFormulas && formulasResult.status === 'fulfilled' && Array.isArray(formulasResult.value)
           ? formulasResult.value
           : current.formulas;
-        const nextUnloadingRules = shouldFetchUnloadingRules && unloadingRulesResult.status === 'fulfilled' && Array.isArray(unloadingRulesResult.value)
+        const nextUnloadingRules = shouldLoadUnloadingRules && unloadingRulesResult.status === 'fulfilled' && Array.isArray(unloadingRulesResult.value)
           ? normalizeUnloadingRulesCollection(unloadingRulesResult.value)
           : current.unloadingRules;
 
@@ -1003,7 +987,7 @@ export const useInventoryStore = create<Store>()(
           shouldLoadOpeningBalances ? openingBalancesResult : null,
           shouldLoadUsers ? usersAndRolesResult : null,
           shouldLoadFormulas ? formulasResult : null,
-          shouldFetchUnloadingRules ? unloadingRulesResult : null,
+          shouldLoadUnloadingRules ? unloadingRulesResult : null,
         ].flatMap((result) => (result && result.status === 'rejected' ? [result] : []));
 
         set({
@@ -1031,7 +1015,7 @@ export const useInventoryStore = create<Store>()(
           usersAndRolesLoadedAt: shouldLoadUsers && usersAndRolesResult.status === 'fulfilled' && usersAndRolesResult.value !== null
             ? Date.now()
             : current.usersAndRolesLoadedAt,
-          unloadingRulesLoadedAt: shouldFetchUnloadingRules && unloadingRulesResult.status === 'fulfilled' ? Date.now() : current.unloadingRulesLoadedAt,
+          unloadingRulesLoadedAt: shouldLoadUnloadingRules && unloadingRulesResult.status === 'fulfilled' ? Date.now() : current.unloadingRulesLoadedAt,
           formulasLoadedAt: shouldLoadFormulas && formulasResult.status === 'fulfilled' ? Date.now() : current.formulasLoadedAt,
         });
       },
@@ -1100,7 +1084,7 @@ export const useInventoryStore = create<Store>()(
       },
 
       setUnloadingRules: (rules) => {
-        set({ unloadingRules: normalizeUnloadingRulesCollection(rules), unloadingRulesLoadedAt: Date.now() });
+        set({ unloadingRules: normalizeUnloadingRulesCollection(rules) });
       },
 
       setReportConfig: (config) => {

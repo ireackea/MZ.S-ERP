@@ -1,7 +1,6 @@
 import React from 'react';
 import SettingsPage from '../modules/settings/pages/Settings';
 import type {
-  AuditLog,
   OperationAppearance,
   ReportColumnConfig,
   SystemSettings,
@@ -38,7 +37,6 @@ export interface SettingsProps {
   onUpdateUnloadingRule: (rule: UnloadingRule) => void;
   allItems: unknown[];
   allTransactions: unknown[];
-  auditLogs?: AuditLog[];
   currentUser?: User;
   onSwitchUser?: (userId: string) => void;
 }
@@ -50,7 +48,6 @@ const Settings: React.FC<SettingsProps> = ({
   onUpdateReportConfig,
   openingBalanceReportConfig,
   onUpdateOpeningBalanceReportConfig,
-  auditLogs = [],
   currentUser,
 }) => (
   <SettingsPage
@@ -60,7 +57,6 @@ const Settings: React.FC<SettingsProps> = ({
     onUpdateReportConfig={onUpdateReportConfig}
     openingBalanceReportConfig={openingBalanceReportConfig}
     onUpdateOpeningBalanceReportConfig={onUpdateOpeningBalanceReportConfig}
-    auditLogs={auditLogs}
     currentUser={currentUser}
   />
 );

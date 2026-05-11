@@ -3,7 +3,7 @@
 // ENTERPRISE FIX: Phase 3 Duplication Cleanup - Archive Only - 2026-03-26
 // All legacy files archived in _ARCHIVE_DUPLICATION_CLEANUP_2026-03-26/
 // ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { Clock, Shield, ShieldAlert, User, Filter, RefreshCcw, Download, Calendar } from 'lucide-react';
 import { usePermissions } from '@hooks/usePermissions';
 import apiClient from '@api/client';
@@ -36,10 +36,43 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ forceAccess = false }) => {
   const [dateRangeEnd, setDateRangeEnd] = useState<string>('');
   const [isExporting, setIsExporting] = useState(false);
   const logsRef = useRef<AuditLogEntry[]>([]);
+  const lastLoadedAtRef = useRef(0);
+  const loadInFlightRef = useRef<Promise<void> | null>(null);
+
+  const loadAuditLogs = useCallback(async (options?: { force?: boolean; background?: boolean }) => {
+    const now = Date.now();
+    if (!options?.force && now - lastLoadedAtRef.current < 30_000) {
+      return;
+    }
+
+    if (loadInFlightRef.current) {
+      return loadInFlightRef.current;
+    }
+
+    loadInFlightRef.current = (async () => {
+      try {
+        if (!options?.background) setLoading(true);
+        const response = await apiClient.get('/audit/logs', {
+          params: { limit: 500 }
+        });
+        setLogs(Array.isArray(response.data) ? response.data : []);
+        setError(null);
+        lastLoadedAtRef.current = Date.now();
+      } catch (error: any) {
+        console.error('Failed to load audit logs:', error);
+        setError('فشل تحميل سجلات التدقيق');
+      } finally {
+        setLoading(false);
+        loadInFlightRef.current = null;
+      }
+    })();
+
+    return loadInFlightRef.current;
+  }, []);
 
   useEffect(() => {
-    loadAuditLogs();
-  }, []);
+    void loadAuditLogs({ force: true });
+  }, [loadAuditLogs]);
 
   // Phase 6: Real-time Sync for Audit Logs
   useEffect(() => {
@@ -48,28 +81,12 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ forceAccess = false }) => {
     // Listen for real-time updates
     const handleAuditUpdate = (event: CustomEvent) => {
       console.log('[AuditLogs] Real-time update received:', event.detail);
-      loadAuditLogs(); // Reload logs on real-time update
+      void loadAuditLogs({ background: true });
     };
 
     window.addEventListener('audit-log-updated' as any, handleAuditUpdate);
     return () => window.removeEventListener('audit-log-updated' as any, handleAuditUpdate);
-  }, [logs]);
-
-  const loadAuditLogs = async () => {
-    try {
-      setLoading(true);
-      const response = await apiClient.get('/audit/logs', {
-        params: { limit: 500 }
-      });
-      setLogs(response.data || []);
-      setError(null);
-    } catch (error: any) {
-      console.error('Failed to load audit logs:', error);
-      setError('فشل تحميل سجلات التدقيق');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [loadAuditLogs]);
 
   // Phase 6: Export to CSV
   const exportToCSV = async () => {
@@ -146,7 +163,7 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ forceAccess = false }) => {
           <p className="text-xs text-slate-500 mt-1">سجل غير قابل للتعديل لجميع العمليات الحساسة في النظام.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={loadAuditLogs} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100">
+          <button onClick={() => void loadAuditLogs({ force: true })} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100">
             <RefreshCcw size={14} />
             تحديث
           </button>

@@ -11,14 +11,12 @@ import {
   bulkImportFromExcel,
   generateMissingCodes,
   getItems as getItemsFromApi,
-  parseExcelFileWithInsights,
+  parseExcelFile,
   uploadItemAttachment,
-  type ExcelImportParseResult,
   type ExcelImportRow,
 } from '@services/itemsService';
-import ItemsSmartCatalog from './ItemsSmartCatalog';
+import ItemsCatalog from './ItemsCatalog';
 import ItemsDialogs from './ItemsDialogs';
-import ItemImportStudio from './import/ItemImportStudio';
 import {
   EMPTY_BULK_FORM,
   EMPTY_FORM,
@@ -33,6 +31,7 @@ import {
   type PendingActionMode,
   type PendingActionState,
   type StatusFilter,
+  type ViewMode,
 } from './shared';
 
 const ItemsPageContent: React.FC = () => {
@@ -75,6 +74,7 @@ const ItemsPageContent: React.FC = () => {
   const canExportExcel = hasPermission('inventory.export.stock') || hasPermission('reports.export.general') || hasPermission('items.*');
   const canPrint = hasPermission('reports.generate') || hasPermission('reports.*') || hasPermission('items.*');
 
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -87,7 +87,7 @@ const ItemsPageContent: React.FC = () => {
   const [barcodeMode, setBarcodeMode] = useState(false);
   const [barcodeInput, setBarcodeInput] = useState('');
   const [importOpen, setImportOpen] = useState(false);
-  const [importParseResult, setImportParseResult] = useState<ExcelImportParseResult | null>(null);
+  const [importRows, setImportRows] = useState<ExcelImportRow[]>([]);
   const [importSourceFileName, setImportSourceFileName] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -208,7 +208,6 @@ const ItemsPageContent: React.FC = () => {
       englishName: item.englishName || '',
       category: item.category,
       unit: item.unit,
-      packageWeight: item.packageWeight == null ? '' : String(n(item.packageWeight, 0)),
       minLimit: String(n(item.minLimit, 0)),
       maxLimit: String(n(item.maxLimit, 1000)),
       orderLimit: item.orderLimit == null ? '' : String(n(item.orderLimit, 0)),
@@ -279,7 +278,6 @@ const ItemsPageContent: React.FC = () => {
       englishName: normalizedEnglishName || undefined,
       category: normalizedCategory,
       unit: normalizedUnit,
-      packageWeight: form.packageWeight.trim() ? n(form.packageWeight, 0) : undefined,
       minLimit: n(form.minLimit, 0),
       maxLimit: n(form.maxLimit, 1000),
       orderLimit: form.orderLimit.trim() ? n(form.orderLimit, 0) : undefined,
@@ -305,7 +303,6 @@ const ItemsPageContent: React.FC = () => {
     const patch: Partial<Item> = {};
     if (bulk.category.trim()) patch.category = bulk.category.trim();
     if (bulk.unit.trim()) patch.unit = bulk.unit.trim();
-    if (bulk.packageWeight.trim()) patch.packageWeight = n(bulk.packageWeight, 0);
     if (bulk.minLimit.trim()) patch.minLimit = n(bulk.minLimit, 0);
     if (bulk.maxLimit.trim()) patch.maxLimit = n(bulk.maxLimit, 1000);
     if (bulk.orderLimit.trim()) patch.orderLimit = n(bulk.orderLimit, 0);
@@ -507,11 +504,11 @@ const ItemsPageContent: React.FC = () => {
     if (!file) return;
 
     try {
-      const parsedItems = await parseExcelFileWithInsights(file);
-      setImportParseResult(parsedItems);
+      const parsedItems = await parseExcelFile(file);
+      setImportRows(parsedItems);
       setImportSourceFileName(file.name);
       setImportOpen(true);
-      toast.success(`تم تحميل ${parsedItems.rows.length} صف من الملف`);
+      toast.success(`تم تحميل ${parsedItems.length} صنف من الملف`);
     } catch (importError: any) {
       toast.error(importError?.message || 'فشل قراءة ملف Excel');
     } finally {
@@ -519,19 +516,21 @@ const ItemsPageContent: React.FC = () => {
     }
   };
 
-  const handleConfirmImport = async (rowsToImport: ExcelImportRow[]) => {
-    if (!rowsToImport.length) return;
+  const handleConfirmImport = async () => {
+    if (!importRows.length) return;
 
     try {
       setIsImporting(true);
-      const result = await bulkImportFromExcel(rowsToImport);
+      const result = await bulkImportFromExcel(importRows);
       toast.success(`تم تنفيذ الاستيراد: ${result.success} صف ناجح، ${result.failed} مرفوض`);
 
       if (result.errors.length > 0) {
         toast.warning(`أخطاء: ${result.errors.map((entry) => `صف ${entry.row}: ${entry.error}`).join(', ')}`);
       }
 
-        closeImportModal();
+      setImportOpen(false);
+      setImportRows([]);
+  setImportSourceFileName('');
       await refreshItemsPage();
       logUserActivity({ userId: actorId, userName: actorName, event: 'data_import', details: `استيراد ${result.success} صنف من Excel` });
     } catch (importError: any) {
@@ -578,7 +577,7 @@ const ItemsPageContent: React.FC = () => {
 
   const closeImportModal = () => {
     setImportOpen(false);
-    setImportParseResult(null);
+    setImportRows([]);
     setImportSourceFileName('');
   };
 
@@ -593,7 +592,7 @@ const ItemsPageContent: React.FC = () => {
 
   return (
     <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <ItemsSmartCatalog
+      <ItemsCatalog
         stats={stats}
         canImport={canImport}
         canExportExcel={canExportExcel}
@@ -625,6 +624,8 @@ const ItemsPageContent: React.FC = () => {
         onToggleBarcodeMode={toggleBarcodeMode}
         onFileImport={(event) => { void handleFileImport(event); }}
         onGenerateCodes={() => { void handleGenerateCodes(); }}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
         selectedCount={selected.size}
         onOpenBulk={() => setBulkOpen(true)}
         onOpenPendingAction={openPendingAction}
@@ -646,18 +647,6 @@ const ItemsPageContent: React.FC = () => {
         onBarcodeSubmit={handleBarcodeSubmit}
       />
 
-      <ItemImportStudio
-        open={importOpen}
-        fileName={importSourceFileName}
-        rows={importParseResult?.rows || []}
-        sourceHeaders={importParseResult?.sourceHeaders || []}
-        columnMatches={importParseResult?.columnMatches || []}
-        existingItems={items}
-        isImporting={isImporting}
-        onClose={closeImportModal}
-        onConfirm={(rowsToImport) => { void handleConfirmImport(rowsToImport); }}
-      />
-
       <ItemsDialogs
         formOpen={formOpen}
         form={form}
@@ -672,6 +661,12 @@ const ItemsPageContent: React.FC = () => {
         onApplyBulk={() => { void applyBulk(); }}
         onCloseBulk={() => setBulkOpen(false)}
         selectedCount={selected.size}
+        importRows={importRows}
+        importSourceFileName={importSourceFileName}
+        importOpen={importOpen}
+        isImporting={isImporting}
+        onCloseImport={closeImportModal}
+        onConfirmImport={() => { void handleConfirmImport(); }}
         uploadOpen={uploadOpen}
         uploadItemName={uploadItemName}
         uploadType={uploadType}

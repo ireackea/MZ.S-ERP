@@ -1,0 +1,202 @@
+{
+  "generatedAt": "2026-05-09T21:29:28.169Z",
+  "totalFiles": 507,
+  "sourceFiles": 319,
+  "categories": {
+    "frontend": 162,
+    "backend": 112,
+    "controllers": 18,
+    "dtoAndValidation": 31,
+    "prisma": 1,
+    "configs": 12,
+    "tests": 19
+  },
+  "giantComponents": [
+    {
+      "path": "frontend/src/components/DailyOperations.tsx",
+      "lines": 4071
+    },
+    {
+      "path": "frontend/src/components/UnifiedIAM.tsx",
+      "lines": 944
+    },
+    {
+      "path": "frontend/src/App.tsx",
+      "lines": 793
+    },
+    {
+      "path": "frontend/src/modules/settings/components/ReferenceDataSettings.tsx",
+      "lines": 753
+    },
+    {
+      "path": "frontend/src/components/BackupCenter.tsx",
+      "lines": 695
+    },
+    {
+      "path": "frontend/src/pages/items/ItemsPageContent.tsx",
+      "lines": 690
+    },
+    {
+      "path": "frontend/src/modules/settings/components/SystemReset.tsx",
+      "lines": 685
+    },
+    {
+      "path": "frontend/src/components/Statement.tsx",
+      "lines": 648
+    },
+    {
+      "path": "frontend/src/components/StockCardReport.tsx",
+      "lines": 648
+    },
+    {
+      "path": "frontend/src/components/OpeningBalancePage.tsx",
+      "lines": 639
+    },
+    {
+      "path": "frontend/src/components/ItemForm.tsx",
+      "lines": 598
+    },
+    {
+      "path": "frontend/src/components/Reports.tsx",
+      "lines": 582
+    },
+    {
+      "path": "frontend/src/pages/items/ItemsSmartCatalog.tsx",
+      "lines": 555
+    },
+    {
+      "path": "frontend/src/components/StockBalances.tsx",
+      "lines": 508
+    },
+    {
+      "path": "frontend/src/components/FormulationForm.tsx",
+      "lines": 497
+    }
+  ],
+  "topLevelEntries": [
+    {
+      "name": ".dockerignore",
+      "type": "file"
+    },
+    {
+      "name": ".editorconfig",
+      "type": "file"
+    },
+    {
+      "name": ".env",
+      "type": "file"
+    },
+    {
+      "name": ".env.example",
+      "type": "file"
+    },
+    {
+      "name": ".gitattributes",
+      "type": "file"
+    },
+    {
+      "name": ".github",
+      "type": "directory"
+    },
+    {
+      "name": ".gitignore",
+      "type": "file"
+    },
+    {
+      "name": ".gitkeep",
+      "type": "file"
+    },
+    {
+      "name": "MZ.S-ERP.code-workspace",
+      "type": "file"
+    },
+    {
+      "name": "OPERATIONS.md",
+      "type": "file"
+    },
+    {
+      "name": "START_MZS_ERP_OFFICIAL.bat",
+      "type": "file"
+    },
+    {
+      "name": "backend",
+      "type": "directory"
+    },
+    {
+      "name": "build.log",
+      "type": "file"
+    },
+    {
+      "name": "copilot.exe",
+      "type": "file"
+    },
+    {
+      "name": "docker-compose.prod.yml",
+      "type": "file"
+    },
+    {
+      "name": "docker-compose.yml",
+      "type": "file"
+    },
+    {
+      "name": "frontend",
+      "type": "directory"
+    },
+    {
+      "name": "logs",
+      "type": "directory"
+    },
+    {
+      "name": "nginx.prod.conf",
+      "type": "file"
+    },
+    {
+      "name": "package-lock.json",
+      "type": "file"
+    },
+    {
+      "name": "package.json",
+      "type": "file"
+    },
+    {
+      "name": "prisma.config.js",
+      "type": "file"
+    },
+    {
+      "name": "prisma.config.mjs",
+      "type": "file"
+    },
+    {
+      "name": "prisma.config.ts",
+      "type": "file"
+    },
+    {
+      "name": "scripts",
+      "type": "directory"
+    },
+    {
+      "name": "start-mzs-erp-safe.ps1",
+      "type": "file"
+    },
+    {
+      "name": "stop-mzs-erp-safe.ps1",
+      "type": "file"
+    },
+    {
+      "name": "tests",
+      "type": "directory"
+    },
+    {
+      "name": "رصيد بداية المدة.xlsx",
+      "type": "file"
+    },
+    {
+      "name": "نموذج الأصناف.xlsx",
+      "type": "file"
+    },
+    {
+      "name": "نموذج وحدات القياس وقواعد التفريغ.xlsx",
+      "type": "file"
+    }
+  ]
+}

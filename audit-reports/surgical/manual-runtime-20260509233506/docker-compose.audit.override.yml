@@ -1,0 +1,10 @@
+services:
+  postgres:
+    ports: !override
+      - "35781:5432"
+  backend:
+    ports: !override
+      - "33059:3001"
+    environment:
+      AUTH_COOKIE_SECURE: "false"
+      NODE_ENV: production

@@ -8,23 +8,6 @@ export interface GridModuleDefinition {
 
 export const GRID_MODULE_DEFINITIONS: GridModuleDefinition[] = [
   {
-    key: 'items_catalog',
-    label: 'شبكة بيانات الأصناف',
-    columns: [
-      { key: 'select', label: 'تحديد', visible: true, order: 0, width: 64, frozen: true, locked: true },
-      { key: 'rowNumber', label: '#', visible: true, order: 1, width: 64, frozen: true },
-      { key: 'identity', label: 'هوية الصنف', visible: true, order: 2, width: 280, frozen: true, locked: true },
-      { key: 'category', label: 'القسم', visible: true, order: 3, width: 150, frozen: false },
-      { key: 'unit', label: 'الوحدة', visible: true, order: 4, width: 110, frozen: false },
-      { key: 'stock', label: 'الرصيد', visible: true, order: 5, width: 130, frozen: false },
-      { key: 'limits', label: 'الحدود', visible: true, order: 6, width: 220, frozen: false },
-      { key: 'packageWeight', label: 'وزن العبوة', visible: true, order: 7, width: 130, frozen: false },
-      { key: 'dataQuality', label: 'جودة البيانات', visible: true, order: 8, width: 150, frozen: false },
-      { key: 'status', label: 'الحالة', visible: true, order: 9, width: 130, frozen: false },
-      { key: 'actions', label: 'إجراءات', visible: true, order: 10, width: 170, frozen: true, locked: true },
-    ],
-  },
-  {
     key: 'statement_grid',
     label: 'كشف الحركة المتقدم',
     columns: [

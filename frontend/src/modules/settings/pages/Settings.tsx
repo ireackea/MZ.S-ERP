@@ -6,7 +6,7 @@ import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { DatabaseBackup, FileText, Globe2, LayoutGrid, Package, RefreshCcw, Settings2, Shield, Users } from 'lucide-react';
 import { usePermissions } from '@hooks/usePermissions';
 import { hasGrantedPermission } from '@services/permissionAliases';
-import type { AuditLog, ReportColumnConfig, SystemSettings, User } from '../../../types';
+import type { ReportColumnConfig, SystemSettings, User } from '../../../types';
 
 const GeneralSettings = lazy(() => import('../components/GeneralSettings'));
 const ReferenceDataSettings = lazy(() => import('../components/ReferenceDataSettings'));
@@ -26,7 +26,6 @@ interface SettingsPageProps {
   onUpdateReportConfig: (config: ReportColumnConfig[]) => void;
   openingBalanceReportConfig: ReportColumnConfig[];
   onUpdateOpeningBalanceReportConfig: (config: ReportColumnConfig[]) => void;
-  auditLogs?: AuditLog[];
   currentUser?: User;
 }
 
@@ -88,7 +87,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   onUpdateReportConfig,
   openingBalanceReportConfig,
   onUpdateOpeningBalanceReportConfig,
-  auditLogs = [],
   currentUser,
 }) => {
   const { hasPermission, permissions } = usePermissions();

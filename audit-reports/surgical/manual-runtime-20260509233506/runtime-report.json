@@ -1,0 +1,60 @@
+{
+  "stage": "runtime",
+  "generatedAt": "2026-05-09T21:35:58.661Z",
+  "backendBaseUrl": "http://host.docker.internal:33059",
+  "allowedOrigin": "http://localhost:34681",
+  "checks": [
+    {
+      "name": "health-endpoint",
+      "ok": true,
+      "status": 200,
+      "payloadStatus": "healthy"
+    },
+    {
+      "name": "metrics-auth-without-token",
+      "ok": true,
+      "status": 401
+    },
+    {
+      "name": "metrics-auth-with-token",
+      "ok": true,
+      "status": 200
+    },
+    {
+      "name": "cors-allowed-origin",
+      "ok": true,
+      "header": "http://localhost:34681"
+    },
+    {
+      "name": "cors-denied-origin",
+      "ok": true,
+      "header": "",
+      "status": 500
+    },
+    {
+      "name": "protected-endpoint-without-session",
+      "ok": true,
+      "status": 401
+    },
+    {
+      "name": "auth-cookie-flags",
+      "ok": true,
+      "status": 201,
+      "cookie": "feed_factory_jwt=<redacted>; Max-Age=86400; Path=/; Expires=Sun, 10 May 2026 21:35:54 GMT; HttpOnly; SameSite=Strict"
+    },
+    {
+      "name": "socket-rejects-anonymous-connection",
+      "ok": true,
+      "connected": false,
+      "error": "Unauthorized"
+    },
+    {
+      "name": "socket-rejects-disallowed-origin",
+      "ok": true,
+      "connected": false,
+      "error": "websocket error"
+    }
+  ],
+  "findings": []
+}
+

@@ -2,7 +2,7 @@
 // ENTERPRISE FIX: Exact Legacy UI Restoration - 2026-02-27
 // ENTERPRISE FIX: Server-First Sync + Optimistic UI - 2026-02-28
 import apiClient from '@api/client';
-import { createExcelWorkbook } from '../utils/exceljs';
+import Fuse from 'fuse.js';
 import { readFirstWorksheetRows } from '../utils/excelWorkbook';
 
 export interface ItemDto {
@@ -241,6 +241,23 @@ export interface ExcelImportRow {
   description?: string;
 }
 
+export type ExcelImportFieldKey = keyof Omit<ExcelImportRow, 'sourceRow'>;
+
+export interface ExcelImportColumnMatch {
+  field: ExcelImportFieldKey;
+  label: string;
+  header: string;
+  confidence: number;
+  strategy: 'exact' | 'fuzzy' | 'missing';
+}
+
+export interface ExcelImportParseResult {
+  rows: ExcelImportRow[];
+  sourceHeaders: string[];
+  columnMatches: ExcelImportColumnMatch[];
+  skippedEmptyRows: number;
+}
+
 export type ItemImportIssue = {
   row: number;
   field: string;
@@ -271,6 +288,103 @@ export const bulkImportFromExcel = async (items: ExcelImportRow[]): Promise<Exce
   }
 };
 
+const normalizeArabicDigits = (value: string) => value
+  .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
+  .replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)));
+
+const normalizeImportText = (value: string) => normalizeArabicDigits(value)
+  .normalize('NFKD')
+  .replace(/[\u064B-\u065F\u0670]/g, '')
+  .replace(/[إأآا]/g, 'ا')
+  .replace(/ى/g, 'ي')
+  .replace(/ة/g, 'ه')
+  .replace(/[^\p{L}\p{N}]+/gu, '')
+  .toLowerCase();
+
+const parseImportNumber = (value: unknown) => {
+  if (value == null || value === '') return undefined;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const normalized = normalizeArabicDigits(String(value))
+    .replace(/,/g, '')
+    .replace(/٫/g, '.')
+    .replace(/٬/g, '')
+    .trim();
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const IMPORT_FIELD_DEFINITIONS: Array<{ field: ExcelImportFieldKey; label: string; aliases: string[] }> = [
+  { field: 'name', label: 'اسم الصنف', aliases: ['name', 'item name', 'itemname', 'product name', 'اسم الصنف', 'الصنف', 'المادة', 'اسم المادة', 'اسم المنتج', 'الوصف العربي'] },
+  { field: 'code', label: 'كود الصنف', aliases: ['code', 'item code', 'itemcode', 'sku', 'كود', 'الكود', 'كود الصنف', 'رقم الصنف', 'رمز الصنف'] },
+  { field: 'barcode', label: 'الباركود', aliases: ['barcode', 'bar code', 'ean', 'upc', 'الباركود', 'باركود', 'رقم الباركود'] },
+  { field: 'englishName', label: 'الاسم الإنجليزي', aliases: ['english name', 'englishname', 'english', 'description en', 'الاسم الانجليزي', 'الاسم الإنجليزي', 'الاسم الانجليزى'] },
+  { field: 'description', label: 'الوصف', aliases: ['description', 'desc', 'notes', 'الوصف', 'ملاحظات', 'بيان'] },
+  { field: 'category', label: 'القسم', aliases: ['category', 'group', 'department', 'section', 'الفئة', 'التصنيف', 'القسم', 'المجموعة', 'البند'] },
+  { field: 'unit', label: 'الوحدة', aliases: ['unit', 'uom', 'unit of measure', 'الوحدة', 'وحدة', 'وحدة القياس'] },
+  { field: 'packageWeight', label: 'وزن العبوة', aliases: ['package weight', 'packageweight', 'pack weight', 'weight', 'وزن العبوة', 'وزن العبوه', 'وزن', 'وزن الشكارة'] },
+  { field: 'minLimit', label: 'الحد الأدنى', aliases: ['min limit', 'minlimit', 'minimum', 'min', 'الحد الأدنى', 'الحد الادنى', 'حد ادنى', 'حد أدنى'] },
+  { field: 'maxLimit', label: 'الحد الأعلى', aliases: ['max limit', 'maxlimit', 'maximum', 'max', 'الحد الأعلى', 'الحد الاعلى', 'الحد الأقصى', 'الحد الاقصى'] },
+  { field: 'orderLimit', label: 'حد إعادة الطلب', aliases: ['order limit', 'orderlimit', 'reorder limit', 'reorder', 'حد الطلب', 'حد إعادة الطلب', 'حد اعادة الطلب'] },
+  { field: 'currentStock', label: 'الرصيد الحالي', aliases: ['current stock', 'currentstock', 'stock', 'quantity', 'qty', 'balance', 'الكمية', 'الكمية الحالية', 'الرصيد', 'الرصيد الحالي'] },
+];
+
+const resolveImportColumnMatches = (headers: string[]): ExcelImportColumnMatch[] => {
+  const normalizedHeaders = headers
+    .map((header) => ({ header, normalized: normalizeImportText(header) }))
+    .filter((entry) => entry.normalized);
+
+  const aliasRows = IMPORT_FIELD_DEFINITIONS.flatMap((definition) =>
+    definition.aliases.map((alias) => ({
+      field: definition.field,
+      label: definition.label,
+      alias,
+      normalizedAlias: normalizeImportText(alias),
+    })),
+  );
+  const fuse = new Fuse(aliasRows, {
+    keys: ['normalizedAlias'],
+    threshold: 0.34,
+    distance: 80,
+    includeScore: true,
+  });
+
+  const bestByField = new Map<ExcelImportFieldKey, ExcelImportColumnMatch>();
+  const usedHeaders = new Set<string>();
+
+  normalizedHeaders.forEach(({ header, normalized }) => {
+    const exact = aliasRows.find((entry) => entry.normalizedAlias === normalized);
+    const match = exact
+      ? { field: exact.field, label: exact.label, header, confidence: 0.99, strategy: 'exact' as const }
+      : (() => {
+          const result = fuse.search(normalized, { limit: 1 })[0];
+          if (!result || result.score == null || result.score > 0.34) return null;
+          return {
+            field: result.item.field,
+            label: result.item.label,
+            header,
+            confidence: Math.max(0.52, Math.min(0.94, 1 - result.score)),
+            strategy: 'fuzzy' as const,
+          };
+        })();
+
+    if (!match || usedHeaders.has(header)) return;
+    const current = bestByField.get(match.field);
+    if (!current || match.confidence > current.confidence) {
+      if (current) usedHeaders.delete(current.header);
+      bestByField.set(match.field, match);
+      usedHeaders.add(header);
+    }
+  });
+
+  return IMPORT_FIELD_DEFINITIONS.map((definition) => bestByField.get(definition.field) || ({
+    field: definition.field,
+    label: definition.label,
+    header: '',
+    confidence: 0,
+    strategy: 'missing' as const,
+  }));
+};
+
 // Phase 5: Upload Attachment
 export const uploadItemAttachment = async (
   publicId: string,
@@ -290,55 +404,60 @@ export const uploadItemAttachment = async (
 };
 
 // Phase 5: Parse Excel File
-export const parseExcelFile = async (file: File): Promise<ExcelImportRow[]> => {
+export const parseExcelFileWithInsights = async (file: File): Promise<ExcelImportParseResult> => {
   const rows = await readFirstWorksheetRows(file);
   const items: ExcelImportRow[] = [];
-  const normalizeHeader = (header: string) => header.replace(/[\s_-]+/g, '').toLowerCase();
-  const readString = (row: Record<string, unknown>, headers: string[]) => {
-    for (const header of headers) {
-      const value = row[header];
-      if (value == null) continue;
-      const normalized = String(value).trim();
-      if (normalized) return normalized;
-    }
+  let skippedEmptyRows = 0;
+  const sourceHeaders = Array.from(rows.reduce((headers, row) => {
+    Object.keys(row).forEach((header) => headers.add(header));
+    return headers;
+  }, new Set<string>()));
+  const columnMatches = resolveImportColumnMatches(sourceHeaders);
+  const activeMatches = columnMatches.filter((match) => match.header);
+
+  const readString = (row: Record<string, unknown>, field: ExcelImportFieldKey) => {
+    const match = activeMatches.find((entry) => entry.field === field);
+    if (!match) return '';
+    const value = row[match.header];
+    if (value == null) return '';
+    const normalized = String(value).trim();
+    if (normalized) return normalized;
     return '';
   };
-  const readNumber = (row: Record<string, unknown>, headers: string[]) => {
-    for (const header of headers) {
-      const value = row[header];
-      const parsed = Number(value);
-      if (Number.isFinite(parsed)) return parsed;
-    }
-    return undefined;
+  const readNumber = (row: Record<string, unknown>, field: ExcelImportFieldKey) => {
+    const match = activeMatches.find((entry) => entry.field === field);
+    return match ? parseImportNumber(row[match.header]) : undefined;
   };
 
   rows.forEach((rawRow, index) => {
-    const normalizedRow = Object.entries(rawRow).reduce<Record<string, unknown>>((result, [header, value]) => {
-      result[normalizeHeader(header)] = value;
-      return result;
-    }, {});
-
     const item: ExcelImportRow = {
       sourceRow: index + 2,
-      name: readString(normalizedRow, ['name', 'itemname', 'الاسم', 'اسمالصنف', 'الصنف']),
-      code: readString(normalizedRow, ['code', 'itemcode', 'الكود', 'كود', 'كودالصنف']) || undefined,
-      barcode: readString(normalizedRow, ['barcode', 'الباركود']) || undefined,
-      englishName: readString(normalizedRow, ['englishname', 'english', 'الاسمالانجليزي', 'الاسمالإنجليزي', 'الاسمالانجليزى', 'الاسمالإنجليزى']) || undefined,
-      category: readString(normalizedRow, ['category', 'التصنيف', 'الفئة', 'القسم']) || undefined,
-      unit: readString(normalizedRow, ['unit', 'الوحدة', 'وحدة', 'وحدةالقياس']) || undefined,
-      description: readString(normalizedRow, ['description', 'الوصف']) || undefined,
-      packageWeight: readNumber(normalizedRow, ['packageweight', 'weight', 'وزنالعبوة', 'وزنالعبوه', 'وزن']),
-      minLimit: readNumber(normalizedRow, ['minlimit', 'min', 'الحدالأدنى']) ?? 0,
-      maxLimit: readNumber(normalizedRow, ['maxlimit', 'max', 'الحدالأقصى', 'الحدالأعلى']) ?? 1000,
-      orderLimit: readNumber(normalizedRow, ['orderlimit', 'reorderlimit', 'order', 'حدالطلب', 'حدإعادةالطلب', 'حداعادةالطلب']),
-      currentStock: readNumber(normalizedRow, ['currentstock', 'stock', 'quantity', 'qty', 'الكمية', 'الكميةالحالية', 'الرصيد', 'الرصيدالحالي']) ?? 0,
+      name: readString(rawRow, 'name'),
+      code: readString(rawRow, 'code') || undefined,
+      barcode: readString(rawRow, 'barcode') || undefined,
+      englishName: readString(rawRow, 'englishName') || undefined,
+      category: readString(rawRow, 'category') || undefined,
+      unit: readString(rawRow, 'unit') || undefined,
+      description: readString(rawRow, 'description') || undefined,
+      packageWeight: readNumber(rawRow, 'packageWeight'),
+      minLimit: readNumber(rawRow, 'minLimit') ?? 0,
+      maxLimit: readNumber(rawRow, 'maxLimit') ?? 1000,
+      orderLimit: readNumber(rawRow, 'orderLimit'),
+      currentStock: readNumber(rawRow, 'currentStock') ?? 0,
     };
 
     const hasAnyValue = Object.entries(item).some(([key, value]) => key !== 'sourceRow' && String(value ?? '').trim());
     if (hasAnyValue) {
       items.push(item);
+    } else {
+      skippedEmptyRows += 1;
     }
   });
 
-  return items;
+  return { rows: items, sourceHeaders, columnMatches, skippedEmptyRows };
+};
+
+export const parseExcelFile = async (file: File): Promise<ExcelImportRow[]> => {
+  const result = await parseExcelFileWithInsights(file);
+  return result.rows;
 };

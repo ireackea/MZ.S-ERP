@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsNumber, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsNumber, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator';
 
 export class BulkImportItemDto {
   @IsOptional()
@@ -73,6 +73,7 @@ export class BulkImportItemDto {
 
 export class BulkImportDto {
   @IsArray()
+  @ArrayMaxSize(15000)
   @ValidateNested({ each: true })
   @Type(() => BulkImportItemDto)
   items!: BulkImportItemDto[];

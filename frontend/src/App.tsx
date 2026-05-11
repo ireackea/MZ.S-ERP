@@ -12,7 +12,6 @@ import React, { Profiler, Suspense, lazy, useEffect, useRef, useState } from 're
 import { Routes, Route, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { toast } from '@services/toastService';
-import apiClient from '@api/client';
 import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
 import EnterpriseLoading from './components/EnterpriseLoading';
@@ -73,29 +72,6 @@ const RouteLoadingFallback: React.FC = () => (
     </div>
   </div>
 );
-
-const mapBackendAuditAction = (action: string): AuditLog['action'] => {
-  if (action.includes('LOGIN')) return 'LOGIN';
-  if (action.includes('DELETE') || action.includes('REVOKE')) return 'DELETE';
-  if (action.includes('UPDATE') || action.includes('EXTENDED') || action.includes('CHANGED')) return 'UPDATE';
-  if (action.includes('EXPORT')) return 'EXPORT';
-  return 'CREATE';
-};
-
-const mapBackendAuditEntity = (entry: {
-  action?: string;
-  targetResource?: string;
-}): AuditLog['entity'] => {
-  const target = String(entry.targetResource || '').toUpperCase();
-  const action = String(entry.action || '').toUpperCase();
-
-  if (target.includes('TRANSACTION') || action.includes('TRANSACTION')) return 'TRANSACTION';
-  if (target.includes('ORDER') || action.includes('ORDER')) return 'ORDER';
-  if (target.includes('FORMULA') || action.includes('FORMULA')) return 'FORMULA';
-  if (target.includes('PARTNER') || action.includes('PARTNER')) return 'Partner';
-  if (target.includes('ITEM') || action.includes('ITEM')) return 'ITEM';
-  return 'USER';
-};
 
 const toAuthSessionUser = (user: User) => ({
   id: user.id,
@@ -192,8 +168,6 @@ const AppContent = () => {
   const [partners, setPartners] = useState<Partner[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
-
   // Settings
   const [appearance, setAppearance] = useState<OperationAppearance[]>([]);
 
@@ -210,7 +184,6 @@ const AppContent = () => {
   const [setupMessage, setSetupMessage] = useState('');
   const permissionGuardDebugEnabled = import.meta.env.DEV && String(import.meta.env.VITE_DEBUG_PERMISSION_GUARD || '').trim() === 'true';
   const currentUserId = currentUser?.id;
-  const canReadAuditLogs = Boolean(currentUser && hasPermission(currentUser, 'users.audit'));
   const realtimeScopes = useRealtimeSyncStore((state) => state.scopes);
   const lastProcessedRealtimeScopesRef = useRef(realtimeScopes);
   const realtimeSyncInitializedRef = useRef(false);
@@ -226,7 +199,6 @@ const AppContent = () => {
     setOrders(getOrders());
     setTags(getTags());
     setAppearance(getAppearanceSettings());
-    setAuditLogs([]);
     clearLegacyInventoryBootstrapState();
   }, []);
 
@@ -347,41 +319,6 @@ const AppContent = () => {
     loadUnloadingRules,
     realtimeScopes,
   ]);
-
-  useEffect(() => {
-    if (!authReady || !currentUserId || !canReadAuditLogs) {
-      setAuditLogs([]);
-      return;
-    }
-
-    let active = true;
-
-    const loadAuditLogs = async () => {
-      try {
-        const response = await apiClient.get('/audit/logs', { params: { limit: 500 } });
-        const rows = Array.isArray(response.data) ? response.data : [];
-        if (!active) return;
-        setAuditLogs(rows.map((entry: any) => ({
-          id: String(entry?.id || crypto.randomUUID()),
-          timestamp: new Date(String(entry?.timestamp || new Date().toISOString())).getTime(),
-          userId: String(entry?.actorId || entry?.targetUserId || 'system'),
-          userName: String(entry?.actorUsername || 'System'),
-          action: mapBackendAuditAction(String(entry?.action || 'CREATE')),
-          entity: mapBackendAuditEntity(entry),
-          details: String(entry?.message || ''),
-        })));
-      } catch (error) {
-        if (!active) return;
-        console.error('[App] Failed to load audit logs from Prisma API:', error);
-        setAuditLogs([]);
-      }
-    };
-
-    void loadAuditLogs();
-    return () => {
-      active = false;
-    };
-  }, [authReady, currentUserId, canReadAuditLogs]);
 
   // Persist data
   useEffect(() => { if (!authReady) return; savePartners(partners); }, [partners, authReady]);
@@ -809,7 +746,6 @@ const AppContent = () => {
                 onUpdateReportConfig={handleUpdateReportConfig}
                 openingBalanceReportConfig={openingBalanceReportConfig}
                 onUpdateOpeningBalanceReportConfig={setOpeningBalanceReportConfig}
-                auditLogs={auditLogs}
                 currentUser={currentUser}
               />
             )
