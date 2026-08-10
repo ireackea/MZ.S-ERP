@@ -1,0 +1,487 @@
+.
+├── .dockerignore
+├── .editorconfig
+├── .env.example
+├── .gitattributes
+├── .github
+│   ├── copilot-instructions.md
+│   └── workflows
+│       ├── ci.yml
+│       └── main.yml
+├── .gitignore
+├── .gitkeep
+├── .qwen
+│   └── PROJECT_SUMMARY.md
+├── .vs
+│   ├── ProjectSettings.json
+│   ├── VSWorkspaceState.json
+│   ├── feedfactory-pro (2)
+│   │   └── CopilotIndices
+│   │       └── 18.0.988.22099
+│   ├── feedfactory-pro (2).slnx
+│   │   ├── FileContentIndex
+│   │   │   └── c8b30ef2-363b-41f8-83eb-a4edb9bad810.vsidx
+│   │   └── v18
+│   │       ├── .wsuo
+│   │       └── DocumentLayout.json
+│   └── slnx.sqlite
+├── .vscode
+│   └── extensions.json
+├── FINAL_SURGICAL_AUDIT_REPORT_2026-03-28.md
+├── MZS-ERP_FINAL_AUDIT_REPORT_2026-03-28.pdf
+├── README.md
+├── SECURITY_FIXES_REPORT_2026-03-28.md
+├── START_PROD_ULTIMATE_v4 old.bat
+├── START_PROD_ULTIMATE_v4.bat
+├── START_PROD_ULTIMATE_v5.bat
+├── SYSTEM_RUN_REPORT_2026-03-28.md
+├── _ARCHIVE_DUPLICATION_CLEANUP_2026-03-26
+│   ├── ARCHIVE_MANIFEST.md
+│   ├── components
+│   │   ├── AuditLogs.tsx
+│   │   ├── BackupCenter.tsx
+│   │   ├── DailyOperations.tsx
+│   │   ├── Dashboard.tsx
+│   │   ├── Formulation.tsx
+│   │   ├── ItemManagement.tsx
+│   │   ├── OpeningBalancePage.tsx
+│   │   ├── Reports.tsx
+│   │   ├── Settings.tsx
+│   │   └── Stocktaking.tsx
+│   └── pages
+│       └── BackupCenter.tsx
+├── _ARCHIVE_PHASE4_AUDIT_SOFTDELETE_2026-03-27
+│   ├── ARCHIVE_MANIFEST.md
+│   ├── backend
+│   │   ├── item
+│   │   │   ├── item.controller.ts
+│   │   │   └── item.service.ts
+│   │   └── prisma
+│   │       └── schema.prisma
+│   ├── pages
+│   │   └── Items.tsx
+│   ├── services
+│   │   └── itemsService.ts
+│   └── store
+│       └── useInventoryStore.ts
+├── _ARCHIVE_PHASE5_BULK_BARCODE_ATTACHMENTS_2026-03-27
+│   ├── ARCHIVE_MANIFEST.md
+│   ├── backend
+│   │   └── item
+│   │       ├── item.controller.ts
+│   │       └── item.service.ts
+│   ├── pages
+│   │   └── Items.tsx
+│   ├── services
+│   │   └── itemsService.ts
+│   └── store
+│       └── useInventoryStore.ts
+├── _ARCHIVE_PHASE6_FINAL_POLISH_2026-03-27
+│   ├── ARCHIVE_MANIFEST.md
+│   ├── backend
+│   │   ├── item
+│   │   │   ├── item.controller.ts
+│   │   │   └── item.service.ts
+│   │   └── prisma
+│   │       └── schema.prisma
+│   ├── frontend
+│   │   └── components
+│   │       └── AuditLogs.tsx
+│   ├── pages
+│   │   └── Items.tsx
+│   ├── services
+│   │   └── itemsService.ts
+│   └── store
+│       └── useInventoryStore.ts
+├── artifacts
+│   └── phase3
+│       ├── file-backups
+│       │   ├── 2026-03-27T021718-phase3-final-cleanup
+│       │   ├── 2026-03-27T022550-phase3-final-import-cleanup
+│       │   └── 2026-03-27T022721-phase3-remove-all-legacy-imports
+│       └── screenshots-after-cleanup
+│           ├── backup.png
+│           ├── dashboard.png
+│           ├── items.png
+│           ├── reports.png
+│           └── settings-all-tabs.png
+├── audit-reports
+│   └── surgical
+│       ├── 20260417-200705
+│       │   ├── FINAL_SURGICAL_AUDIT_REPORT.md
+│       │   ├── final-report.json
+│       │   ├── inventory.json
+│       │   ├── npm-audit.json
+│       │   └── static-report.json
+│       ├── 20260417-200803
+│       │   ├── FINAL_SURGICAL_AUDIT_REPORT.md
+│       │   ├── final-report.json
+│       │   ├── inventory.json
+│       │   ├── npm-audit.json
+│       │   └── static-report.json
+│       ├── 20260417-200900
+│       │   ├── FINAL_SURGICAL_AUDIT_REPORT.md
+│       │   ├── final-report.json
+│       │   ├── inventory.json
+│       │   ├── npm-audit.json
+│       │   └── static-report.json
+│       ├── 20260417-200956
+│       │   └── docker-compose.audit.override.yml
+│       ├── 20260417-201026
+│       │   └── docker-compose.audit.override.yml
+│       ├── 20260417-201054
+│       │   └── docker-compose.audit.override.yml
+│       ├── 20260417-201109
+│       │   └── docker-compose.audit.override.yml
+│       ├── 20260417-201141
+│       │   └── docker-compose.audit.override.yml
+│       ├── 20260417-205014
+│       │   ├── FINAL_SURGICAL_AUDIT_REPORT.md
+│       │   ├── final-report.json
+│       │   ├── inventory.json
+│       │   ├── npm-audit.json
+│       │   └── static-report.json
+│       ├── 20260417-205213
+│       │   ├── FINAL_SURGICAL_AUDIT_REPORT.md
+│       │   ├── final-report.json
+│       │   └── runtime-report.json
+│       └── 20260417-205249
+│           ├── FINAL_SURGICAL_AUDIT_REPORT.md
+│           ├── final-report.json
+│           └── runtime-report.json
+├── audit-v5.2
+│   ├── API_CONTRACT_AUDIT_v5.2.sh
+│   ├── AUTO_INDEX_v5.2.sh
+│   ├── CORE_SCANS_v5.2.sh
+│   ├── FINAL_REPORT_GENERATOR_v5.2.sh
+│   ├── MASTER_AUDIT_v5.2.sh
+│   ├── MASTER_PREFLIGHT_v5.2.sh
+│   ├── README.md
+│   ├── SECURITY_SCANNER_v5.2.sh
+│   ├── TECH_DEBT_SCANNER_v5.2.sh
+│   └── reports
+│       ├── file_tree.txt
+│       └── inventory.json
+├── backend
+│   ├── .dockerignore
+│   ├── Dockerfile
+│   ├── Dockerfile.prod
+│   ├── backups
+│   │   ├── archive
+│   │   │   └── phase-6.2-json-cutover
+│   │   ├── index.json
+│   │   └── schedule.json
+│   ├── dev.db
+│   ├── nest-cli.json
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── prisma
+│   │   ├── dev.db
+│   │   ├── migrations
+│   │   │   ├── 20260222110000_baseline
+│   │   │   ├── 20260222120000_item_operational_fields
+│   │   │   ├── 20260222153000_transaction_api_fields
+│   │   │   ├── 20260222153100_transaction_code_index
+│   │   │   ├── 20260222154000_add_item_code_unique
+│   │   │   ├── 20260222170000_add_user_username_jwt
+│   │   │   ├── 20260223070000_rbac_foundation
+│   │   │   ├── 20260223071000_rbac_foundation_fix
+│   │   │   ├── 20260302233403_add_phase2_user_fields
+│   │   │   ├── 20260303002500_add_is_email_confirmed_and_other_models
+│   │   │   ├── 20260313160917_phase_6_1_critical_red_flags_removal
+│   │   │   ├── 20260313190834_phase_6_3_audit_prisma_cutover
+│   │   │   └── migration_lock.toml
+│   │   ├── schema.prisma
+│   │   └── seed.ts
+│   ├── scripts
+│   │   ├── smoke-frontend.mjs
+│   │   └── smoke-settings-tabs.mjs
+│   ├── src
+│   │   ├── app.module.ts
+│   │   ├── audit
+│   │   │   ├── audit.controller.ts
+│   │   │   ├── audit.module.ts
+│   │   │   └── audit.service.ts
+│   │   ├── auth
+│   │   │   ├── auth.constants.ts
+│   │   │   ├── auth.controller.ts
+│   │   │   ├── auth.module.ts
+│   │   │   ├── auth.service.ts
+│   │   │   ├── decorators
+│   │   │   ├── dto
+│   │   │   ├── jwt-auth.guard.ts
+│   │   │   └── rbac.guard.ts
+│   │   ├── backup
+│   │   │   ├── backup.controller.ts
+│   │   │   ├── backup.guard.ts
+│   │   │   ├── backup.module.ts
+│   │   │   └── backup.service.ts
+│   │   ├── dashboard
+│   │   │   ├── dashboard.controller.ts
+│   │   │   ├── dashboard.module.ts
+│   │   │   └── dashboard.service.ts
+│   │   ├── item
+│   │   │   ├── dto
+│   │   │   ├── item.controller.ts
+│   │   │   ├── item.module.ts
+│   │   │   └── item.service.ts
+│   │   ├── main.ts
+│   │   ├── monitoring
+│   │   │   ├── dto
+│   │   │   ├── monitoring.controller.ts
+│   │   │   ├── monitoring.module.ts
+│   │   │   └── monitoring.service.ts
+│   │   ├── opening-balance
+│   │   │   ├── dto
+│   │   │   ├── opening-balance.controller.ts
+│   │   │   ├── opening-balance.module.ts
+│   │   │   └── opening-balance.service.ts
+│   │   ├── prisma.service.ts
+│   │   ├── realtime
+│   │   │   ├── realtime.gateway.ts
+│   │   │   ├── realtime.module.ts
+│   │   │   └── realtime.service.ts
+│   │   ├── report
+│   │   │   ├── dto
+│   │   │   ├── report.controller.ts
+│   │   │   ├── report.module.ts
+│   │   │   ├── report.service.ts
+│   │   │   ├── report.service.ts.broken-2026-02-28-runtime-start
+│   │   │   └── templates
+│   │   ├── reports
+│   │   │   ├── report.controller.ts
+│   │   │   ├── report.module.ts
+│   │   │   ├── report.service.ts
+│   │   │   └── templates
+│   │   ├── security
+│   │   │   └── global-rate-limit.ts
+│   │   ├── theme
+│   │   │   ├── theme.controller.ts
+│   │   │   ├── theme.module.ts
+│   │   │   └── theme.service.ts
+│   │   ├── transaction
+│   │   │   ├── balances.controller.ts
+│   │   │   ├── dto
+│   │   │   ├── transaction.controller.ts
+│   │   │   ├── transaction.module.ts
+│   │   │   └── transaction.service.ts
+│   │   └── users
+│   │       ├── dto
+│   │       ├── users.controller.ts
+│   │       ├── users.module.ts
+│   │       └── users.service.ts
+│   ├── tsconfig.json
+│   └── tsconfig.run.json
+├── backups
+│   ├── 20260326_1720
+│   │   └── dev.db.backup
+│   ├── 20260327_ 131
+│   │   └── dev.db.backup
+│   ├── 20260327_ 132
+│   │   └── dev.db.backup
+│   ├── 20260327_013703
+│   │   └── dev.db.backup
+│   ├── 20260327_013818
+│   │   └── dev.db.backup
+│   ├── 20260327_013913
+│   │   └── dev.db.backup
+│   ├── 20260327_014200
+│   │   └── dev.db.backup
+│   ├── 20260327_023851
+│   │   └── dev.db.backup
+│   ├── 20260327_103410
+│   │   └── dev.db.backup
+│   ├── 20260327_113201
+│   │   └── dev.db.backup
+│   ├── 20260327_113219
+│   │   └── dev.db.backup
+│   ├── 20260327_114415
+│   │   └── dev.db.backup
+│   ├── 20260327_115621
+│   │   └── dev.db.backup
+│   ├── 20260327_121532
+│   │   └── dev.db.backup
+│   ├── 20260327_165650
+│   │   └── dev.db.backup
+│   ├── 20260327_171507
+│   │   └── dev.db.backup
+│   ├── 20260327_171928
+│   │   └── dev.db.backup
+│   └── 20260328_010423
+│       └── dev.db.backup
+├── docker-compose.prod.yml
+├── docker-compose.yml
+├── frontend
+│   ├── .dockerignore
+│   ├── Dockerfile
+│   ├── Dockerfile.frontend
+│   ├── index.html
+│   ├── nginx.frontend.conf
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── public
+│   │   ├── .gitkeep
+│   │   ├── icons
+│   │   │   ├── icon-192x192-maskable.png
+│   │   │   ├── icon-192x192.png
+│   │   │   ├── icon-512x512-maskable.png
+│   │   │   └── icon-512x512.png
+│   │   ├── manifest.json
+│   │   └── sw.js
+│   ├── src
+│   │   ├── App.tsx
+│   │   ├── api
+│   │   │   └── client.ts
+│   │   ├── components
+│   │   │   ├── AcceptInvitation.tsx
+│   │   │   ├── App.test.tsx
+│   │   │   ├── AuditLogViewer.tsx
+│   │   │   ├── AuditLogs.tsx
+│   │   │   ├── AuthenticationPortal.tsx
+│   │   │   ├── BackupCenter.tsx
+│   │   │   ├── DailyOperations.tsx
+│   │   │   ├── Dashboard.tsx
+│   │   │   ├── EnterpriseLoading.tsx
+│   │   │   ├── ErrorBoundary.tsx
+│   │   │   ├── Formulation.tsx
+│   │   │   ├── FormulationForm.tsx
+│   │   │   ├── ItemForm.tsx
+│   │   │   ├── ItemManagement.tsx
+│   │   │   ├── Layout.tsx
+│   │   │   ├── LoginV2.test.tsx
+│   │   │   ├── LoginV2.tsx
+│   │   │   ├── LoginV2.tsx.before-restore-2026-02-28
+│   │   │   ├── OpeningBalancePage.tsx
+│   │   │   ├── OperationsPlaceholder.tsx
+│   │   │   ├── Orders.tsx
+│   │   │   ├── Partners.tsx
+│   │   │   ├── ProtectedRoute.tsx
+│   │   │   ├── Reports.tsx
+│   │   │   ├── SelectionTranslator.tsx
+│   │   │   ├── Settings.tsx
+│   │   │   ├── Statement.tsx
+│   │   │   ├── StockBalances.tsx
+│   │   │   ├── StockCardReport.tsx
+│   │   │   ├── Stocktaking.tsx
+│   │   │   ├── ThemeSwitcher.tsx
+│   │   │   ├── UnifiedIAM.tsx
+│   │   │   ├── UnifiedIAM.tsx.backup
+│   │   │   ├── UniversalColumnManager.tsx
+│   │   │   └── UserProfile.tsx
+│   │   ├── constants.ts
+│   │   ├── hooks
+│   │   │   ├── useInventoryCalculations.test.tsx
+│   │   │   ├── useInventoryCalculations.ts
+│   │   │   ├── useOfflineSync.ts
+│   │   │   ├── usePermissions.ts
+│   │   │   ├── useSession.ts
+│   │   │   ├── useSessionTimeout.ts
+│   │   │   └── useToast.tsx
+│   │   ├── i18n.ts
+│   │   ├── locales
+│   │   │   ├── ar
+│   │   │   └── en
+│   │   ├── main.tsx
+│   │   ├── modules
+│   │   │   └── settings
+│   │   ├── pages
+│   │   │   ├── BackupCenter.tsx
+│   │   │   ├── BackupCenterView.tsx
+│   │   │   ├── Dashboard.tsx
+│   │   │   ├── Formulation.tsx
+│   │   │   ├── FormulationView.tsx
+│   │   │   ├── Items.tsx
+│   │   │   ├── OpeningBalancePage.tsx
+│   │   │   ├── OpeningBalanceView.tsx
+│   │   │   ├── Operations.tsx
+│   │   │   ├── OperationsView.tsx
+│   │   │   ├── Reports.tsx
+│   │   │   ├── Stocktaking.tsx
+│   │   │   └── StocktakingView.tsx
+│   │   ├── services
+│   │   │   ├── authController.ts
+│   │   │   ├── authService.ts
+│   │   │   ├── authService.ts.new
+│   │   │   ├── backupCenterApi.ts
+│   │   │   ├── cacheService.ts
+│   │   │   ├── deviceFingerprint.ts
+│   │   │   ├── eventBus.ts
+│   │   │   ├── forecasting.ts
+│   │   │   ├── gridModules.ts
+│   │   │   ├── iamService.ts
+│   │   │   ├── itemsService.ts
+│   │   │   ├── legacy
+│   │   │   ├── monthlyStocktakingService.ts
+│   │   │   ├── mutationQueueService.ts
+│   │   │   ├── notificationService.ts
+│   │   │   ├── openingBalanceService.ts
+│   │   │   ├── realtimeSync.ts
+│   │   │   ├── reportingService.ts
+│   │   │   ├── stocktakingService.ts
+│   │   │   ├── storage.ts
+│   │   │   ├── systemResetService.ts
+│   │   │   ├── toastService.ts
+│   │   │   ├── transactionsService.ts
+│   │   │   └── usersService.ts
+│   │   ├── setupTests.ts
+│   │   ├── shared
+│   │   │   ├── api
+│   │   │   ├── context
+│   │   │   ├── hooks
+│   │   │   └── store
+│   │   ├── store
+│   │   │   └── useInventoryStore.ts
+│   │   ├── types.ts
+│   │   └── utils
+│   │       ├── __tests__
+│   │       └── wordSelectionTranslate.js
+│   ├── themes
+│   │   ├── classic
+│   │   │   └── index.css
+│   │   ├── fiori
+│   │   │   └── index.css
+│   │   ├── fluent
+│   │   │   └── index.css
+│   │   └── material
+│   │       └── index.css
+│   ├── tsconfig.json
+│   ├── vite.config.ts
+│   └── vitest.config.ts
+├── nginx.prod.conf
+├── package-lock.json
+├── package.json
+├── scripts
+│   ├── audit
+│   │   ├── Invoke-SurgicalAudit.ps1
+│   │   ├── audit.config.json
+│   │   ├── collect-inventory.mjs
+│   │   ├── render-audit-report.mjs
+│   │   ├── run-runtime-audit.mjs
+│   │   ├── run-static-audit.mjs
+│   │   ├── shared.mjs
+│   │   └── tests
+│   │       └── analyzers.test.mjs
+│   ├── check-password.mjs
+│   ├── check-text-encoding.mjs
+│   ├── deploy.sh
+│   ├── fix-mojibake.ps1
+│   ├── health-check.mjs
+│   ├── list-users-hash.mjs
+│   ├── list-users.mjs
+│   ├── postinstall.mjs
+│   ├── restart-servers.ps1
+│   ├── test-login.mjs
+│   ├── unified-users-seed.ts
+│   ├── update-deps-and-test.ps1
+│   ├── validation-phase1.mjs
+│   └── validation-phase3.mjs
+├── tests
+│   └── e2e
+│       ├── backup-dashboard.spec.ts
+│       ├── full-system.spec.ts
+│       ├── login.spec.ts
+│       ├── phase3-visual-proof.spec.ts
+│       └── settings-regression.spec.ts
+└── دليل-التشغيل.md
+
+155 directories, 330 files

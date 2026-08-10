@@ -1,0 +1,50 @@
+./scripts/unified-users-seed.ts:182:    } catch (error: any) {
+./backend/src/audit/audit.service.ts:247:    details: any,
+./backend/src/reports/report.service.ts:169:    const customColumns = Array.isArray((data as any)?.columns) ? ((data as any).columns as any[]) : [];
+./backend/src/reports/report.service.ts:201:    const customSummary = Array.isArray((data as any)?.summary) ? ((data as any).summary as any[]) : [];
+./backend/src/users/users.controller.ts:35:  async getCurrentUserPermissions(@Req() req: any) {
+./backend/src/users/users.controller.ts:63:    @Req() req: any,
+./backend/src/users/users.controller.ts:76:  async create(@Body() dto: CreateUserDto, @Req() req: any) {
+./backend/src/users/users.controller.ts:82:  async inviteUser(@Body() dto: InviteUserDto, @Req() req: any) {
+./backend/src/users/users.controller.ts:100:  async update(@Param('id') id: string, @Body() dto: UpdateUserDto, @Req() req: any) {
+./backend/src/users/users.controller.ts:106:  async remove(@Param('id') id: string, @Req() req: any) {
+./backend/src/users/users.controller.ts:112:  async lockAccount(@Param('id') id: string, @Body() dto: LockUserDto, @Req() req: any) {
+./backend/src/users/users.controller.ts:118:  async bulkAssignRole(@Body() dto: BulkAssignRoleDto, @Req() req: any) {
+./backend/src/users/users.controller.ts:124:  async bulkDelete(@Body() dto: BulkDeleteUsersDto, @Req() req: any) {
+./backend/src/users/users.controller.ts:134:  private resolveActor(req: any) {
+./backend/src/users/users.service.ts:311:  async getCurrentUserPermissions(principal: any) {
+./backend/src/users/users.service.ts:822:    let current: any[] = [];
+./backend/src/auth/rbac.guard.ts:62:  private resolvePrincipal(request: any): Principal | null {
+./backend/src/auth/jwt-auth.guard.ts:129:    } catch (error: any) {
+./backend/src/auth/auth.service.ts:306:    } catch (seedError: any) {
+./backend/src/auth/auth.service.ts:310:    let user: any;
+./backend/src/auth/auth.service.ts:325:    } catch (queryError: any) {
+./backend/src/auth/auth.service.ts:351:      } catch (resetError: any) {
+./backend/src/auth/auth.service.ts:386:      } catch (attemptsUpdateError: any) {
+./backend/src/auth/auth.service.ts:425:    } catch (postAuthUpdateError: any) {
+./backend/src/auth/auth.service.ts:453:    } catch (jwtError: any) {
+./backend/src/opening-balance/opening-balance.service.ts:35:    } catch (error: any) {
+./backend/src/transaction/transaction.service.ts:233:    } catch (dbError: any) {
+./backend/src/transaction/transaction.service.ts:632:    } catch (dbError: any) {
+./backend/src/report/report.service.ts:60:    const where: any = {};
+./backend/src/report/report.service.ts:131:    const where: any = {};
+./backend/src/item/item.controller.ts:55:  async sync(@Body() dto: BulkSyncDto, @Req() req: any) {
+./backend/src/item/item.controller.ts:70:  async archive(@Body() dto: ArchiveItemsDto, @Req() req: any) {
+./backend/src/item/item.controller.ts:78:  async restore(@Body() dto: RestoreItemsDto, @Req() req: any) {
+./backend/src/item/item.controller.ts:87:  async deletePermanent(@Body() dto: DeleteItemsPermanentDto, @Req() req: any) {
+./backend/src/item/item.controller.ts:95:  async generateMissingCodes(@Req() req: any) {
+./backend/src/item/item.controller.ts:126:  async importExcel(@Body() dto: BulkImportDto, @Req() req: any) {
+./backend/src/item/item.controller.ts:155:  async uploadImage(@Req() req: any, @UploadedFile() file: any) {
+./backend/src/item/item.controller.ts:179:  async uploadFile(@Req() req: any, @UploadedFile() file: any) {
+./backend/src/item/item.service.ts:19:  data: any[];
+./backend/src/item/item.service.ts:108:    const where: any = {
+./backend/src/item/item.service.ts:462:      } catch (error: any) {
+./backend/src/item/item.service.ts:491:    file: any, // Express.Multer.File
+./backend/src/item/item.service.ts:507:    let updateData: any = {};
+./backend/src/item/item.service.ts:512:      const existingAttachments = (item.attachments as any[]) || [];
+./backend/src/monitoring/monitoring.service.ts:87:  async performSystemReset(dto: SystemResetDto, user: any) {
+./backend/src/monitoring/monitoring.service.ts:120:    } catch (error: any) {
+./backend/src/monitoring/monitoring.controller.ts:24:  async resetSystem(@Body() dto: SystemResetDto, @Req() req: any) {
+./backend/src/backup/backup.controller.ts:75:  async createFullSystemBackup(@Body() body: any, @Req() req: Request, @Res() res: Response) {
+./backend/src/backup/backup.controller.ts:83:    } catch (error: any) {
+./backend/src/backup/backup.controller.ts:94:  async createInventoryBackup(@Body() body: any, @Req() req: Request, @Res() res: Response) {

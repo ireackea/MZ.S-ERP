@@ -1,0 +1,50 @@
+./tests/e2e/backup-dashboard.spec.ts:7:const frontendUrl = process.env.E2E_FRONTEND_URL || 'http://127.0.0.1:4173';
+./tests/e2e/backup-dashboard.spec.ts:8:const backendUrl = process.env.E2E_BASE_URL || 'http://127.0.0.1:3001';
+./tests/e2e/backup-dashboard.spec.ts:9:const username = process.env.E2E_USERNAME || 'superadmin';
+./tests/e2e/backup-dashboard.spec.ts:10:const password = process.env.E2E_PASSWORD || 'SecurePassword2026!';
+./tests/e2e/settings-regression.spec.ts:5:const frontendUrl = process.env.E2E_FRONTEND_URL || 'http://127.0.0.1:4173';
+./tests/e2e/settings-regression.spec.ts:6:const backendUrl = process.env.E2E_BASE_URL || 'http://127.0.0.1:3001';
+./tests/e2e/settings-regression.spec.ts:7:const username = process.env.E2E_USERNAME || 'superadmin';
+./tests/e2e/settings-regression.spec.ts:8:const password = process.env.E2E_PASSWORD || 'SecurePassword2026!';
+./tests/e2e/phase3-visual-proof.spec.ts:8:const frontendUrl = process.env.E2E_FRONTEND_URL || 'http://127.0.0.1:4173';
+./tests/e2e/phase3-visual-proof.spec.ts:9:const backendUrl = process.env.E2E_BASE_URL || 'http://127.0.0.1:3001';
+./tests/e2e/phase3-visual-proof.spec.ts:10:const username = process.env.E2E_USERNAME || 'superadmin';
+./tests/e2e/phase3-visual-proof.spec.ts:11:const password = process.env.E2E_PASSWORD || 'SecurePassword2026!';
+./tests/e2e/full-system.spec.ts:8:const frontendUrl = process.env.E2E_FRONTEND_URL || 'http://127.0.0.1:4173';
+./tests/e2e/full-system.spec.ts:9:const backendUrl = process.env.E2E_BASE_URL || 'http://127.0.0.1:3001';
+./tests/e2e/full-system.spec.ts:10:const username = process.env.E2E_USERNAME || 'superadmin';
+./tests/e2e/full-system.spec.ts:11:const password = process.env.E2E_PASSWORD || 'SecurePassword2026!';
+./tests/e2e/login.spec.ts:4:const baseUrl = process.env.E2E_BASE_URL || 'http://127.0.0.1:3001';
+./tests/e2e/login.spec.ts:5:const username = process.env.E2E_USERNAME || 'superadmin';
+./tests/e2e/login.spec.ts:6:const password = process.env.E2E_PASSWORD || 'SecurePassword2026!';
+./backend/src/users/users.service.ts:769:    const base = (process.env.APP_BASE_URL || 'http://localhost:5173').replace(/\/$/, '');
+./backend/src/auth/auth.controller.ts:20:    const explicitSetting = String(process.env.AUTH_COOKIE_SECURE || '').trim().toLowerCase();
+./backend/src/auth/jwt-auth.guard.ts:82:    const explicitSetting = String(process.env.AUTH_COOKIE_SECURE || '').trim().toLowerCase();
+./backend/src/auth/jwt-auth.guard.ts:90:    const secret = String(process.env.JWT_SECRET || '').trim();
+./backend/src/auth/jwt-auth.guard.ts:98:    const raw = String(process.env.JWT_EXPIRES_IN || '24h').trim();
+./backend/src/auth/auth.service.ts:82:    const secret = String(process.env.JWT_SECRET || '').trim();
+./backend/src/auth/auth.service.ts:90:    const rawPassword = String(process.env.ADMIN_PASSWORD || '').trim();
+./backend/src/auth/auth.service.ts:103:    const parsed = Number(process.env.AUTH_MAX_FAILED_ATTEMPTS || 5);
+./backend/src/auth/auth.service.ts:108:    const parsed = Number(process.env.AUTH_LOCKOUT_MINUTES || 15);
+./backend/src/auth/auth.service.ts:113:    const parsed = Number(process.env.AUTH_SESSION_TIMEOUT_MINUTES || 30);
+./backend/src/auth/auth.service.ts:445:    const jwtExpiresIn = (process.env.JWT_EXPIRES_IN || '24h') as any;
+./backend/src/realtime/realtime.gateway.ts:21:    process.env.CORS_ORIGINS ||
+./backend/src/realtime/realtime.gateway.ts:22:    process.env.ALLOWED_ORIGINS ||
+./backend/src/realtime/realtime.gateway.ts:59:  const allowCodespacesOrigin = String(process.env.ALLOW_CODESPACES_ORIGINS || '').toLowerCase() === 'true';
+./backend/src/realtime/realtime.gateway.ts:60:  const isProduction = process.env.NODE_ENV === 'production';
+./backend/src/main.ts:49:    process.env.CORS_ORIGINS ||
+./backend/src/main.ts:87:  const secret = String(process.env.JWT_SECRET || '').trim();
+./backend/src/main.ts:169:  const metricsAuthToken = String(process.env.METRICS_AUTH_TOKEN || '').trim();
+./backend/src/main.ts:178:    if (!metricsAuthToken && process.env.NODE_ENV === 'production') {
+./backend/src/main.ts:258:      const allowCodespacesOrigin = String(process.env.ALLOW_CODESPACES_ORIGINS || '').toLowerCase() === 'true';
+./backend/src/main.ts:260:      if (process.env.NODE_ENV !== 'production') {
+./backend/src/main.ts:290:  await app.listen(process.env.PORT || 3001);
+./backend/src/main.ts:294:  console.log('Backend (Nest) listening on port', process.env.PORT || 3001);
+./backend/src/monitoring/monitoring.service.ts:26:    const resetToken = String(process.env.RESET_TOKEN || '').trim();
+./backend/src/monitoring/monitoring.service.ts:79:    const token = String(process.env.SYSTEM_RESET_TOKEN || '').trim();
+./backend/src/backup/backup.guard.ts:43:    const expectedTokens = [process.env.BACKUP_API_TOKEN, process.env.ADMIN_TOKEN]
+./backend/src/backup/backup.service.ts:175:      process.env.BACKUP_ENCRYPTION_SECRET ||
+./backend/src/backup/backup.service.ts:176:      process.env.JWT_SECRET
+./backend/src/backup/backup.service.ts:180:      if (process.env.NODE_ENV === 'production') {
+./backend/src/backup/backup.service.ts:356:    const rawUrl = String(process.env.DATABASE_URL || '').trim();
+./backend/src/backup/backup.service.ts:833:    const fallback = String(process.env.BACKUP_RESTORE_PIN || '').trim();

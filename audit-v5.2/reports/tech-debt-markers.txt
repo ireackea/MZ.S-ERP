@@ -1,0 +1,10 @@
+./_ARCHIVE_DUPLICATION_CLEANUP_2026-03-26/components/Settings.tsx:399:    console.log('[DEBUG] System Reset Started - Code:', resetModal.confirmationCode);
+./_ARCHIVE_DUPLICATION_CLEANUP_2026-03-26/components/Settings.tsx:412:    console.log('[DEBUG] Calling systemResetService.performCompleteSystemReset...');
+./_ARCHIVE_DUPLICATION_CLEANUP_2026-03-26/components/Settings.tsx:416:      console.log('[DEBUG] API Response:', response);
+./_ARCHIVE_DUPLICATION_CLEANUP_2026-03-26/components/Settings.tsx:421:          console.log('[DEBUG] Redirecting to /login');
+./_ARCHIVE_DUPLICATION_CLEANUP_2026-03-26/components/Settings.tsx:428:      console.error('[DEBUG] Reset Error:', error);
+./frontend/src/components/Settings.tsx:399:    console.log('[DEBUG] System Reset Started - Code:', resetModal.confirmationCode);
+./frontend/src/components/Settings.tsx:412:    console.log('[DEBUG] Calling systemResetService.performCompleteSystemReset...');
+./frontend/src/components/Settings.tsx:416:      console.log('[DEBUG] API Response:', response);
+./frontend/src/components/Settings.tsx:421:          console.log('[DEBUG] Redirecting to /login');
+./frontend/src/components/Settings.tsx:428:      console.error('[DEBUG] Reset Error:', error);

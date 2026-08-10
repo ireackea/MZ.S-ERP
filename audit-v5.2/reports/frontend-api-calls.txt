@@ -1,0 +1,19 @@
+./tests/e2e/backup-dashboard.spec.ts:62:    const response = await fetch(input, init);
+./tests/e2e/settings-regression.spec.ts:50:    const response = await fetch(input, init);
+./tests/e2e/phase3-visual-proof.spec.ts:47:    const response = await fetch(input, init);
+./tests/e2e/full-system.spec.ts:74:    const response = await fetch(input, init);
+./tests/e2e/full-system.spec.ts:305:    const metricsResponse = await fetch(`${backendUrl}/metrics`);
+./tests/e2e/login.spec.ts:10:    const loginResponse = await fetch(`${baseUrl}/api/auth/login`, {
+./tests/e2e/login.spec.ts:23:    const metricsResponse = await fetch(`${baseUrl}/metrics`);
+./_ARCHIVE_PHASE5_BULK_BARCODE_ATTACHMENTS_2026-03-27/pages/Items.tsx:211:      const response = await fetch('/api/reports/print', {
+./_ARCHIVE_DUPLICATION_CLEANUP_2026-03-26/components/Dashboard.tsx:140:      const response = await fetch('/api/reports/print', {
+./_ARCHIVE_PHASE6_FINAL_POLISH_2026-03-27/pages/Items.tsx:326:      const response = await fetch('/api/reports/print', {
+./frontend/src/components/Dashboard.tsx:140:      const response = await fetch('/api/reports/print', {
+./frontend/src/components/Statement.tsx:1117:      const response = await fetch(PDF_RENDER_ENDPOINT, {
+./frontend/src/pages/Items.tsx:326:      const response = await fetch('/api/reports/print', {
+./frontend/src/services/notificationService.ts:43:      await fetch(params.slackWebhookUrl, {
+./frontend/public/sw.js:44:        const fetchPromise = fetch(event.request).then((networkResponse) => {
+./frontend/public/sw.js:64:      fetch(event.request)
+./frontend/public/sw.js:88:      fetch(event.request).catch(() => {
+./frontend/public/sw.js:163:        const response = await fetch(task.url, {
+./_ARCHIVE_PHASE4_AUDIT_SOFTDELETE_2026-03-27/pages/Items.tsx:206:      const response = await fetch('/api/reports/print', {

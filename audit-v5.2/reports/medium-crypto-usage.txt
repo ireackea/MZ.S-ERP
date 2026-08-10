@@ -1,0 +1,30 @@
+./tests/e2e/full-system.spec.ts:254:        id: crypto.randomUUID(),
+./scripts/unified-users-seed.ts:14:const bcrypt = require('bcryptjs');
+./scripts/unified-users-seed.ts:145:      const passwordHash = await bcrypt.hash(userData.password, 10);
+./backend/src/audit/audit.service.ts:4:import { createHash, randomUUID } from 'node:crypto';
+./backend/src/users/users.service.ts:11:import * as bcrypt from 'bcryptjs';
+./backend/src/users/users.service.ts:12:import { randomBytes } from 'node:crypto';
+./backend/src/users/users.service.ts:183:        passwordHash: await bcrypt.hash(dto.password, 10),
+./backend/src/users/users.service.ts:250:          passwordHash: await bcrypt.hash(randomBytes(24).toString('hex'), 10),
+./backend/src/users/users.service.ts:397:        passwordHash: await bcrypt.hash(dto.password, 10),
+./backend/src/users/users.service.ts:468:        passwordHash: dto.password ? await bcrypt.hash(dto.password, 10) : undefined,
+./backend/src/users/users.service.ts:833:        id: crypto.randomUUID(),
+./backend/src/auth/auth.service.ts:12:import * as bcrypt from 'bcryptjs';
+./backend/src/auth/auth.service.ts:13:import { randomUUID } from 'node:crypto';
+./backend/src/auth/auth.service.ts:199:      updates.passwordHash = await bcrypt.hash(defaultAdminPassword, 10);
+./backend/src/auth/auth.service.ts:266:    const passwordHash = await bcrypt.hash(this.getDefaultAdminPassword(), 10);
+./backend/src/auth/auth.service.ts:284:      return await bcrypt.compare(plain, hash);
+./backend/src/auth/auth.service.ts:408:    // Upgrade legacy plain password hash to bcrypt/reset lock state without breaking login flow.
+./backend/src/auth/auth.service.ts:414:            passwordHash: await bcrypt.hash(password, 10),
+./backend/src/transaction/transaction.service.ts:6:import { createHash, randomUUID } from 'crypto';
+./backend/src/transaction/transaction.service.ts:131:    const digest = createHash('sha1').update(signature).digest('hex').slice(0, 24);
+./backend/src/backup/backup.service.ts:24:} from 'crypto';
+./backend/prisma/seed.ts:3:import bcrypt from 'bcryptjs';
+./backend/prisma/seed.ts:93:  const passwordHash = await bcrypt.hash(defaultPassword, 10);
+./_ARCHIVE_PHASE5_BULK_BARCODE_ATTACHMENTS_2026-03-27/store/useInventoryStore.ts:358:  id: String(raw?.id || crypto.randomUUID()),
+./_ARCHIVE_PHASE6_FINAL_POLISH_2026-03-27/store/useInventoryStore.ts:358:  id: String(raw?.id || crypto.randomUUID()),
+./frontend/src/store/useInventoryStore.ts:358:  id: String(raw?.id || crypto.randomUUID()),
+./frontend/src/services/legacy/openingBalanceService.ts:51:      id: existing?.id || crypto.randomUUID(),
+./frontend/src/services/legacy/openingBalanceService.ts:85:      id: existing?.id || crypto.randomUUID(),
+./frontend/src/services/mutationQueueService.ts:46:      id: crypto.randomUUID(),
+./frontend/src/services/storage.ts:279:		id: crypto.randomUUID(),
