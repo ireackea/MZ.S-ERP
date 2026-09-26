@@ -2,16 +2,21 @@
 // ENTERPRISE FIX: Phase 0.2 – Full Runtime Docker Proof - 2026-03-13
 // ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
 // Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
-import { Body, Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, Res, UseGuards, UsePipes, ValidationPipe } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Public } from './decorators/public.decorator';
 import { AuthService } from './auth.service';
+import { CreateInitialAdminDto } from './dto/create-initial-admin.dto';
 import { LoginDto } from './dto/login.dto';
 import { ResetLoginAttemptsDto } from './dto/reset-login-attempts.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { RbacGuard } from './rbac.guard';
+import { AllowAuthenticated } from './decorators/allow-authenticated.decorator';
+import { PERMISSION_CATALOG, PERMISSION_MODULES } from './permission-catalog';
 import { resetGlobalRateLimit } from '../security/global-rate-limit';
 
 // ENTERPRISE FIX: Phase 0 - Fatal Errors Fixed - Blueprint Compliant - 2026-03-02
+@UseGuards(JwtAuthGuard, RbacGuard)
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -53,9 +58,13 @@ export class AuthController {
     };
   }
 
-  @Public()
+  @AllowAuthenticated()
   @Post('logout')
-  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+  async logout(
+    @Req() req: Request & { user?: { sessionId?: string } },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    await this.authService.revokeSession(req.user?.sessionId);
     res.clearCookie('feed_factory_jwt', {
       path: '/',
       httpOnly: true,
@@ -67,7 +76,7 @@ export class AuthController {
 
   // SECURITY FIX: 2026-03-28 - Removed @Public() decorator
   // This endpoint now requires authentication to prevent brute force bypass
-  @UseGuards(JwtAuthGuard)
+  @AllowAuthenticated()
   @Post('reset-attempts')
   async resetAttempts(
     @Body() dto: ResetLoginAttemptsDto,
@@ -94,9 +103,31 @@ export class AuthController {
     return result;
   }
 
-  @UseGuards(JwtAuthGuard)
+  @AllowAuthenticated()
   @Get('me')
   async me(@Req() req: Request & { user?: unknown }) {
     return req.user;
+  }
+
+  // FC-SEC-003 — one-time first-run admin bootstrap, server-side only.
+  // Public because the system has no admin yet, but it self-disables as soon
+  // as any administrative user exists, so it cannot be used to add a backdoor.
+  @Public()
+  @Post('setup')
+  @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+  async setup(@Body() dto: CreateInitialAdminDto) {
+    return this.authService.createInitialAdmin(dto);
+  }
+
+  // FC-SEC-002 — the single permission catalog, so the frontend never keeps a
+  // hand-maintained list that can drift from the backend.
+  @AllowAuthenticated()
+  @Get('permissions')
+  permissionsCatalog() {
+    return {
+      modules: PERMISSION_MODULES,
+      permissions: PERMISSION_CATALOG,
+      total: PERMISSION_CATALOG.length,
+    };
   }
 }

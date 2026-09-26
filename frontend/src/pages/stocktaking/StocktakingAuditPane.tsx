@@ -255,7 +255,7 @@ const StocktakingAuditPane: React.FC<StocktakingAuditPaneProps> = ({
       pdfDocument.save();
 
       const base64 = dataUri.includes(',') ? dataUri.split(',')[1] : dataUri;
-      const result = closeMonth({
+      const result = await closeMonth({
         monthKey,
         approvedBy: currentUserName || 'النظام',
         rows: auditRows,
@@ -270,7 +270,7 @@ const StocktakingAuditPane: React.FC<StocktakingAuditPaneProps> = ({
       }
 
       onSessionChanged();
-      onStatusMessage(`تم اعتماد إغلاق الجرد ${monthKey} وحفظ الرصيد الفعلي كأرصدة افتتاحية للشهر القادم.`);
+      onStatusMessage(`تم اعتماد إغلاق الجرد ${monthKey} وحفظ الجلسة على الخادم.`);
     } catch (error) {
       onStatusMessage(error instanceof Error ? error.message : 'حدث خطأ أثناء إعداد أو إغلاق الجرد.');
     } finally {

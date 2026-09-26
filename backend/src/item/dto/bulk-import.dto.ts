@@ -1,10 +1,11 @@
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsNumber, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsInt, IsNumber, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator';
 
 export class BulkImportItemDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ allowNaN: false, allowInfinity: false })
+  @IsInt()
   @Min(1)
   sourceRow?: number;
 
@@ -47,13 +48,6 @@ export class BulkImportItemDto {
   @Min(0)
   @Max(999999999.999)
   orderLimit?: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber({ allowNaN: false, allowInfinity: false })
-  @Min(0)
-  @Max(999999999.999)
-  currentStock?: number;
 
   @IsOptional()
   @IsString()

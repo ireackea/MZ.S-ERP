@@ -1,3 +1,5 @@
+import { assertStorageKeyAllowed } from '../services/storageOwnership';
+
 type BootstrapOutcome = 'success' | 'failed' | 'anonymous';
 
 export type BootstrapMetricsSnapshot = {
@@ -46,6 +48,7 @@ const publishSnapshots = () => {
   };
 
   if (lastSnapshot?.completedAt) {
+    assertStorageKeyAllowed(STORAGE_KEY, 'sessionStorage');
     window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(lastSnapshot));
   }
 };

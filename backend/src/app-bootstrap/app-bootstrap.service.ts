@@ -2,26 +2,6 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { ReferenceDataService } from '../reference-data/reference-data.service';
 
-/** Default permissions per built-in role – mirrors auth.service.ts DEFAULT_ROLES */
-const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
-  SuperAdmin: ['*'],
-  Admin: [
-    'users.*',
-    'settings.*',
-    'reports.*',
-    'backup.*',
-    'items.*',
-    'transactions.*',
-    'formulation.*',
-    'opening-balances.*',
-    'theme.*',
-    'monitoring.logs.write',
-  ],
-  Manager: ['transactions.*', 'reports.view', 'items.view', 'formulation.view', 'opening-balances.view', 'backup.view'],
-  Operator: ['transactions.create', 'transactions.update', 'transactions.delete', 'transactions.view', 'items.view'],
-  Viewer: ['items.view', 'transactions.view', 'reports.view', 'formulation.view', 'opening-balances.view', 'backup.view'],
-};
-
 @Injectable()
 export class AppBootstrapService {
   constructor(
@@ -69,29 +49,7 @@ export class AppBootstrapService {
       throw new UnauthorizedException('Authenticated user is inactive or missing');
     }
 
-    const permissions = user ? this.parsePermissions(user.role?.permissions) : [];
-
-    // Self-heal: if the DB role has no permissions (not yet seeded or wiped),
-    // fall back to DEFAULT_ROLE_PERMISSIONS and repair the DB row non-blocking.
-    const resolvedPermissions = (() => {
-      if (permissions.length > 0 || !user?.role?.name) {
-        return permissions;
-      }
-
-      const defaults = DEFAULT_ROLE_PERMISSIONS[user.role.name];
-      if (!defaults || defaults.length === 0) {
-        return permissions;
-      }
-
-      console.warn(`[AppBootstrap] Role "${user.role.name}" had empty permissions in DB – applying defaults.`);
-      this.prisma.role
-        .update({ where: { id: user.role.id }, data: { permissions: JSON.stringify(defaults) } })
-        .catch((err: unknown) =>
-          console.warn('[AppBootstrap] Non-blocking role-permissions repair failed:', (err as Error)?.message || err),
-        );
-
-      return defaults;
-    })();
+    const resolvedPermissions = user ? this.parsePermissions(user.role?.permissions) : [];
 
     const includeInactiveUnloadingRules =
       this.hasPermission(resolvedPermissions, 'settings.view.general') ||

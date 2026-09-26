@@ -1,5 +1,6 @@
 import apiClient from '@api/client';
 import type { UnloadingRule, UnloadingRuleDraft } from '../types';
+import { assertStorageKeyAllowed } from './storageOwnership';
 
 const LEGACY_UNLOADING_RULES_KEY = 'feed_factory_unloading_rules';
 const LEGACY_UNLOADING_RULES_MIGRATION_KEY = 'feed_factory_unloading_rules_migrated_v1';
@@ -69,6 +70,7 @@ const normalizeLegacyDraft = (rule: any): UnloadingRuleDraft | null => {
 
 const readLegacyUnloadingRules = (): UnloadingRuleDraft[] => {
   if (!canUseStorage()) return [];
+  assertStorageKeyAllowed(LEGACY_UNLOADING_RULES_KEY);
 
   const raw = window.localStorage.getItem(LEGACY_UNLOADING_RULES_KEY);
   if (!raw) return [];
@@ -91,6 +93,7 @@ const readLegacyUnloadingRules = (): UnloadingRuleDraft[] => {
 
 const markLegacyMigrationComplete = () => {
   if (!canUseStorage()) return;
+  assertStorageKeyAllowed(LEGACY_UNLOADING_RULES_MIGRATION_KEY);
   window.localStorage.setItem(LEGACY_UNLOADING_RULES_MIGRATION_KEY, 'done');
   window.localStorage.removeItem(LEGACY_UNLOADING_RULES_KEY);
 };
@@ -133,6 +136,7 @@ export const deleteUnloadingRulesInApi = async (ids: string[]): Promise<void> =>
 
 export const migrateLegacyUnloadingRules = async (): Promise<UnloadingRule[]> => {
   if (!canUseStorage()) return [];
+  assertStorageKeyAllowed(LEGACY_UNLOADING_RULES_MIGRATION_KEY);
   if (window.localStorage.getItem(LEGACY_UNLOADING_RULES_MIGRATION_KEY) === 'done') return [];
 
   const legacyRules = readLegacyUnloadingRules();

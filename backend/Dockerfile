@@ -20,7 +20,8 @@ COPY tsconfig.json ./
 COPY tsconfig.run.json ./
 COPY src ./src
 
-RUN npm ci --only=production=false
+RUN npm ci
+RUN npx puppeteer browsers install chrome
 RUN npm run prisma:generate
 RUN npm run build
 
@@ -30,10 +31,23 @@ FROM node:20-bookworm-slim AS production
 WORKDIR /app
 
 # SECURITY FIX: 2026-03-28 - Install minimal runtime dependencies only
+# FC-OPS-001: PostgreSQL client tools. These must match the server major version
+# (postgres:16), because pg_dump refuses to run against a newer server. The
+# Debian default is v15, so the PGDG apt repository is used to pin v16.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     openssl \
     ca-certificates \
+    curl \
+    gnupg \
+  && install -d /usr/share/postgresql-common/pgdg \
+  && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+       -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+  && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+       > /etc/apt/sources.list.d/pgdg.list \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends postgresql-client-16 \
+  && apt-get install -y --no-install-recommends \
     # Minimal chromium dependencies for PDF generation (if needed)
     libnss3 \
     libnspr4 \
@@ -64,6 +78,7 @@ COPY --from=builder --chown=appuser:appgroup /app/node_modules ./node_modules
 COPY --from=builder --chown=appuser:appgroup /app/package.json ./
 COPY --from=builder --chown=appuser:appgroup /app/prisma ./prisma
 COPY --from=builder --chown=appuser:appgroup /app/prisma.config.ts ./prisma.config.ts
+COPY --from=builder --chown=appuser:appgroup /root/.cache/puppeteer /home/appuser/.cache/puppeteer
 
 # SECURITY FIX: 2026-03-28 - Create writable runtime directories for non-root startup
 RUN mkdir -p /app/backups /app/uploads/items \
@@ -74,6 +89,7 @@ USER appuser
 
 ENV NODE_ENV=production
 ENV PORT=3001
+ENV PUPPETEER_CACHE_DIR=/home/appuser/.cache/puppeteer
 
 EXPOSE 3001
 

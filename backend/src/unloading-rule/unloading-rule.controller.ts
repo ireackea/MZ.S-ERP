@@ -1,6 +1,7 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Put, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Permissions } from '../auth/decorators/permissions.decorator';
+import { AllowAuthenticated } from '../auth/decorators/allow-authenticated.decorator';
 import { RbacGuard } from '../auth/rbac.guard';
 import { DeleteUnloadingRulesDto } from './dto/delete-unloading-rules.dto';
 import { SaveUnloadingRuleDto } from './dto/save-unloading-rule.dto';
@@ -30,6 +31,7 @@ const hasPermission = (rawPermissions: unknown, permission: string) => {
 export class UnloadingRuleController {
   constructor(private readonly unloadingRuleService: UnloadingRuleService) {}
 
+  @AllowAuthenticated()
   @Get()
   async findAll(@Req() req: any) {
     const permissions = req.user?.permissions;

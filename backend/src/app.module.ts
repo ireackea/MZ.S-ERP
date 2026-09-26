@@ -8,6 +8,8 @@ import { ThemeModule } from './theme/theme.module';
 import { BackupModule } from './backup/backup.module';
 import { OpeningBalanceModule } from './opening-balance/opening-balance.module';
 import { ItemModule } from './item/item.module';
+// DEF-001 — the deficit queue: a clamped over-issue is recorded, visible and resolvable.
+import { StockDeficitModule } from './stockdeficit/stock-deficit.module';
 import { MonitoringModule } from './monitoring/monitoring.module';
 import { ReportModule } from './report/report.module';
 import { ReportsModule } from './reports/report.module';
@@ -18,6 +20,10 @@ import { FormulationModule } from './formulation/formulation.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { UnloadingRuleModule } from './unloading-rule/unloading-rule.module';
 import { ReferenceDataModule } from './reference-data/reference-data.module';
+import { TimeModule } from './common/time/time.module';
+import { PartnersModule } from './partners/partners.module';
+import { OrdersModule } from './orders/orders.module';
+import { StocktakingModule } from './stocktaking/stocktaking.module';
 
 @Module({
   imports: [
@@ -28,6 +34,7 @@ import { ReferenceDataModule } from './reference-data/reference-data.module';
     BackupModule,
     OpeningBalanceModule,
     ItemModule,
+    StockDeficitModule,
     MonitoringModule,
     ReportModule,
     ReportsModule,
@@ -36,6 +43,10 @@ import { ReferenceDataModule } from './reference-data/reference-data.module';
     FormulationModule,
     UnloadingRuleModule,
     ReferenceDataModule,
+    TimeModule,
+    PartnersModule,
+    OrdersModule,
+    StocktakingModule,
     DashboardModule, // ENTERPRISE FIX: Dashboard module registration
   ],
 })

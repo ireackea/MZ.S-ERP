@@ -4,6 +4,7 @@
 import apiClient from '@api/client';
 import Fuse from 'fuse.js';
 import { readFirstWorksheetRows } from '../utils/excelWorkbook';
+import type { Item } from '../types';
 
 export interface ItemDto {
   id: number;
@@ -40,7 +41,20 @@ export interface SyncItemPayload {
   maxLimit?: number;
   orderLimit?: number;
   packageWeight?: number;
-  currentStock?: number;
+  description?: string;
+}
+
+export interface ItemWritePayload {
+  publicId?: string;
+  name: string;
+  code?: string;
+  barcode?: string;
+  unit?: string;
+  category?: string;
+  minLimit?: number;
+  maxLimit?: number;
+  orderLimit?: number;
+  packageWeight?: number;
   description?: string;
 }
 
@@ -102,34 +116,17 @@ export const getItems = async (params?: GetItemsParams): Promise<PaginatedItemsR
   try {
     const response = await apiClient.get('/items', { params });
 
-    if (!response.data) {
-      return { data: [], total: 0, page: 1, limit: 100, totalPages: 0 };
+    if (!response.data || !Array.isArray(response.data.data)) {
+      throw new Error('Unexpected /items response shape');
     }
 
-    // Handle paginated response
-    if (response.data.data && Array.isArray(response.data.data)) {
-      return {
-        data: response.data.data,
-        total: response.data.total || 0,
-        page: response.data.page || 1,
-        limit: response.data.limit || 100,
-        totalPages: response.data.totalPages || 0,
-      };
-    }
-
-    // Handle legacy array response
-    if (Array.isArray(response.data)) {
-      return {
-        data: response.data,
-        total: response.data.length,
-        page: 1,
-        limit: response.data.length,
-        totalPages: 1,
-      };
-    }
-
-    console.warn('Unexpected /items response shape:', response.data);
-    return { data: [], total: 0, page: 1, limit: 100, totalPages: 0 };
+    return {
+      data: response.data.data,
+      total: response.data.total || 0,
+      page: response.data.page || 1,
+      limit: response.data.limit || 100,
+      totalPages: response.data.totalPages || 0,
+    };
   } catch (error: any) {
     if (error.message?.includes('JSON') || error.code === 'ERR_BAD_RESPONSE') {
       console.warn('Warning: invalid/empty response body from /items. Returning empty list.');
@@ -274,10 +271,39 @@ export interface ExcelImportResult {
   errors: Array<ItemImportIssue & { error: string }>;
 }
 
-const toImportPayload = (items: ExcelImportRow[]) => items.map(({ englishName, description, ...item }) => ({
+const toImportPayload = (items: ExcelImportRow[]) => items.map(({ englishName, description, currentStock, ...item }) => ({
   ...item,
   description: String(description || englishName || '').trim() || undefined,
 }));
+
+const toWritePayload = (item: Item, includePublicId = true): ItemWritePayload => ({
+  ...(includePublicId ? { publicId: String(item.id) } : {}),
+  name: item.name,
+  code: item.code || undefined,
+  barcode: item.barcode || undefined,
+  unit: item.unit,
+  category: item.category,
+  minLimit: toFiniteNumber(item.minLimit, 0),
+  maxLimit: toFiniteNumber(item.maxLimit, 1000),
+  orderLimit: item.orderLimit == null ? undefined : toFiniteNumber(item.orderLimit, 0),
+  packageWeight: item.packageWeight == null ? undefined : toFiniteNumber(item.packageWeight, 0),
+  description: item.englishName || undefined,
+});
+
+const toFiniteNumber = (value: unknown, fallback: number) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+export const createItemInApi = async (item: Item): Promise<ItemDto> => {
+  const response = await apiClient.post('/items', toWritePayload(item));
+  return response.data as ItemDto;
+};
+
+export const updateItemInApi = async (publicId: string, item: Item): Promise<ItemDto> => {
+  const response = await apiClient.put(`/items/${encodeURIComponent(publicId)}`, toWritePayload(item, false));
+  return response.data as ItemDto;
+};
 
 export const bulkImportFromExcel = async (items: ExcelImportRow[]): Promise<ExcelImportResult> => {
   try {
@@ -386,11 +412,24 @@ const resolveImportColumnMatches = (headers: string[]): ExcelImportColumnMatch[]
 };
 
 // Phase 5: Upload Attachment
+// FC-ITEM-001 — the backend returns the *generated* name as the identity;
+// `originalName` is the sanitized display label. Callers must key off `url` /
+// `fileName`, never the client-side File.name.
+export type ItemAttachmentUploadResult = {
+  success: boolean;
+  url: string;
+  fileName: string;
+  originalName?: string;
+  type: string;
+  mimeType?: string;
+  size?: number;
+};
+
 export const uploadItemAttachment = async (
   publicId: string,
   file: File,
   type: 'image' | 'file'
-): Promise<{ success: boolean; url: string; fileName: string; type: string }> => {
+): Promise<ItemAttachmentUploadResult> => {
   const formData = new FormData();
   formData.append('file', file);
 

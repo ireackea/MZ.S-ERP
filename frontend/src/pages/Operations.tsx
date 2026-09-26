@@ -7,7 +7,6 @@ import DailyOperations from './OperationsView';
 import { useSession } from '@hooks/useSession';
 import { usePermissions } from '@hooks/usePermissions';
 import {
-  bulkCreateTransactions,
   deleteTransactionsInApi,
   updateTransactionInApi,
 } from '../services/transactionsService';
@@ -52,17 +51,10 @@ const OperationsPage: React.FC = () => {
     [transactions],
   );
 
-  const handleAddTransaction = async (rows: Transaction[]) => {
-    try {
-      const created = await bulkCreateTransactions(rows);
-      const nextRows = created.length > 0 ? created : rows;
-      const merged = [...transactions, ...nextRows];
-      setInventoryTransactions(merged);
-      nextRows.forEach((row) => updateStockFromTransaction(row, 'add'));
-    } catch (error) {
-      console.error('[OperationsPage] Failed to create transactions in API:', error);
-      toast.error('تعذر إنشاء الحركات على الخادم. لم يتم تنفيذ حفظ محلي احتياطي.');
-    }
+  const handleAddTransaction = (rows: Transaction[]) => {
+    const merged = [...transactions, ...rows];
+    setInventoryTransactions(merged);
+    rows.forEach((row) => updateStockFromTransaction(row, 'add'));
   };
 
   const handleUpdateTransaction = async (row: Transaction) => {

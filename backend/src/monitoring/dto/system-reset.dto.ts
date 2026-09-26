@@ -6,10 +6,13 @@ export type SystemResetScope = 'full' | 'data' | 'inventory' | 'audit';
 export const SYSTEM_RESET_SCOPES: SystemResetScope[] = ['full', 'data', 'inventory', 'audit'];
 
 export class SystemResetDto {
-  // Long-lived environment-derived token (SYSTEM_RESET_TOKEN). Acts as the "knowledge" factor.
+  // FC-SEC-003: the acting SuperAdmin re-enters their own password. The backend
+  // verifies it against the stored bcrypt hash, so no shared secret is ever
+  // typed into or held by the browser. Acts as the "knowledge" factor.
   @IsString()
   @IsNotEmpty()
-  @MinLength(16)
+  @MinLength(8)
+  @MaxLength(128)
   confirmationCode!: string;
 
   // Per-session one-time challenge code returned by /admin/reset-system/challenge.

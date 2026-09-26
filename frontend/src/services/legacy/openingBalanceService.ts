@@ -1,6 +1,7 @@
 // ENTERPRISE FIX: Phase 0.3 – Final Arabic Encoding Fix & 10/10 Declaration - 2026-03-13
 import { Item, Transaction } from '../../types';
 import { isInboundOperationType, isOutboundOperationType } from '../../utils/operationTypes';
+import { assertStorageKeyAllowed } from '../storageOwnership';
 
 const OPENING_BALANCES_KEY = 'feed_factory_opening_balances';
 
@@ -13,6 +14,7 @@ export interface OpeningBalanceRecord {
 }
 
 function readJson<T>(key: string, fallback: T): T {
+  assertStorageKeyAllowed(key);
   const raw = localStorage.getItem(key);
   if (!raw) return fallback;
   try {
@@ -23,6 +25,7 @@ function readJson<T>(key: string, fallback: T): T {
 }
 
 function writeJson<T>(key: string, value: T) {
+  assertStorageKeyAllowed(key);
   localStorage.setItem(key, JSON.stringify(value));
 }
 

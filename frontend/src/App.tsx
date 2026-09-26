@@ -19,7 +19,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { clearLegacyInventoryBootstrapState, useInventoryStore } from './store/useInventoryStore';
 import { Transaction, Partner, Order, User, Tag, SystemSettings, OperationAppearance, ReportColumnConfig, Formula, AuditLog } from './types';
 import { v4 as uuidv4 } from 'uuid';
-import { provisionInitialAdmin } from './services/authController';
+import apiClient from '@api/client';
 import { clearAllAuthData, logout, setAuthUser } from '@services/authService';
 import { filterByDataScope, getIamConfig, hasPermission, logUserActivity, normalizeUsers, upsertCurrentSession } from './services/iamService';
 import { isInboundOperationType, isOutboundOperationType } from './utils/operationTypes';
@@ -32,12 +32,13 @@ import {
   updateTransactionInApi,
 } from '@services/transactionsService';
 import {
-  getPartners, savePartners,
-  getOrders, saveOrders,
   getTags, saveTags,
   getAppearanceSettings, saveAppearanceSettings,
   clearStrictEmptyBootFlag,
 } from './services/storage';
+import { partnersApi } from './services/partnersApi';
+import { ordersApi } from './services/ordersApi';
+import { migrateLegacyDomains } from './services/domainMigrationService';
 
 import { useAppBootstrap } from './hooks/useAppBootstrap';
 import { useOfflineSync } from './hooks/useOfflineSync';
@@ -80,46 +81,6 @@ const toAuthSessionUser = (user: User) => ({
   permissions: Array.isArray(user.permissions) ? user.permissions : [],
   name: String(user.name || user.username || user.email || user.id),
 });
-
-// ENTERPRISE FIX: 2026-04-29 — RBAC role-based default permissions.
-// When the upstream user dataset (e.g. /users response) lacks a permissions
-// array for a built-in role, fall back to a stable client-side default so the
-// freshUser resync never strips access from an authenticated SuperAdmin/Admin
-// session. Mirrors backend DEFAULT_ROLES contract.
-const ROLE_BASED_FALLBACK_PERMISSIONS: Record<string, string[]> = {
-  SuperAdmin: ['*'],
-  superadmin: ['*'],
-  admin: [
-    'users.*',
-    'settings.*',
-    'reports.*',
-    'backup.*',
-    'items.*',
-    'transactions.*',
-    'formulation.*',
-    'opening-balances.*',
-    'theme.*',
-    'monitoring.logs.write',
-  ],
-  Admin: [
-    'users.*',
-    'settings.*',
-    'reports.*',
-    'backup.*',
-    'items.*',
-    'transactions.*',
-    'formulation.*',
-    'opening-balances.*',
-    'theme.*',
-    'monitoring.logs.write',
-  ],
-};
-
-const resolveRoleFallbackPermissions = (role: unknown): string[] | null => {
-  const key = String(role || '').trim();
-  if (!key) return null;
-  return ROLE_BASED_FALLBACK_PERMISSIONS[key] || null;
-};
 
 const toAuthSessionComparisonKey = (user: User | undefined) => JSON.stringify({
   id: user?.id || '',
@@ -195,8 +156,6 @@ const AppContent = () => {
   };
 
   useEffect(() => {
-    setPartners(getPartners());
-    setOrders(getOrders());
     setTags(getTags());
     setAppearance(getAppearanceSettings());
     clearLegacyInventoryBootstrapState();
@@ -211,28 +170,34 @@ const AppContent = () => {
   });
 
   useEffect(() => {
+    if (!authReady || !currentUserId) return;
+    let active = true;
+    void migrateLegacyDomains()
+      .catch((error) => console.error('Legacy domain migration failed', error))
+      .finally(() => {
+        if (!active) return;
+        void Promise.all([partnersApi.list(), ordersApi.list()])
+          .then(([loadedPartners, loadedOrders]) => {
+            if (active) {
+              setPartners(loadedPartners);
+              setOrders(loadedOrders);
+            }
+          })
+          .catch((error) => console.error('Failed to load server-backed partners/orders', error));
+      });
+    return () => {
+      active = false;
+    };
+  }, [authReady, currentUserId]);
+
+  useEffect(() => {
     if (users.length > 0 && currentUser) {
       const freshUser = users.find((user) => user.id === currentUser.id);
       if (!freshUser) return;
 
-      // ENTERPRISE FIX: 2026-04-29 — Non-destructive permissions resync.
-      // If the freshly loaded user record (from /users) carries an empty or
-      // missing permissions array, never overwrite the live session permissions
-      // with []. Instead, preserve the current session permissions, or — for
-      // built-in roles (SuperAdmin/Admin) — apply the role-based fallback so
-      // the user keeps full intended access. This eliminates the regression
-      // that produced "0 granted permissions" on the Settings page even when
-      // route-level role guards already permitted entry.
       const freshPermissions = Array.isArray(freshUser.permissions) ? freshUser.permissions : [];
       const currentPermissions = Array.isArray(currentUser.permissions) ? currentUser.permissions : [];
-      const roleFallback = resolveRoleFallbackPermissions(freshUser.role || currentUser.role);
-
-      const mergedPermissions =
-        freshPermissions.length > 0
-          ? freshPermissions
-          : currentPermissions.length > 0
-            ? currentPermissions
-            : roleFallback || [];
+      const mergedPermissions = freshPermissions.length > 0 ? freshPermissions : currentPermissions;
 
       const reconciledUser: User = {
         ...freshUser,
@@ -321,8 +286,6 @@ const AppContent = () => {
   ]);
 
   // Persist data
-  useEffect(() => { if (!authReady) return; savePartners(partners); }, [partners, authReady]);
-  useEffect(() => { if (!authReady) return; saveOrders(orders); }, [orders, authReady]);
   useEffect(() => { if (!authReady) return; saveTags(tags); }, [tags, authReady]);
   useEffect(() => { if (!authReady) return; saveAppearanceSettings(appearance); }, [appearance, authReady]);
 
@@ -398,37 +361,83 @@ const AppContent = () => {
     }
   };
 
-  const handleAddPartner = (p: Partner) => { setPartners(prev => [...prev, p]); logAction('CREATE', 'Partner', p.name); };
-  const handleUpdatePartner = (p: Partner) => { setPartners(prev => prev.map(pa => pa.id === p.id ? p : pa)); logAction('UPDATE', 'Partner', p.name); };
-  const handleDeletePartner = (id: string) => { setPartners(prev => prev.filter(p => p.id !== id)); logAction('DELETE', 'Partner', id); };
+  const handleAddPartner = async (p: Partner) => {
+    try {
+      const created = await partnersApi.create({ name: p.name, type: p.type, phone: p.phone, address: p.address, notes: p.notes });
+      setPartners(prev => [...prev, created]);
+      logAction('CREATE', 'Partner', created.name);
+    } catch (error) {
+      console.error('Failed to create partner', error);
+      toast.error('فشل حفظ المورد/العميل.');
+    }
+  };
+  const handleUpdatePartner = async (p: Partner) => {
+    try {
+      const updated = await partnersApi.update(p.id, { name: p.name, type: p.type, phone: p.phone, address: p.address, notes: p.notes });
+      setPartners(prev => prev.map(pa => pa.id === updated.id ? updated : pa));
+      logAction('UPDATE', 'Partner', updated.name);
+    } catch (error) {
+      console.error('Failed to update partner', error);
+      toast.error('فشل تحديث المورد/العميل.');
+    }
+  };
+  const handleDeletePartner = async (id: string) => {
+    try {
+      await partnersApi.remove(id);
+      setPartners(prev => prev.filter(p => p.id !== id));
+      logAction('DELETE', 'Partner', id);
+    } catch (error) {
+      console.error('Failed to delete partner', error);
+      toast.error('فشل حذف المورد/العميل.');
+    }
+  };
 
-  const handleAddOrder = (o: Order) => {
+  const handleAddOrder = async (o: Order) => {
     if (denyPermission('sales.create.orders', 'إضافة طلب بيع')) return;
     const mapped = { ...o, warehouseId: o.warehouseId ?? currentUser?.scope ?? 'all', createdByUserId: o.createdByUserId ?? currentUser?.id };
-    setOrders(prev => [...prev, mapped]);
-    logAction('CREATE', 'ORDER', mapped.orderNumber);
+    try {
+      const created = await ordersApi.create(mapped);
+      setOrders(prev => [...prev, created]);
+      logAction('CREATE', 'ORDER', created.orderNumber);
+    } catch (error) {
+      console.error('Failed to create order', error);
+      toast.error('فشل حفظ الطلب.');
+    }
   };
-  const handleUpdateOrder = (o: Order) => {
+  const handleUpdateOrder = async (o: Order) => {
     if (denyPermission('sales.update.orders', 'تعديل طلب بيع')) return;
-    setOrders(prev => prev.map(or => or.id === o.id ? o : or));
-    logAction('UPDATE', 'ORDER', o.orderNumber);
+    try {
+      const updated = await ordersApi.update(o.id, o);
+      setOrders(prev => prev.map(order => order.id === updated.id ? updated : order));
+      logAction('UPDATE', 'ORDER', updated.orderNumber);
+    } catch (error) {
+      console.error('Failed to update order', error);
+      toast.error('فشل تحديث الطلب.');
+    }
   };
 
-  const handleCompleteOrder = (o: Order) => {
-    handleUpdateOrder(o);
-    const newTransactions: Transaction[] = o.items.map(item => ({
-      id: uuidv4(),
-      date: o.date,
-      warehouseId: o.warehouseId ?? currentUser?.scope ?? 'all',
-      itemId: item.itemId,
-      type: o.type === 'purchase' ? 'وارد' : 'صادر',
-      quantity: item.quantity,
-      supplierOrReceiver: partners.find(p => p.id === o.partnerId)?.name || 'Order',
-      notes: `From Order #${o.orderNumber}`,
-      timestamp: Date.now(),
-      warehouseInvoice: o.orderNumber
-    }));
-    handleAddTransactions(newTransactions);
+  const handleCompleteOrder = async (o: Order) => {
+    if (denyPermission('sales.update.orders', 'إكمال طلب بيع')) return;
+    try {
+      const completed = await ordersApi.complete(o.id, o.warehouseId);
+      setOrders(prev => prev.map(order => order.id === completed.id ? completed : order));
+      const newTransactions: Transaction[] = completed.items.map(item => ({
+        id: uuidv4(),
+        date: completed.date,
+        warehouseId: completed.warehouseId ?? currentUser?.scope ?? 'all',
+        itemId: item.itemId,
+        type: completed.type === 'purchase' ? 'وارد' : 'صادر',
+        quantity: item.quantity,
+        supplierOrReceiver: partners.find(p => p.id === completed.partnerId)?.name || 'Order',
+        notes: `From Order #${completed.orderNumber}`,
+        timestamp: Date.now(),
+        warehouseInvoice: completed.orderNumber
+      }));
+      await handleAddTransactions(newTransactions);
+    } catch (error) {
+      console.error('Failed to complete order', error);
+      toast.error('فشل إكمال الطلب.');
+    }
   };
 
   const handleAddUser = (u: User) => {
@@ -449,20 +458,8 @@ const AppContent = () => {
 
   useEffect(() => { if (!currentUser) return; upsertCurrentSession(currentUser); }, [currentUser?.id]);
 
-  const handleSwitchCurrentUser = (userId: string) => {
-    const targetUser = users.find(user => user.id === userId);
-    if (!targetUser) return;
-
-    if (targetUser.status === 'suspended' || !targetUser.active) {
-      logUserActivity({ userId: targetUser.id, userName: targetUser.name, event: 'login_failed', details: 'محاولة دخول لحساب موقوف أو غير نشط' });
-      toast.error('هذا الحساب موقوف أو غير نشط. يرجى التواصل مع الدعم.');
-      return;
-    }
-
-    setCurrentUser(targetUser);
-    upsertCurrentSession(targetUser);
-    logUserActivity({ userId: targetUser.id, userName: targetUser.name, event: 'login_success', details: 'تسجيل دخول ناجح' });
-  };
+  // FC-SEC-003 — the client-side "switch user" impersonation helper was removed.
+  // Changing identity must go through POST /auth/login on the backend.
 
   const scopedTransactions = filterByDataScope(transactions, currentUser);
   const scopedOrders = filterByDataScope(orders, currentUser);
@@ -482,20 +479,14 @@ const AppContent = () => {
   };
 
   // ENTERPRISE FIX: Permission Guard Fixed - 2026-02-26
+  // FC-SEC-003 — no auth/permission payloads in production logs.
   const handleAuthenticated = (user: any, redirectTo: string) => {
-    console.log('[App] LOGIN SUCCESS:', { username: user?.username, role: user?.role, id: user?.id, redirectTo, permissions: user?.permissions });
-
     const targetUser: User = {
       id: user?.id || `user-${user?.username || 'unknown'}`,
       username: user?.username || 'user',
       role: user?.role || 'User',
       roleId: user?.roleId || 'user',
-      // ENTERPRISE FIX: 2026-04-29 — Use centralized role-based fallback so
-      // SuperAdmin/Admin sessions never start with an empty permissions array.
-      permissions:
-        user?.permissions && user?.permissions?.length > 0
-          ? user.permissions
-          : (resolveRoleFallbackPermissions(user?.role) || []),
+      permissions: Array.isArray(user?.permissions) ? user.permissions : [],
       name: user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.username,
       email: user?.email || '',
       firstName: user?.firstName || '',
@@ -509,15 +500,11 @@ const AppContent = () => {
       mustChangePassword: user?.mustChangePassword ?? false,
     };
 
-    console.log('[Permissions] Setting currentUser.permissions:', targetUser.permissions);
     setInventoryRouteReady(false);
     setCurrentUser(targetUser);
     setAuthUser(toAuthSessionUser(targetUser));
     upsertCurrentSession(targetUser);
     logUserActivity?.({ userId: targetUser.id, userName: targetUser.name, event: 'login_success', details: `${targetUser.role} - ${redirectTo}` });
-    console.log('currentUser SET', targetUser.username, targetUser.role);
-    console.log('[Permissions] currentUser.permissions =', targetUser.permissions);
-    console.log('Navigation handled by LoginV2');
   };
 
   const handleLogout = () => {
@@ -554,33 +541,34 @@ const AppContent = () => {
 
       try {
         setSetupLoading(true);
-        const newAdmin: User = {
-          id: uuidv4(),
-          name: setupName.trim(),
+        setSetupMessage('');
+
+        // FC-SEC-003 — admin provisioning is a server operation. The password
+        // goes straight to the backend, which hashes and stores it.
+        const created = await apiClient.post('/auth/setup', {
+          firstName: setupName.trim(),
           email: setupEmail.trim(),
-          role: 'admin',
-          roleId: 'admin',
-          active: true,
-          status: 'active',
-          scope: 'all',
-          twoFactorEnabled: false,
-          twoFaEnabled: false,
-          mustChangePassword: false,
+          username: setupEmail.trim().split('@')[0] || setupName.trim(),
+          password: setupPassword,
+        });
+
+        const createdUser = created.data as {
+          id: string;
+          username: string;
+          email: string;
+          firstName?: string;
+          lastName?: string;
+          role: string;
+          roleId: string;
         };
 
-        const result = await provisionInitialAdmin({ user: newAdmin, password: setupPassword });
-
-        if (!result.success || !result.user) {
-          setSetupMessage(result.message || 'فشل إنشاء الحساب. يرجى إعادة المحاولة.');
-          return;
-        }
-
         clearStrictEmptyBootFlag();
-        setInventoryUsers(normalizeUsers([...users, result.user]));
-        setCurrentUser(result.user);
-        setAuthUser(toAuthSessionUser(result.user));
-        upsertCurrentSession(result.user);
-        logUserActivity({ userId: result.user.id, userName: result.user.name, event: 'login_success', details: 'تم إنشاء حساب المدير بنجاح' });
+        setInventoryUsers(normalizeUsers([...users, createdUser as unknown as User]));
+        setSetupMessage('تم إنشاء حساب المدير. يرجى تسجيل الدخول الآن.');
+      } catch (error: any) {
+        setSetupMessage(
+          error?.response?.data?.message || 'فشل إنشاء الحساب. يرجى إعادة المحاولة.',
+        );
       } finally {
         setSetupLoading(false);
       }
@@ -634,11 +622,6 @@ const AppContent = () => {
           subMessage="يتم تهيئة حالة التطبيق بعد تسجيل الدخول"
         />
       );
-    }
-
-    if (currentUser?.role === 'SuperAdmin' || currentUser?.role === 'admin') {
-      debugPermissionGuard(`[Permission Guard] SuperAdmin access granted to ${routeId}`);
-      return element;
     }
 
     if (currentUser?.permissions?.includes('*')) {

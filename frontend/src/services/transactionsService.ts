@@ -98,7 +98,6 @@ const toCreatePayload = (transaction: Transaction, options?: { includeId?: boole
   attachmentName: transaction.attachmentName,
   attachmentType: transaction.attachmentType,
   googleDriveLink: transaction.googleDriveLink,
-  createdByUserId: transaction.createdByUserId,
   timestamp: transaction.timestamp,
 });
 
@@ -126,60 +125,91 @@ export const getTransactionByIdFromApi = async (id: string): Promise<Transaction
   return normalizeApiTransaction(response.data);
 };
 
-export const createTransactionInApi = async (transaction: Transaction): Promise<Transaction> => {
-  const response = await apiClient.post('/transactions', toCreatePayload(transaction));
+const idempotencyConfig = (key: string) => ({
+  headers: { 'Idempotency-Key': key },
+});
+
+export const createTransactionInApi = async (
+  transaction: Transaction,
+  idempotencyKey = crypto.randomUUID(),
+): Promise<Transaction> => {
+  const response = await apiClient.post('/transactions', toCreatePayload(transaction), idempotencyConfig(idempotencyKey));
   return normalizeApiTransaction(response.data);
 };
 
-export const bulkCreateTransactions = async (transactions: Transaction[]): Promise<Transaction[]> => {
+export const bulkCreateTransactions = async (
+  transactions: Transaction[],
+  idempotencyKey = crypto.randomUUID(),
+): Promise<Transaction[]> => {
   const response = await apiClient.post('/transactions/bulk', {
     transactions: transactions.map((tx) => toCreatePayload(tx)),
-  });
+  }, idempotencyConfig(idempotencyKey));
 
   return extractRows(response.data).map(normalizeApiTransaction);
 };
 
-export const bulkImportTransactions = async (transactions: Transaction[]): Promise<Transaction[]> => {
+export const bulkImportTransactions = async (
+  transactions: Transaction[],
+  idempotencyKey = crypto.randomUUID(),
+): Promise<Transaction[]> => {
   const response = await apiClient.post('/transactions/bulk-import', {
     transactions: transactions.map((tx) => toCreatePayload(tx)),
-  });
+  }, idempotencyConfig(idempotencyKey));
 
   return extractRows(response.data).map(normalizeApiTransaction);
 };
 
 export const migrateFromLocalTransactions = async (
   transactions: Transaction[],
+  idempotencyKey = crypto.randomUUID(),
 ): Promise<MigrateFromLocalResponse> => {
   const response = await apiClient.post('/transactions/migrate-from-local', {
     transactions: transactions.map((tx) => toCreatePayload(tx, { includeId: true })),
-  });
+  }, idempotencyConfig(idempotencyKey));
   return response.data as MigrateFromLocalResponse;
 };
 
 export const updateTransactionInApi = async (
   id: string,
   transaction: Transaction,
+  idempotencyKey = crypto.randomUUID(),
 ): Promise<Transaction> => {
   try {
-    const response = await apiClient.put(`/transactions/${encodeURIComponent(id)}`, toCreatePayload(transaction));
+    const response = await apiClient.put(
+      `/transactions/${encodeURIComponent(id)}`,
+      toCreatePayload(transaction),
+      idempotencyConfig(idempotencyKey),
+    );
     return normalizeApiTransaction(response.data);
   } catch (error: any) {
-    // Backward compatibility with older backend versions that still use PATCH only.
     if (error?.response?.status === 404 || error?.response?.status === 405) {
-      const response = await apiClient.patch(`/transactions/${encodeURIComponent(id)}`, toCreatePayload(transaction));
+      const response = await apiClient.patch(
+        `/transactions/${encodeURIComponent(id)}`,
+        toCreatePayload(transaction),
+        idempotencyConfig(idempotencyKey),
+      );
       return normalizeApiTransaction(response.data);
     }
     throw error;
   }
 };
 
-export const deleteTransactionByIdInApi = async (id: string): Promise<number> => {
-  const response = await apiClient.delete(`/transactions/${encodeURIComponent(id)}`);
+export const deleteTransactionByIdInApi = async (
+  id: string,
+  idempotencyKey = crypto.randomUUID(),
+): Promise<number> => {
+  const response = await apiClient.delete(
+    `/transactions/${encodeURIComponent(id)}`,
+    idempotencyConfig(idempotencyKey),
+  );
   return Number(response.data?.deleted ?? 0);
 };
 
-export const deleteTransactionsInApi = async (ids: string[]): Promise<number> => {
-  const response = await apiClient.post('/transactions/delete', { ids });
+export const deleteTransactionsInApi = async (
+  ids: string[],
+  idempotencyKey = crypto.randomUUID(),
+): Promise<number> => {
+  const response = await apiClient.post('/transactions/delete', { ids }, idempotencyConfig(idempotencyKey));
   return Number(response.data?.deleted ?? 0);
 };
 

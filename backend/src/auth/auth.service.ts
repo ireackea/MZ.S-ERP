@@ -7,12 +7,20 @@
 // ENTERPRISE FIX: superadmin bootstrap with JWT authentication
 
 // ENTERPRISE FIX: Phase 0 - Fatal Errors Fixed - 2026-03-02
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  InternalServerErrorException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { DEFAULT_ROLES } from './role-templates';
+import { migratePermissionGrants } from './permission-catalog';
 
 type JwtUser = {
   id: string;
@@ -24,50 +32,6 @@ type JwtUser = {
 };
 
 const LEGACY_WEAK_ADMIN_PASSWORDS = new Set(['admin123', 'admin123!', 'admin', 'password', '12345678', 'admin@123']);
-
-const DEFAULT_ROLES: Array<{
-  name: string;
-  description: string;
-  permissions: string[];
-  color: string;
-}> = [
-    { name: 'SuperAdmin', description: 'وصول كامل إلى جميع وحدات النظام والإعدادات الحساسة.', permissions: ['*'], color: '#ef4444' },
-    {
-      name: 'Admin',
-      description: 'صلاحيات إدارية موسعة لإدارة المستخدمين والتقارير والنسخ الاحتياطي.',
-      permissions: [
-        'users.*',
-        'settings.*',
-        'reports.*',
-        'backup.*',
-        'items.*',
-        'transactions.*',
-        'formulation.*',
-        'opening-balances.*',
-        'theme.*',
-        'monitoring.logs.write',
-      ],
-      color: '#2563eb',
-    },
-    {
-      name: 'Manager',
-      description: 'إدارة العمليات اليومية ومراجعة التقارير والبيانات التشغيلية.',
-      permissions: ['transactions.*', 'reports.view', 'items.view', 'formulation.view', 'opening-balances.view', 'backup.view'],
-      color: '#10b981',
-    },
-    {
-      name: 'Operator',
-      description: 'تنفيذ الحركات اليومية على الأصناف مع صلاحيات تشغيلية محدودة.',
-      permissions: ['transactions.create', 'transactions.update', 'transactions.delete', 'transactions.view', 'items.view'],
-      color: '#f59e0b',
-    },
-    {
-      name: 'Viewer',
-      description: 'عرض البيانات والتقارير دون صلاحيات تعديل.',
-      permissions: ['items.view', 'transactions.view', 'reports.view', 'formulation.view', 'opening-balances.view', 'backup.view'],
-      color: '#6b7280',
-    },
-  ];
 
 @Injectable()
 export class AuthService {
@@ -147,7 +111,9 @@ export class AuthService {
     try {
       const parsed = JSON.parse(value);
       if (!Array.isArray(parsed)) return [];
-      return parsed.filter((entry): entry is string => typeof entry === 'string');
+      // FC-SEC-002 — translate any legacy id stored in an older role row to its
+      // canonical catalog id, so the JWT only ever carries canonical grants.
+      return migratePermissionGrants(parsed.filter((entry): entry is string => typeof entry === 'string'));
     } catch {
       return [];
     }
@@ -159,45 +125,16 @@ export class AuthService {
   // and trigger a non-blocking DB repair so the next login is consistent.
   private applyDefaultPermissionsFallback(
     permissions: string[],
-    role: { id: string; name: string | null } | null | undefined,
   ): string[] {
-    if (permissions.length > 0 || !role?.name) {
-      return permissions;
-    }
-
-    const defaultsRole = DEFAULT_ROLES.find((entry) => entry.name === role.name);
-    if (!defaultsRole || defaultsRole.permissions.length === 0) {
-      return permissions;
-    }
-
-    console.warn(
-      `[Auth Service] Role "${role.name}" had empty permissions in DB at login – applying defaults.`,
-    );
-    this.prisma.role
-      .update({
-        where: { id: role.id },
-        data: { permissions: JSON.stringify(defaultsRole.permissions) },
-      })
-      .catch((err: any) =>
-        console.warn(
-          '[Auth Service] Non-blocking role-permissions repair failed:',
-          err?.message || err,
-        ),
-      );
-
-    return [...defaultsRole.permissions];
+    return permissions;
   }
 
   private async ensureDefaultRoles() {
     for (const role of DEFAULT_ROLES) {
-      await this.prisma.role.upsert({
-        where: { name: role.name },
-        update: {
-          description: role.description,
-          permissions: JSON.stringify(role.permissions),
-          color: role.color,
-        },
-        create: {
+      const existing = await this.prisma.role.findUnique({ where: { name: role.name }, select: { id: true } });
+      if (existing) continue;
+      await this.prisma.role.create({
+        data: {
           name: role.name,
           description: role.description,
           permissions: JSON.stringify(role.permissions),
@@ -468,7 +405,6 @@ export class AuthService {
     // corrupted/empty DB permissions JSON (matches AppBootstrapService behavior).
     const permissions = this.applyDefaultPermissionsFallback(
       this.normalizePermissions(user.role?.permissions),
-      user.role ? { id: user.role.id, name: user.role.name } : null,
     );
     const sessionTimeoutMinutes = this.getSessionTimeoutMinutes();
     const sessionExpiresAt = new Date(Date.now() + sessionTimeoutMinutes * 60 * 1000);
@@ -550,6 +486,77 @@ export class AuthService {
     };
   }
 
+  /**
+   * FC-SEC-003 — one-time first-run admin bootstrap.
+   *
+   * Refuses once any user already holds an administrative role, so this can
+   * never be used to add a back-door administrator to a live system. The
+   * password is hashed here and never leaves the backend.
+   */
+  async createInitialAdmin(dto: {
+    firstName: string;
+    lastName?: string;
+    email: string;
+    username: string;
+    password: string;
+  }) {
+    await this.ensureDefaultRoles();
+
+    const privileged = await this.prisma.user.count({
+      where: { role: { name: { in: ['SuperAdmin', 'Admin'] } } },
+    });
+    if (privileged > 0) {
+      throw new ConflictException('Setup has already been completed for this system.');
+    }
+
+    const email = String(dto.email || '').trim().toLowerCase();
+    const username = String(dto.username || '').trim();
+    const existing = await this.prisma.user.findFirst({
+      where: { OR: [{ username }, { email }] },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new ConflictException('A user with this username or email already exists.');
+    }
+
+    const adminRole = await this.prisma.role.findUnique({ where: { name: 'Admin' } });
+    if (!adminRole) {
+      throw new InternalServerErrorException('Admin role is not available.');
+    }
+
+    const user = await this.prisma.user.create({
+      data: {
+        username,
+        email,
+        passwordHash: await bcrypt.hash(dto.password, 10),
+        firstName: String(dto.firstName || '').trim(),
+        lastName: dto.lastName ? String(dto.lastName).trim() : null,
+        isActive: true,
+        roleId: adminRole.id,
+      },
+    });
+
+    await this.auditService.log({
+      action: 'INITIAL_ADMIN_CREATED',
+      actorId: user.id,
+      actorUsername: user.username,
+      actorRole: 'Admin',
+      targetResource: `users/${user.id}`,
+      status: 'success',
+      message: 'Initial administrator created via one-time setup',
+    });
+
+    return {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: adminRole.name,
+      roleId: adminRole.id,
+    };
+  }
+
   async resetLoginAttempts(
     username: string,
     clientMeta?: { ipAddress?: string; userAgent?: string },
@@ -603,6 +610,12 @@ export class AuthService {
     };
   }
 
+  async revokeSession(sessionId?: string): Promise<void> {
+    const normalizedSessionId = String(sessionId || '').trim();
+    if (!normalizedSessionId) return;
+    await this.auditService.revokeSession(normalizedSessionId);
+  }
+
   async verifyToken(token: string): Promise<JwtUser> {
     const payload = await this.jwtService.verifyAsync(token, {
       secret: this.getJwtSecret(),
@@ -612,7 +625,19 @@ export class AuthService {
     const userId = String(payload?.sub || '');
     const tokenHash = AuditService.hashToken(token);
 
-    if (sessionId && userId) {
+    if (!userId) {
+      throw new UnauthorizedException('Invalid token subject');
+    }
+
+    const currentUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { role: true },
+    });
+    if (!currentUser || !currentUser.isActive || (currentUser.lockoutUntil && currentUser.lockoutUntil > new Date())) {
+      throw new UnauthorizedException('User account is inactive or locked');
+    }
+
+    if (sessionId) {
       const active = await this.auditService.findActiveSession({ sessionId, userId, tokenHash });
       if (!active) {
         await this.auditService.log({
@@ -632,12 +657,10 @@ export class AuthService {
 
     return {
       id: userId,
-      username: String(payload?.username || ''),
-      role: String(payload?.role || 'user'),
-      permissions: Array.isArray(payload?.permissions)
-        ? payload.permissions.filter((entry: unknown): entry is string => typeof entry === 'string')
-        : [],
-      name: payload?.name ? String(payload.name) : undefined,
+      username: currentUser.username,
+      role: currentUser.role?.name || 'Viewer',
+      permissions: this.normalizePermissions(currentUser.role?.permissions),
+      name: currentUser.firstName || currentUser.lastName ? `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim() : currentUser.username,
       sessionId,
     };
   }

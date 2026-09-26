@@ -4,10 +4,15 @@
 // ENTERPRISE FIX: Dashboard Backend Data Provider - 2026-02-26
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { TimeService } from '../common/time/time.service';
+import { warehouseScopeCondition } from '../common/scope';
 
 @Injectable()
 export class DashboardService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly timeService: TimeService,
+  ) {}
 
   private normalizeType(type: string): string {
     return String(type || '').trim().toLowerCase();
@@ -39,21 +44,21 @@ export class DashboardService {
     return 'حركة مخزنية';
   }
 
-  async getDashboardStats() {
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  async getDashboardStats(scope = 'default') {
+    const { start: todayStart } = this.timeService.getBusinessDayRange();
 
     const [totalItems, lowStockItems, todayTransactions, totalRevenue] = await Promise.all([
       this.prisma.item.count(),
       this.prisma.item.count({ where: { currentStock: { lte: 20 } } }),
-      this.prisma.transaction.count({ where: { date: { gte: todayStart } } }),
+      this.prisma.transaction.count({ where: { ...warehouseScopeCondition(scope), date: { gte: todayStart } } }),
       this.prisma.transaction.aggregate({ 
         _sum: { quantity: true }, 
-        where: { date: { gte: todayStart } } 
+        where: { ...warehouseScopeCondition(scope), date: { gte: todayStart } }
       }),
     ]);
 
     const recentActivity = await this.prisma.transaction.findMany({
+      where: warehouseScopeCondition(scope),
       take: 5,
       orderBy: { date: 'desc' },
       include: { item: true },

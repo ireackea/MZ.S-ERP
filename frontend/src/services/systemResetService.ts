@@ -3,6 +3,7 @@
 //   1) requestChallenge()   -> backend issues a one-time per-session code (5 min TTL)
 //   2) executeReset(...)    -> backend validates env token + challenge + reason + scope
 import apiClient from '../api/client';
+import { assertStorageKeyAllowed } from './storageOwnership';
 
 export type SystemResetScope = 'full' | 'data' | 'inventory' | 'audit';
 
@@ -48,7 +49,7 @@ const translateResetError = (code: string | null, message: string | null, retryA
         ? `تم إيقاف محاولات إعادة الضبط مؤقتًا. حاول بعد ${new Date(retryAt).toLocaleString('ar-EG')}.`
         : 'تم إيقاف محاولات إعادة الضبط مؤقتًا. حاول لاحقًا.';
     case 'SYSTEM_RESET_INVALID_CODE':
-      return 'رمز SYSTEM_RESET_TOKEN غير صحيح. أدخل الرمز الثابت الموجود في ملف .env، وليس رمز التحقق المؤقت المعروض في الشاشة.';
+      return 'كلمة المرور غير صحيحة. يرجى إعادة إدخال كلمة مرور حسابك.';
     case 'SYSTEM_RESET_INVALID_CHALLENGE':
       return 'رمز التحقق المؤقت غير صالح أو انتهت صلاحيته. يرجى طلب رمز جديد.';
     case 'SYSTEM_RESET_SUPERADMIN_REQUIRED':
@@ -90,11 +91,12 @@ export const systemResetService = {
   },
 
   /**
-   * Step 2: execute the scoped reset using the env token + the challenge code + reason.
+   * Step 2: execute the scoped reset using password re-authentication + the
+   * challenge code + reason. FC-SEC-003: no shared secret is entered here.
    */
   async executeReset(params: ExecuteResetParams): Promise<SystemResetResponse> {
-    if (!params.confirmationCode || params.confirmationCode.trim().length < 16) {
-      throw new Error('يرجى إدخال رمز تأكيد صالح (16 حرفًا على الأقل).');
+    if (!params.confirmationCode || params.confirmationCode.trim().length < 8) {
+      throw new Error('يرجى إدخال كلمة مرور حسابك لتأكيد الهوية.');
     }
     if (!params.challengeId || !params.challengeCode) {
       throw new Error('رمز التحقق المؤقت مفقود — يرجى طلب رمز جديد.');
@@ -131,6 +133,10 @@ export const systemResetService = {
    * Clear local browser state and bounce to /login. Called by the UI after a successful reset.
    */
   clearLocalStateAndRedirect(message?: string): void {
+    assertStorageKeyAllowed('ff_theme');
+    assertStorageKeyAllowed('ff_lang');
+    assertStorageKeyAllowed('ff_api_url');
+    assertStorageKeyAllowed('ff_features');
     const ff_theme = localStorage.getItem('ff_theme');
     const ff_lang = localStorage.getItem('ff_lang');
     const ff_api_url = localStorage.getItem('ff_api_url');
@@ -144,6 +150,8 @@ export const systemResetService = {
     if (ff_api_url) localStorage.setItem('ff_api_url', ff_api_url);
     if (ff_features) localStorage.setItem('ff_features', ff_features);
 
+    assertStorageKeyAllowed('feed_factory_system_reset_complete');
+    assertStorageKeyAllowed('feed_factory_system_reset_message');
     localStorage.setItem('feed_factory_system_reset_complete', '1');
     if (message) localStorage.setItem('feed_factory_system_reset_message', message);
     window.location.href = '/login';

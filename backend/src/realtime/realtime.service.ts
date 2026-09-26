@@ -4,7 +4,7 @@
 // ENTERPRISE FIX: Legacy Migration Phase 5 - Final Stabilization & Production - 2026-02-27
 import { Injectable, Logger } from '@nestjs/common';
 
-export type RealtimeScope = 'dashboard' | 'items' | 'operations' | 'transactions' | 'formulation' | 'stocktaking' | 'settings' | 'offline_sync' | 'audit';
+export type RealtimeScope = 'dashboard' | 'items' | 'operations' | 'transactions' | 'formulation' | 'stocktaking' | 'settings' | 'offline_sync' | 'audit' | 'partners' | 'orders';
 
 export type RealtimeSyncEvent = {
   scopes: RealtimeScope[];
@@ -13,6 +13,7 @@ export type RealtimeSyncEvent = {
   actor?: string;
   meta?: Record<string, unknown>;
   conflict?: boolean;
+  scope?: string;
 };
 
 type RealtimeGatewayBridge = {
@@ -33,7 +34,7 @@ export class RealtimeService {
   emitSync(
     scopes: RealtimeScope[],
     reason: string,
-    options?: { actor?: string; meta?: Record<string, unknown>; conflict?: boolean },
+    options?: { actor?: string; meta?: Record<string, unknown>; conflict?: boolean; scope?: string },
   ) {
     if (!this.gateway || !scopes.length) return;
     const event: RealtimeSyncEvent = {
@@ -43,6 +44,7 @@ export class RealtimeService {
       actor: options?.actor,
       meta: options?.meta,
       conflict: options?.conflict || false,
+      scope: options?.scope || 'all',
     };
     this.gateway.broadcastSync(event);
   }

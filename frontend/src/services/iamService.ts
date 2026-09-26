@@ -2,6 +2,7 @@
 // ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
 // ENTERPRISE FIX: Phase 6.6 - Global 100% Cleanup & Absolute Verification - 2026-03-13
 import { v4 as uuidv4 } from 'uuid';
+import apiClient from '@api/client';
 import {
   DataScope,
   IamConfig,
@@ -12,139 +13,122 @@ import {
   UserRole,
   UserSession,
 } from '../types';
-import { hasGrantedPermission } from './permissionAliases';
+import { expandRequestedPermissions, hasGrantedPermission } from './permissionAliases';
+import { resolveRoleFallbackPermissions } from './rolePermissionFallbacks';
+import {
+  ALL_PERMISSION_IDS,
+  FULL_ACCESS_TOKEN,
+  PERMISSIONS_CATALOG,
+} from './permissionsCatalog';
+import { assertStorageKeyAllowed } from './storageOwnership';
 
 const IAM_CONFIG_KEY = 'feed_factory_iam_config';
-const USER_ACTIVITY_LOG_KEY = 'feed_factory_user_activity_logs';
 
-const permissionCatalog: PermissionDefinition[] = [
-  // ENTERPRISE FIX: Warehouse Manager Role Matrix - 2026-03-03
-  { id: 'items.view', module: 'inventory', resource: 'items', action: 'view', label: 'عرض الأصناف (عام)' },
-  { id: 'items.create', module: 'inventory', resource: 'items', action: 'create', label: 'إنشاء الأصناف (عام)' },
-  { id: 'items.update', module: 'inventory', resource: 'items', action: 'update', label: 'تعديل الأصناف (عام)' },
-  { id: 'items.delete', module: 'inventory', resource: 'items', action: 'delete', label: 'حذف الأصناف (عام)' },
-  { id: 'transactions.view', module: 'inventory', resource: 'transactions', action: 'view', label: 'عرض الحركات (عام)' },
-  { id: 'transactions.create', module: 'inventory', resource: 'transactions', action: 'create', label: 'إنشاء الحركات (عام)' },
-  { id: 'transactions.update', module: 'inventory', resource: 'transactions', action: 'update', label: 'تعديل الحركات (عام)' },
-  { id: 'transactions.delete', module: 'inventory', resource: 'transactions', action: 'delete', label: 'حذف الحركات (عام)' },
-  { id: 'formulation.view', module: 'production', resource: 'formulation', action: 'view', label: 'عرض التركيبات' },
-  { id: 'formulation.create', module: 'production', resource: 'formulation', action: 'create', label: 'إنشاء تركيبة' },
-  { id: 'formulation.update', module: 'production', resource: 'formulation', action: 'update', label: 'تعديل تركيبة' },
-  { id: 'formulation.delete', module: 'production', resource: 'formulation', action: 'delete', label: 'حذف تركيبة' },
-  { id: 'settings.view', module: 'settings', resource: 'system', action: 'view', label: 'عرض الإعدادات (عام)' },
+// FC-SEC-002 — derived from the single permission catalog instead of a second
+// hand-maintained list, so the two can never drift.
+const permissionCatalog: PermissionDefinition[] = PERMISSIONS_CATALOG.flatMap((group) =>
+  group.permissions.map((permission) => ({
+    id: permission.id,
+    module: group.key,
+    resource: permission.id,
+    action: permission.action,
+    label: permission.label,
+  })),
+);
 
-  { id: 'inventory.view.items', module: 'inventory', resource: 'items', action: 'view', label: 'عرض الأصناف' },
-  { id: 'inventory.create.items', module: 'inventory', resource: 'items', action: 'create', label: 'إضافة صنف' },
-  { id: 'inventory.update.items', module: 'inventory', resource: 'items', action: 'update', label: 'تعديل صنف' },
-  { id: 'inventory.delete.items', module: 'inventory', resource: 'items', action: 'delete', label: 'حذف صنف' },
-  { id: 'inventory.view.operations', module: 'inventory', resource: 'operations', action: 'view', label: 'عرض الحركات' },
-  { id: 'inventory.create.operations', module: 'inventory', resource: 'operations', action: 'create', label: 'إنشاء حركة' },
-  { id: 'inventory.update.operations', module: 'inventory', resource: 'operations', action: 'update', label: 'تعديل حركة' },
-  { id: 'inventory.delete.operations', module: 'inventory', resource: 'operations', action: 'delete', label: 'حذف حركة' },
+const KNOWN_PERMISSION_IDS = new Set<string>(ALL_PERMISSION_IDS);
+const KNOWN_MODULE_KEYS = new Set<string>(PERMISSIONS_CATALOG.map((group) => group.key));
 
-  { id: 'inventory.view.stock', module: 'inventory', resource: 'stock', action: 'view', label: 'عرض الجرد' },
-  { id: 'inventory.create.inbound', module: 'inventory', resource: 'inbound', action: 'create', label: 'إضافة حركة وارد' },
-  { id: 'inventory.create.outbound', module: 'inventory', resource: 'outbound', action: 'create', label: 'إضافة حركة صادر' },
-  { id: 'inventory.update.pricing', module: 'inventory', resource: 'pricing', action: 'update', label: 'تعديل الأسعار' },
-  { id: 'inventory.delete.transactions', module: 'inventory', resource: 'transactions', action: 'delete', label: 'حذف الحركات' },
-  { id: 'inventory.export.stock', module: 'inventory', resource: 'stock', action: 'export', label: 'تصدير بيانات المخزون' },
+const isKnownGrant = (grant: string): boolean =>
+  grant === FULL_ACCESS_TOKEN ||
+  KNOWN_PERMISSION_IDS.has(grant) ||
+  (grant.endsWith('.*') && KNOWN_MODULE_KEYS.has(grant.slice(0, -2)));
 
-  { id: 'sales.view.orders', module: 'sales', resource: 'orders', action: 'view', label: 'عرض الطلبات' },
-  { id: 'sales.create.orders', module: 'sales', resource: 'orders', action: 'create', label: 'إنشاء طلب' },
-  { id: 'sales.update.orders', module: 'sales', resource: 'orders', action: 'update', label: 'تعديل الطلبات' },
-  { id: 'sales.delete.orders', module: 'sales', resource: 'orders', action: 'delete', label: 'حذف الطلبات' },
-  { id: 'sales.export.orders', module: 'sales', resource: 'orders', action: 'export', label: 'تصدير الطلبات' },
-
-  { id: 'reports.view.general', module: 'reports', resource: 'general', action: 'view', label: 'عرض التقارير' },
-  { id: 'reports.export.general', module: 'reports', resource: 'general', action: 'export', label: 'تصدير التقارير' },
-
-  { id: 'settings.view.general', module: 'settings', resource: 'general', action: 'view', label: 'عرض الإعدادات العامة' },
-  { id: 'settings.view.users', module: 'settings', resource: 'users', action: 'view', label: 'عرض المستخدمين والأدوار' },
-  { id: 'settings.view.permissions', module: 'settings', resource: 'permissions', action: 'view', label: 'عرض مصفوفة الصلاحيات' },
-  { id: 'settings.view.backup', module: 'settings', resource: 'backup', action: 'view', label: 'عرض النسخ الاحتياطية' },
-  { id: 'settings.view.reset', module: 'settings', resource: 'reset', action: 'view', label: 'عرض إعادة الضبط' },
-  { id: 'settings.view.audit', module: 'settings', resource: 'audit', action: 'view', label: 'عرض سجلات التدقيق' },
-  { id: 'settings.view.offline', module: 'settings', resource: 'offline', action: 'view', label: 'عرض إعدادات الأوفلاين' },
-  { id: 'settings.view.printing', module: 'settings', resource: 'printing', action: 'view', label: 'عرض قوالب الطباعة' },
-  { id: 'settings.view.localization', module: 'settings', resource: 'localization', action: 'view', label: 'عرض الثيم واللغة' },
-  { id: 'settings.view.system', module: 'settings', resource: 'system', action: 'view', label: 'عرض الإعدادات' },
-  { id: 'settings.update.system', module: 'settings', resource: 'system', action: 'update', label: 'تعديل الإعدادات' },
-  { id: 'backup.create', module: 'settings', resource: 'backup', action: 'create', label: 'إنشاء نسخة احتياطية' },
-  { id: 'backup.restore', module: 'settings', resource: 'backup', action: 'update', label: 'استعادة النسخة الاحتياطية' },
-  { id: 'backup.schedule', module: 'settings', resource: 'backup', action: 'update', label: 'إدارة جدولة النسخ الاحتياطية' },
-  { id: 'backup.download', module: 'settings', resource: 'backup', action: 'export', label: 'تنزيل النسخ الاحتياطية' },
-  { id: 'backup.delete', module: 'settings', resource: 'backup', action: 'delete', label: 'حذف النسخ الاحتياطية' },
-
-  { id: 'users.view.management', module: 'users', resource: 'management', action: 'view', label: 'عرض المستخدمين' },
-  { id: 'users.create.management', module: 'users', resource: 'management', action: 'create', label: 'إضافة مستخدم' },
-  { id: 'users.update.management', module: 'users', resource: 'management', action: 'update', label: 'تعديل المستخدمين' },
-  { id: 'users.delete.management', module: 'users', resource: 'management', action: 'delete', label: 'حذف المستخدمين' },
-  { id: 'users.export.management', module: 'users', resource: 'management', action: 'export', label: 'تصدير المستخدمين' },
-];
+const canonicalizeGrants = (permissionIds: string[]): string[] => {
+  const canonical = permissionIds.map(
+    (permissionId) => expandRequestedPermissions(permissionId)[0] || permissionId,
+  );
+  return [...new Set(canonical)].filter((permissionId) => isKnownGrant(permissionId));
+};
 
 const rolePermissionTemplates: Record<string, string[]> = {
-  admin: permissionCatalog.map((permission) => permission.id),
+  admin: ['*'],
   warehouse_manager: [
+    'items.view',
+    'items.create',
+    'items.update',
+    'items.sync',
+    'transactions.view',
+    'transactions.create',
+    'transactions.update',
+    'formulation.view',
+    'opening-balances.view',
+    'partners.view',
+    'partners.create',
+    'sales.view.orders',
+    'inventory.view.stocktaking',
+    'reports.view',
+    'dashboard.view',
+    'settings.view.general',
+    'theme.view',
+  ],
+  storekeeper: [
+    'items.view',
+    'transactions.view',
+    'transactions.create',
+    'transactions.update',
+    'inventory.view.stocktaking',
+    'inventory.create.stocktaking',
+    'inventory.update.stocktaking',
+    'partners.view',
+    'reports.view',
+    'settings.view.general',
+  ],
+  general_supervisor: [
+    'items.view',
+    'transactions.view',
+    'formulation.view',
+    'opening-balances.view',
+    'partners.view',
+    'sales.view.orders',
+    'inventory.view.stocktaking',
+    'reports.view',
+    'reports.generate',
+    'dashboard.view',
+    'settings.view.general',
+  ],
+  special_supervisor: [
+    'items.view',
+    'transactions.view',
+    'formulation.view',
+    'partners.view',
+    'sales.view.orders',
+    'sales.create.orders',
+    'sales.update.orders',
+    'inventory.view.stocktaking',
+    'reports.view',
+    'reports.generate',
+    'dashboard.view',
+    'settings.view.general',
+  ],
+  dispatch_officer: ['sales.view.orders', 'sales.create.orders', 'sales.update.orders', 'partners.view'],
+  dispatch_manager: ['sales.view.orders', 'sales.create.orders', 'sales.update.orders', 'partners.view', 'reports.view'],
+  production_manager: [
     'items.view',
     'items.create',
     'items.update',
     'transactions.view',
     'transactions.create',
     'formulation.view',
-    'settings.view',
-
-    'inventory.view.items',
-    'inventory.create.items',
-    'inventory.update.items',
-    'inventory.view.operations',
-    'inventory.create.operations',
-    'settings.view.general',
-    'settings.view.offline',
-    'settings.view.printing',
-    'settings.view.system',
-  ],
-  storekeeper: [
-    'inventory.view.stock',
-    'inventory.create.inbound',
-    'inventory.create.outbound',
-    'reports.view.general',
-    'settings.view.offline',
-  ],
-  general_supervisor: [
-    'inventory.view.stock',
-    'formulation.view',
-    'reports.view.general',
-    'reports.export.general',
-    'sales.view.orders',
-    'settings.view.general',
-    'settings.view.audit',
-  ],
-  special_supervisor: [
-    'inventory.view.stock',
-    'formulation.view',
-    'sales.view.orders',
-    'sales.create.orders',
-    'sales.update.orders',
-    'reports.view.general',
-    'reports.export.general',
-    'settings.view.general',
-    'settings.view.audit',
-  ],
-  dispatch_officer: ['sales.view.orders', 'sales.create.orders', 'sales.update.orders'],
-  dispatch_manager: ['sales.view.orders', 'sales.create.orders', 'sales.update.orders', 'sales.export.orders'],
-  production_manager: [
-    'inventory.view.stock',
-    'inventory.create.inbound',
-    'inventory.create.outbound',
-    'formulation.view',
     'formulation.create',
     'formulation.update',
     'formulation.delete',
-    'reports.view.general',
-    'reports.export.general',
-    'sales.view.orders',
+    'inventory.view.stocktaking',
+    'reports.view',
+    'reports.generate',
+    'partners.view',
+    'dashboard.view',
     'settings.view.general',
-    'settings.view.printing',
   ],
   customer: ['sales.view.orders'],
 };
@@ -162,6 +146,7 @@ const roleLabels: Record<UserRole, string> = {
 };
 
 function readJson<T>(key: string, fallback: T): T {
+  assertStorageKeyAllowed(key);
   const raw = localStorage.getItem(key);
   if (!raw) return fallback;
   try {
@@ -172,6 +157,7 @@ function readJson<T>(key: string, fallback: T): T {
 }
 
 function writeJson<T>(key: string, value: T) {
+  assertStorageKeyAllowed(key);
   localStorage.setItem(key, JSON.stringify(value));
 }
 
@@ -180,7 +166,7 @@ function getDefaultRoles(): RoleDefinition[] {
     id: roleId,
     name: roleLabels[roleId],
     description: `دور ${roleLabels[roleId]}`,
-    permissionIds: rolePermissionTemplates[roleId],
+    permissionIds: canonicalizeGrants(rolePermissionTemplates[roleId]),
   }));
 }
 
@@ -193,10 +179,11 @@ export function getIamConfig(): IamConfig {
 
   const config = readJson<IamConfig>(IAM_CONFIG_KEY, fallback);
 
-  const knownPermissionIds = new Set(config.permissions.map((permission) => permission.id));
+  // FC-SEC-002 — migrate any legacy alias stored in a previous session down to
+  // the canonical catalog, then drop anything the catalog no longer defines.
   const normalizedRoles = config.roles.map((role) => ({
     ...role,
-    permissionIds: role.permissionIds.filter((permissionId) => knownPermissionIds.has(permissionId)),
+    permissionIds: canonicalizeGrants(role.permissionIds || []),
   }));
 
   return {
@@ -213,7 +200,7 @@ export function saveIamConfig(config: IamConfig) {
 export function updateRolePermissions(roleId: string, permissionIds: string[]) {
   const config = getIamConfig();
   const updatedRoles = config.roles.map((role) =>
-    role.id === roleId ? { ...role, permissionIds: [...new Set(permissionIds)] } : role
+    role.id === roleId ? { ...role, permissionIds: canonicalizeGrants(permissionIds) } : role
   );
   saveIamConfig({ ...config, roles: updatedRoles, updatedAt: Date.now() });
 }
@@ -241,17 +228,23 @@ export function getUserRole(user?: User): RoleDefinition | undefined {
   return getIamConfig().roles.find((role) => role.id === normalizedUser.roleId);
 }
 
+/**
+ * FC-SEC-003 — display-only permission check.
+ *
+ * This no longer grants access from a role *name*: a local `role: 'admin'`
+ * string used to unlock every permission, which meant anyone able to edit
+ * localStorage could render the full admin UI. Authority now comes only from
+ * the permission list the backend issued for the current session, falling back
+ * to the canonical role grants purely for display.
+ */
 export function hasPermission(user: User | undefined, permissionId: string): boolean {
   if (!user) return false;
   const normalizedUser = ensureUserDefaults(user);
   if (normalizedUser.status === 'suspended' || !normalizedUser.active) return false;
+
   const directPermissions = Array.isArray(normalizedUser.permissions)
     ? normalizedUser.permissions.filter((entry): entry is string => typeof entry === 'string')
     : [];
-
-  if (normalizedUser.role?.toLowerCase() === 'superadmin' || normalizedUser.role?.toLowerCase() === 'admin') {
-    return true;
-  }
 
   if (directPermissions.includes('*')) {
     return true;
@@ -261,17 +254,25 @@ export function hasPermission(user: User | undefined, permissionId: string): boo
     return true;
   }
 
+  // No server-issued list yet (e.g. during bootstrap): use the canonical role
+  // grants for display only.
+  if (directPermissions.length === 0) {
+    const fallback = resolveRoleFallbackPermissions(normalizedUser.role);
+    if (hasGrantedPermission(fallback, permissionId)) {
+      return true;
+    }
+  }
+
   const role = getUserRole(normalizedUser);
   return hasGrantedPermission(role?.permissionIds || [], permissionId);
 }
 
-export function getScopeWhereClause(user: User | undefined, columnName = 'warehouse_id'): string {
-  if (!user) return '1=0';
-  const normalizedUser = ensureUserDefaults(user);
-  if (normalizedUser.scope === 'all') return '1=1';
-  return `${columnName} = '${normalizedUser.scope}'`;
-}
-
+/**
+ * FC-SEC-003 — `getScopeWhereClause` was removed. It built a SQL fragment by
+ * interpolating a client-held scope, and row-level scoping is the backend's job
+ * (see SEC-001 warehouseScopeCondition). `filterByDataScope` below remains a
+ * display-only filter over rows the server already scoped.
+ */
 export function filterByDataScope<T extends { warehouseId?: DataScope }>(rows: T[], user: User | undefined): T[] {
   if (!user) return [];
   const normalizedUser = ensureUserDefaults(user);
@@ -293,15 +294,25 @@ export function revokeAllOtherSessions(userId: string) {
 }
 
 export function getUserActivityLogs(userId: string): UserActivityLog[] {
-  return readJson<UserActivityLog[]>(USER_ACTIVITY_LOG_KEY, [])
-    .filter((log) => log.userId === userId)
-    .sort((a, b) => b.timestamp - a.timestamp);
+  // FC-AUD-001 — activity history is no longer stored in the browser.
+  void userId;
+  return [];
 }
 
 export function getAllUserActivityLogs(): UserActivityLog[] {
-  return readJson<UserActivityLog[]>(USER_ACTIVITY_LOG_KEY, []).sort((a, b) => b.timestamp - a.timestamp);
+  // FC-AUD-001 — read the server-side trail via GET /audit/logs instead.
+  return [];
 }
 
+/**
+ * FC-AUD-001 — client activity is recorded server-side.
+ *
+ * This used to append to `localStorage['feed_factory_user_activity_logs']`,
+ * which made the audit trail editable (and clearable) by anyone with browser
+ * access. The entry is now POSTed to the backend, which stamps the actor from
+ * the session and redacts the payload. Failure is intentionally non-fatal: an
+ * unreachable audit endpoint must not roll back the user's action.
+ */
 export function logUserActivity(params: {
   userId: string;
   userName: string;
@@ -309,15 +320,9 @@ export function logUserActivity(params: {
   details: string;
   ipAddress?: string;
 }) {
-  const currentLogs = readJson<UserActivityLog[]>(USER_ACTIVITY_LOG_KEY, []);
-  const nextLog: UserActivityLog = {
-    id: uuidv4(),
-    timestamp: Date.now(),
-    userId: params.userId,
-    userName: params.userName,
-    event: params.event,
-    details: params.details,
-    ipAddress: params.ipAddress ?? '127.0.0.1 (simulated)',
-  };
-  writeJson(USER_ACTIVITY_LOG_KEY, [nextLog, ...currentLogs].slice(0, 1000));
+  void apiClient
+    .post('/audit/client-activity', { event: params.event, details: params.details })
+    .catch(() => {
+      /* best-effort diagnostics only — never block the user action */
+    });
 }

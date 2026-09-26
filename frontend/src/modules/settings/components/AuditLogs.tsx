@@ -22,10 +22,9 @@ interface AuditLogEntry {
 }
 
 interface AuditLogsProps {
-  forceAccess?: boolean;
 }
 
-const AuditLogs: React.FC<AuditLogsProps> = ({ forceAccess = false }) => {
+const AuditLogs: React.FC<AuditLogsProps> = ({ }) => {
   const { hasPermission } = usePermissions();
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -122,7 +121,7 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ forceAccess = false }) => {
     }
   };
 
-  if (!forceAccess && !hasPermission('settings.view.audit')) {
+  if (!hasPermission('settings.view.audit')) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
         <div className="mb-2 flex items-center gap-2 font-bold"><ShieldAlert size={18} />لا تملك صلاحية عرض سجلات التدقيق</div>

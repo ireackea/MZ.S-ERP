@@ -17,6 +17,7 @@ import { Public } from '../auth/decorators/public.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RbacGuard } from '../auth/rbac.guard';
 import { AcceptInvitationDto } from './dto/accept-invitation.dto';
+import { AllowAuthenticated } from '../auth/decorators/allow-authenticated.decorator';
 import { BulkAssignRoleDto, BulkDeleteUsersDto } from './dto/bulk-actions.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { InviteUserDto } from './dto/invite-user.dto';
@@ -31,6 +32,7 @@ import { UsersService } from './users.service';
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  @AllowAuthenticated()
   @Get('permissions/me')
   async getCurrentUserPermissions(@Req() req: any) {
     return this.usersService.getCurrentUserPermissions(req?.user || null);

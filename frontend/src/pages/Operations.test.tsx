@@ -127,20 +127,15 @@ describe('OperationsPage', () => {
     });
   });
 
-  it('persists added transactions through the API result before updating local stock state', async () => {
+  it('updates local state after the server accepts a transaction without a second API request', async () => {
     const draftRow = {
       id: 'draft-tx-1',
       itemId: 'item-1',
       quantity: 5,
       timestamp: 3000,
     } as any;
-    const createdRow = {
-      ...draftRow,
-      id: 'server-tx-1',
-    } as any;
 
     mocks.storeState.transactions = [];
-    mocks.bulkCreateTransactions.mockResolvedValue([createdRow]);
 
     await renderOperationsPage();
 
@@ -152,9 +147,9 @@ describe('OperationsPage', () => {
     props.onAddTransaction([draftRow]);
 
     await waitFor(() => {
-      expect(mocks.bulkCreateTransactions).toHaveBeenCalledWith([draftRow]);
-      expect(mocks.storeState.setTransactions).toHaveBeenCalledWith([createdRow]);
-      expect(mocks.storeState.updateStockFromTransaction).toHaveBeenCalledWith(createdRow, 'add');
+      expect(mocks.bulkCreateTransactions).not.toHaveBeenCalled();
+      expect(mocks.storeState.setTransactions).toHaveBeenCalledWith([draftRow]);
+      expect(mocks.storeState.updateStockFromTransaction).toHaveBeenCalledWith(draftRow, 'add');
     });
   });
 });

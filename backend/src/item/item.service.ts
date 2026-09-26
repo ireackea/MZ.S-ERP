@@ -3,10 +3,22 @@
 // ENTERPRISE FIX: Legacy Migration Phase 5 - Final Stabilization & Production - 2026-02-27
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import { createReadStream } from 'node:fs';
+import { unlink, stat, readFile } from 'node:fs/promises';
+import { basename, extname } from 'node:path';
+import { CreateItemDto, UpdateItemDto } from './dto/item.dto';
 import { PrismaService } from '../prisma.service';
 import { SyncItemDto } from './dto/sync-items.dto';
 import { RealtimeService } from '../realtime/realtime.service';
+import { serializeDecimal } from '../common/decimal';
 import { AuditService } from '../audit/audit.service';
+import {
+  UPLOAD_ROOT,
+  assertRealImageContent,
+  buildAttachmentName,
+  resolveStoredPath,
+  type SafeFileName,
+} from './attachment-safety';
 
 export interface FindAllItemsParams {
   skip?: number;
@@ -35,6 +47,148 @@ export class ItemService {
     private readonly auditService: AuditService,
   ) {}
 
+  private itemWriteData(dto: CreateItemDto | UpdateItemDto) {
+    return {
+      code: dto.code === undefined ? undefined : dto.code?.trim() || null,
+      barcode: dto.barcode === undefined ? undefined : dto.barcode?.trim() || null,
+      name: dto.name.trim(),
+      unit: dto.unit?.trim() || null,
+      category: dto.category?.trim() || null,
+      minLimit: dto.minLimit,
+      maxLimit: dto.maxLimit,
+      orderLimit: dto.orderLimit,
+      packageWeight: dto.packageWeight,
+      description: dto.description?.trim() || null,
+    };
+  }
+
+  private responseSelect() {
+    return {
+      id: true,
+      publicId: true,
+      code: true,
+      barcode: true,
+      name: true,
+      unit: true,
+      category: true,
+      codeGenerated: true,
+      minLimit: true,
+      maxLimit: true,
+      orderLimit: true,
+      packageWeight: true,
+      currentStock: true,
+      description: true,
+      isArchived: true,
+      archivedAt: true,
+      archivedBy: true,
+      createdAt: true,
+      updatedAt: true,
+      createdBy: true,
+      updatedBy: true,
+      // FC-ITEM-001 — the stored attachment reference was being written to the
+      // DB but never selected, so a client could upload an image and then never
+      // read its URL back.
+      imageUrl: true,
+      attachments: true,
+    } as const;
+  }
+
+  private toApiItem(row: any) {
+    // FC-DATA-001 — the Prisma Decimal columns leave the API as strings, not
+    // `Number(...)`. A float would re-introduce the very drift the ledger
+    // invariant prevents, and JSON would render large values in exponent form.
+    return {
+      ...row,
+      minLimit: serializeDecimal(row.minLimit),
+      maxLimit: serializeDecimal(row.maxLimit),
+      orderLimit: serializeDecimal(row.orderLimit),
+      packageWeight: serializeDecimal(row.packageWeight),
+      currentStock: serializeDecimal(row.currentStock),
+    };
+  }
+
+  private emitItemsChanged(action: string, count: number) {
+    if (count <= 0) return;
+    this.realtimeService.emitSync(
+      ['items', 'dashboard', 'operations', 'formulation', 'stocktaking'],
+      `items.${action}`,
+      { meta: { count } },
+    );
+  }
+
+  async create(dto: CreateItemDto, userId?: string, actorUsername?: string) {
+    const publicId = dto.publicId.trim();
+    if (!publicId) throw new BadRequestException('publicId is required');
+    if (dto.minLimit != null && dto.maxLimit != null && dto.maxLimit < dto.minLimit) {
+      throw new BadRequestException('maxLimit must be greater than or equal to minLimit');
+    }
+
+    const created = await this.prisma.item.create({
+      data: {
+        publicId,
+        code: dto.code?.trim() || null,
+        codeGenerated: dto.code?.trim() ? false : undefined,
+        barcode: dto.barcode?.trim() || null,
+        name: dto.name.trim(),
+        unit: dto.unit?.trim() || null,
+        category: dto.category?.trim() || 'غير مصنف',
+        minLimit: dto.minLimit ?? 0,
+        maxLimit: dto.maxLimit ?? 1000,
+        orderLimit: dto.orderLimit,
+        packageWeight: dto.packageWeight,
+        description: dto.description?.trim() || null,
+        createdBy: userId || undefined,
+      },
+      select: this.responseSelect(),
+    });
+
+    await this.auditService.logItemAction(
+      userId || 'system',
+      'CREATE',
+      'Item',
+      String(created.publicId),
+      { count: 1, items: [{ publicId: String(created.publicId), name: created.name }] },
+      actorUsername,
+    );
+    this.emitItemsChanged('created', 1);
+    return this.toApiItem(created);
+  }
+
+  async getByPublicId(publicId: string) {
+    const item = await this.prisma.item.findUnique({ where: { publicId }, select: this.responseSelect() });
+    if (!item) throw new NotFoundException(`Item not found: ${publicId}`);
+    return this.toApiItem(item);
+  }
+
+  async update(publicId: string, dto: UpdateItemDto, userId?: string, actorUsername?: string) {
+    if (dto.minLimit != null && dto.maxLimit != null && dto.maxLimit < dto.minLimit) {
+      throw new BadRequestException('maxLimit must be greater than or equal to minLimit');
+    }
+    const existing = await this.prisma.item.findUnique({ where: { publicId } });
+    if (!existing) throw new NotFoundException(`Item not found: ${publicId}`);
+
+    const updated = await this.prisma.item.update({
+      where: { publicId },
+      data: {
+        ...this.itemWriteData(dto),
+        codeGenerated: dto.code === undefined ? undefined : dto.code?.trim() ? false : undefined,
+        updatedBy: userId || undefined,
+      },
+      select: this.responseSelect(),
+    });
+
+    await this.auditService.logItemAction(
+      userId || 'system',
+      'UPDATE',
+      'Item',
+      publicId,
+      { count: 1, items: [{ publicId, name: updated.name }] },
+      actorUsername,
+    );
+    this.emitItemsChanged('updated', 1);
+    return this.toApiItem(updated);
+  }
+
   async syncItems(items: SyncItemDto[], userId?: string, actorUsername?: string) {
     const results = [];
     const isUpdate = items.length > 0 && await this.prisma.item.findUnique({ where: { publicId: items[0].publicId } });
@@ -56,7 +210,6 @@ export class ItemService {
           maxLimit: item.maxLimit,
           orderLimit: item.orderLimit,
           packageWeight: item.packageWeight,
-          currentStock: item.currentStock,
           description: item.description,
           updatedBy: userId || undefined,
           ...(item.code !== undefined
@@ -78,7 +231,6 @@ export class ItemService {
           maxLimit: item.maxLimit ?? 1000,
           orderLimit: item.orderLimit,
           packageWeight: item.packageWeight,
-          currentStock: item.currentStock ?? 0,
           description: item.description,
           createdBy: userId || undefined,
         },
@@ -130,29 +282,7 @@ export class ItemService {
     const [rows, total] = await Promise.all([
       this.prisma.item.findMany({
         where,
-        select: {
-          id: true,
-          publicId: true,
-          code: true,
-          barcode: true,
-          name: true,
-          unit: true,
-          category: true,
-          codeGenerated: true,
-          minLimit: true,
-          maxLimit: true,
-          orderLimit: true,
-          packageWeight: true,
-          currentStock: true,
-          description: true,
-          isArchived: true,
-          archivedAt: true,
-          archivedBy: true,
-          createdAt: true,
-          updatedAt: true,
-          createdBy: true,
-          updatedBy: true,
-        },
+        select: this.responseSelect(),
         orderBy: { name: 'asc' },
         skip,
         take,
@@ -160,14 +290,7 @@ export class ItemService {
       this.prisma.item.count({ where }),
     ]);
 
-    const data = rows.map((row) => ({
-      ...row,
-      minLimit: row.minLimit == null ? null : Number(row.minLimit),
-      maxLimit: row.maxLimit == null ? null : Number(row.maxLimit),
-      orderLimit: row.orderLimit == null ? null : Number(row.orderLimit),
-      packageWeight: row.packageWeight == null ? null : Number(row.packageWeight),
-      currentStock: row.currentStock == null ? null : Number(row.currentStock),
-    }));
+    const data = rows.map((row) => this.toApiItem(row));
 
     return {
       data,
@@ -180,41 +303,12 @@ export class ItemService {
 
   async getAll() {
     const rows = await this.prisma.item.findMany({
-      select: {
-        id: true,
-        publicId: true,
-        code: true,
-        barcode: true,
-        name: true,
-        unit: true,
-        category: true,
-        codeGenerated: true,
-        minLimit: true,
-        maxLimit: true,
-        orderLimit: true,
-        packageWeight: true,
-        currentStock: true,
-        description: true,
-        isArchived: true,
-        archivedAt: true,
-        archivedBy: true,
-        createdAt: true,
-        updatedAt: true,
-        createdBy: true,
-        updatedBy: true,
-      },
+      select: this.responseSelect(),
       where: { isArchived: false },
       orderBy: { name: 'asc' },
     });
 
-    return rows.map((row) => ({
-      ...row,
-      minLimit: row.minLimit == null ? null : Number(row.minLimit),
-      maxLimit: row.maxLimit == null ? null : Number(row.maxLimit),
-      orderLimit: row.orderLimit == null ? null : Number(row.orderLimit),
-      packageWeight: row.packageWeight == null ? null : Number(row.packageWeight),
-      currentStock: row.currentStock == null ? null : Number(row.currentStock),
-    }));
+    return rows.map((row) => this.toApiItem(row));
   }
 
   async archiveItems(publicIds: string[], userId: string, actorUsername: string) {
@@ -431,7 +525,6 @@ export class ItemService {
       maxLimit?: number;
       orderLimit?: number;
       packageWeight?: number;
-      currentStock?: number;
       englishName?: string;
       description?: string;
       sourceRow?: number;
@@ -495,7 +588,6 @@ export class ItemService {
       maxLimit: number;
       orderLimit: number | null;
       packageWeight: number | null;
-      currentStock: number;
       description: string | null;
       createdBy?: string;
     }> = [];
@@ -515,7 +607,6 @@ export class ItemService {
       const maxLimit = readNumber(item.maxLimit, 1000);
       const orderLimit = readNumber(item.orderLimit, null);
       const packageWeight = readNumber(item.packageWeight, null);
-      const currentStock = readNumber(item.currentStock, 0);
 
       if (!name || !category || !unit) {
         errors.push({ row: rowNumber, field: 'required', message: 'اسم الصنف والتصنيف ووحدة القياس مطلوبة.', error: 'اسم الصنف والتصنيف ووحدة القياس مطلوبة.' });
@@ -541,7 +632,6 @@ export class ItemService {
         ['maxLimit', maxLimit, 'الحد الأعلى'],
         ['orderLimit', orderLimit, 'حد إعادة الطلب'],
         ['packageWeight', packageWeight, 'وزن العبوة'],
-        ['currentStock', currentStock, 'الرصيد الحالي'],
       ];
       const invalidNumber = numberEntries.find(([, value]) => value != null && (!Number.isFinite(value) || value < 0 || value > 999999999.999));
       if (invalidNumber) {
@@ -587,7 +677,6 @@ export class ItemService {
         maxLimit: maxLimit ?? 1000,
         orderLimit,
         packageWeight,
-        currentStock: currentStock ?? 0,
         description,
         createdBy: userId || undefined,
       });
@@ -606,7 +695,6 @@ export class ItemService {
         maxLimit: row.maxLimit,
         orderLimit: row.orderLimit,
         packageWeight: row.packageWeight,
-        currentStock: row.currentStock,
         description: row.description,
         createdBy: row.createdBy,
       },
@@ -668,23 +756,67 @@ export class ItemService {
   }
 
   // Phase 5: Upload Attachment (Image/File)
+  // FC-ITEM-001 — `file.filename` (generated by multer via attachment-safety) is
+  // the single identity used for the disk path, the DB row and the response.
+  // The client's original name is display text only.
   async uploadAttachment(
     publicId: string,
     file: any, // Express.Multer.File
     attachmentType: 'image' | 'file',
     userId: string,
     actorUsername: string,
+    options?: { prebuilt?: SafeFileName },
   ) {
     const item = await this.prisma.item.findUnique({
       where: { publicId },
     });
 
     if (!item) {
+      // FC-ITEM-001 — do not leave an orphaned file behind for a missing item.
+      await this.discardUploadedFile(file);
       throw new NotFoundException('Item not found');
     }
 
-    const fileName = `${publicId}-${Date.now()}-${file.originalname}`;
-    const fileUrl = `/uploads/items/${fileName}`;
+    // Re-validate the real size: multer's filename callback runs before the
+    // body is fully written, so the earlier check saw a placeholder.
+    const built = buildAttachmentName({
+      publicId,
+      originalName: file?.originalname,
+      mimetype: file?.mimetype,
+      size: Number(file?.size) || 0,
+      kind: attachmentType,
+    });
+
+    if (built.ok === false) {
+      await this.discardUploadedFile(file);
+      throw new BadRequestException(built.error);
+    }
+
+    // FC-ITEM-001 — the declared Content-Type is attacker-controlled, so the
+    // bytes are inspected. Without this a Windows executable typed as
+    // `image/png` is stored and later served back.
+    if (attachmentType === 'image') {
+      const contentCheck = await assertRealImageContent(
+        file?.filename || built.value.storedName,
+        (path) => readFile(path),
+      );
+      if (contentCheck.ok === false) {
+        await this.discardUploadedFile(file);
+        throw new BadRequestException(contentCheck.error);
+      }
+    }
+
+    // The pre-built name from the interceptor is authoritative; re-deriving it
+    // here would produce a different random suffix and break the disk path.
+    const value: SafeFileName = options?.prebuilt && options.prebuilt.storedName === file?.filename
+      ? { ...options.prebuilt, size: Number(file?.size) || options.prebuilt.size }
+      : built.value;
+
+    const storedName = file?.filename || value.storedName;
+    // FC-ITEM-001 — the persisted URL points at the guarded download route.
+    // There is no static file mount for /uploads, so the old path 404'd and the
+    // image was effectively unreachable after a successful upload.
+    const fileUrl = `/items/attachments/${encodeURIComponent(storedName)}`;
 
     let updateData: any = {};
 
@@ -695,37 +827,106 @@ export class ItemService {
       updateData.attachments = [
         ...existingAttachments,
         {
-          id: `attach-${Date.now()}`,
-          name: file.originalname,
+          id: `attach-${randomUUID()}`,
+          // Display name, sanitized — never used to build a path.
+          name: value.displayName,
           url: fileUrl,
-          type: file.mimetype,
-          size: file.size,
+          storedName,
+          type: value.mimeType,
+          size: value.size,
           uploadedAt: new Date().toISOString(),
           uploadedBy: userId,
         },
       ];
     }
 
-    const updatedItem = await this.prisma.item.update({
-      where: { publicId },
-      data: updateData,
-    });
+    let updatedItem: any;
+    try {
+      updatedItem = await this.prisma.item.update({
+        where: { publicId },
+        data: updateData,
+      });
+    } catch (error) {
+      // FC-ITEM-001 — a DB failure must not leave the file orphaned on disk.
+      await this.discardUploadedFile(file, storedName);
+      throw error;
+    }
 
-    // Audit logging
     await this.auditService.logItemAction(
       userId,
-      'UPDATE',
+      'ITEM_UPDATE',
       'Item',
       publicId,
-      { action: 'attachment_uploaded', fileName: file.originalname, fileType: attachmentType },
+      { action: 'attachment_uploaded', storedName, displayName: value.displayName, fileType: attachmentType, size: value.size },
       actorUsername,
     );
 
     return {
       success: true,
       url: fileUrl,
-      fileName: file.originalname,
+      // The generated name is the identity callers must use.
+      fileName: storedName,
+      originalName: value.displayName,
       type: attachmentType,
+      mimeType: value.mimeType,
+      size: value.size,
     };
+  }
+
+  /** FC-ITEM-001 — best-effort removal of a file we no longer reference. */
+  private async discardUploadedFile(file: any, storedName?: string): Promise<void> {
+    const name = storedName || file?.filename;
+    if (!name) return;
+    try {
+      const safeName = basename(String(name));
+      const target = resolveStoredPath(UPLOAD_ROOT, safeName);
+      if (target) {
+        await unlink(target).catch(() => undefined);
+      }
+    } catch {
+      // Cleanup is best-effort; never mask the original error.
+    }
+  }
+
+  /** FC-ITEM-001 — serves a stored attachment, refusing any path escape. */
+  async serveAttachment(storedName: string, res: any): Promise<void> {
+    const target = resolveStoredPath(UPLOAD_ROOT, storedName);
+    if (!target) {
+      throw new BadRequestException('Invalid attachment path');
+    }
+
+    let stats: any;
+    try {
+      stats = await stat(target);
+    } catch {
+      throw new NotFoundException('Attachment not found');
+    }
+    if (!stats.isFile()) {
+      throw new NotFoundException('Attachment not found');
+    }
+
+    // Infer the type from the stored extension, never from client input.
+    const extension = extname(target).toLowerCase();
+    const mimeForExtension: Record<string, string> = {
+      '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+      '.webp': 'image/webp', '.gif': 'image/gif', '.avif': 'image/avif',
+      '.pdf': 'application/pdf', '.txt': 'text/plain', '.csv': 'text/csv',
+      '.json': 'application/json', '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      '.xls': 'application/vnd.ms-excel',
+      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    };
+
+    res.setHeader('Content-Type', mimeForExtension[extension] || 'application/octet-stream');
+    // Stored under a generated name, so a download cannot be executed inline.
+    res.setHeader('Content-Disposition', `attachment; filename="${basename(target)}"`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Length', String(stats.size));
+
+    await new Promise<void>((resolve, reject) => {
+      const stream = createReadStream(target);
+      stream.on('error', reject);
+      stream.on('end', resolve);
+      stream.pipe(res);
+    });
   }
 }

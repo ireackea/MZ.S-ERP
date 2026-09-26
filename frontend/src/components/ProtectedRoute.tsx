@@ -1,4 +1,6 @@
 // SECURITY FIX: 2026-03-28 - Added authentication check before permission validation
+// FC-SEC-003 — authentication is not optional. The `requireAuth` escape hatch
+// was removed so no caller can render a protected tree without a session.
 import React, { ReactNode, useMemo } from 'react';
 import { usePermissions } from '@hooks/usePermissions';
 
@@ -8,7 +10,6 @@ interface ProtectedRouteProps {
   permissions?: string[];
   mode?: 'all' | 'any';
   fallback?: ReactNode;
-  requireAuth?: boolean;
 }
 
 const notAuthenticatedFallback = (
@@ -29,13 +30,12 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   permissions,
   mode = 'all',
   fallback = defaultFallback,
-  requireAuth = true,
 }) => {
   const { hasPermission, hasAll, hasAny, isAuthenticated } = usePermissions();
 
   const allowed = useMemo(() => {
     // SECURITY FIX: 2026-03-28 - Check authentication first
-    if (requireAuth && !isAuthenticated) {
+    if (!isAuthenticated) {
       return false;
     }
 
@@ -50,10 +50,10 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     }
     
     return isAuthenticated;
-  }, [permission, permissions, mode, hasPermission, hasAll, hasAny, isAuthenticated, requireAuth]);
+  }, [permission, permissions, mode, hasPermission, hasAll, hasAny, isAuthenticated]);
 
   // Return not authenticated fallback if user is not logged in
-  if (requireAuth && !isAuthenticated) {
+  if (!isAuthenticated) {
     return <>{notAuthenticatedFallback}</>;
   }
 

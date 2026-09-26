@@ -6,6 +6,7 @@ import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { DatabaseBackup, FileText, Globe2, LayoutGrid, Package, RefreshCcw, Settings2, Shield, Users } from 'lucide-react';
 import { usePermissions } from '@hooks/usePermissions';
 import { hasGrantedPermission } from '@services/permissionAliases';
+import { resolveRoleFallbackPermissions } from '@services/rolePermissionFallbacks';
 import type { ReportColumnConfig, SystemSettings, User } from '../../../types';
 
 const GeneralSettings = lazy(() => import('../components/GeneralSettings'));
@@ -41,43 +42,9 @@ type SettingsTabKey =
   | 'printing'
   | 'theme';
 
-const ROLE_BASED_FALLBACK_PERMISSIONS: Record<string, string[]> = {
-  SuperAdmin: ['*'],
-  superadmin: ['*'],
-  Admin: [
-    'users.*',
-    'settings.*',
-    'reports.*',
-    'backup.*',
-    'items.*',
-    'transactions.*',
-    'formulation.*',
-    'opening-balances.*',
-    'theme.*',
-    'monitoring.logs.write',
-  ],
-  admin: [
-    'users.*',
-    'settings.*',
-    'reports.*',
-    'backup.*',
-    'items.*',
-    'transactions.*',
-    'formulation.*',
-    'opening-balances.*',
-    'theme.*',
-    'monitoring.logs.write',
-  ],
-};
-
 const normalizePermissions = (permissions: unknown): string[] => {
   if (!Array.isArray(permissions)) return [];
   return [...new Set(permissions.filter((entry): entry is string => typeof entry === 'string'))];
-};
-
-const resolveRoleFallbackPermissions = (role: unknown): string[] => {
-  const key = String(role || '').trim();
-  return key ? ROLE_BASED_FALLBACK_PERMISSIONS[key] || [] : [];
 };
 
 const SettingsPage: React.FC<SettingsPageProps> = ({
@@ -94,14 +61,14 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   const tabs = useMemo(() => ([
     { key: 'general' as const, label: 'الإعدادات العامة', permission: 'settings.view.general', icon: Settings2 },
     { key: 'reference-data' as const, label: 'الأقسام ووحدات القياس', permission: 'settings.view.general', icon: Package },
-    { key: 'users' as const, label: 'المستخدمون والأدوار', permission: 'settings.view.users', icon: Users },
-    { key: 'permissions' as const, label: 'مصفوفة الصلاحيات', permission: 'settings.view.permissions', icon: Shield },
-    { key: 'backup' as const, label: 'النسخ الاحتياطي', permission: 'settings.view.backup', icon: DatabaseBackup },
+    { key: 'users' as const, label: 'المستخدمون والأدوار', permission: 'users.view', icon: Users },
+    { key: 'permissions' as const, label: 'مصفوفة الصلاحيات', permission: 'users.update', icon: Shield },
+    { key: 'backup' as const, label: 'النسخ الاحتياطي', permission: 'backup.view', icon: DatabaseBackup },
     { key: 'reset' as const, label: 'إعادة الضبط', permission: 'admin.reset_system', icon: RefreshCcw },
-    { key: 'audit' as const, label: 'سجلات التدقيق', permission: 'settings.view.audit', icon: FileText },
-    { key: 'offline' as const, label: 'إعدادات الأوفلاين', permission: 'settings.view.offline', icon: LayoutGrid },
-    { key: 'printing' as const, label: 'قوالب الطباعة', permission: 'settings.view.printing', icon: FileText },
-    { key: 'theme' as const, label: 'الثيم واللغة', permission: 'settings.view.localization', icon: Globe2 },
+    { key: 'audit' as const, label: 'سجلات التدقيق', permission: 'users.audit', icon: FileText },
+    { key: 'offline' as const, label: 'إعدادات الأوفلاين', permission: 'settings.view.general', icon: LayoutGrid },
+    { key: 'printing' as const, label: 'قوالب الطباعة', permission: 'settings.view.general', icon: FileText },
+    { key: 'theme' as const, label: 'الثيم واللغة', permission: 'theme.view', icon: Globe2 },
   ]), []);
 
   const effectivePermissions = useMemo(() => {

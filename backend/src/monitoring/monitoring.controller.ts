@@ -1,5 +1,5 @@
 // ENTERPRISE FIX: Phase 7 - Advanced System Reset Module with Multi-Layer Security - 2026-04-29
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, ServiceUnavailableException, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { Public } from '../auth/decorators/public.decorator';
@@ -27,7 +27,11 @@ export class MonitoringController {
   @Public()
   @Get('health')
   async getHealth() {
-    return this.monitoringService.getHealth();
+    const health = await this.monitoringService.getHealth();
+    if (health.status !== 'healthy') {
+      throw new ServiceUnavailableException(health);
+    }
+    return health;
   }
 
   // Step 1: Generate a per-session one-time challenge code (second factor).

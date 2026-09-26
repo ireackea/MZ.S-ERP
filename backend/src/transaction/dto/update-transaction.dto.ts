@@ -1,5 +1,7 @@
 import { Type } from 'class-transformer';
-import { IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsIn, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsDecimalString } from '../../common/decimal-validation';
+import type { DecimalString } from '../../common/decimal';
 
 export class UpdateTransactionDto {
   @IsOptional()
@@ -15,10 +17,8 @@ export class UpdateTransactionDto {
   type?: string;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber({ allowNaN: false, allowInfinity: false })
-  @Min(0)
-  quantity?: number;
+  @IsDecimalString()
+  quantity?: DecimalString;
 
   @IsOptional()
   @IsString()
@@ -37,28 +37,24 @@ export class UpdateTransactionDto {
   supplierInvoice?: string;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber({ allowNaN: false, allowInfinity: false })
-  supplierNet?: number;
+  @IsDecimalString()
+  supplierNet?: DecimalString;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber({ allowNaN: false, allowInfinity: false })
-  difference?: number;
+  @IsDecimalString()
+  difference?: DecimalString;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber({ allowNaN: false, allowInfinity: false })
-  packageCount?: number;
+  @IsDecimalString()
+  packageCount?: DecimalString;
 
   @IsOptional()
   @IsString()
   weightSlip?: string;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber({ allowNaN: false, allowInfinity: false })
-  salaryOfWorker?: number;
+  @IsDecimalString()
+  salaryOfWorker?: DecimalString;
 
   @IsOptional()
   @IsString()
@@ -95,14 +91,12 @@ export class UpdateTransactionDto {
   delayDuration?: number;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber({ allowNaN: false, allowInfinity: false })
-  delayPenalty?: number;
+  @IsDecimalString()
+  delayPenalty?: DecimalString;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber({ allowNaN: false, allowInfinity: false })
-  calculatedFine?: number;
+  @IsDecimalString()
+  calculatedFine?: DecimalString;
 
   @IsOptional()
   @IsString()
@@ -125,11 +119,21 @@ export class UpdateTransactionDto {
   googleDriveLink?: string;
 
   @IsOptional()
-  @IsString()
-  createdByUserId?: string;
-
-  @IsOptional()
   @Type(() => Number)
   @IsNumber({ allowNaN: false, allowInfinity: false })
   timestamp?: number;
+
+  @IsOptional()
+  @IsIn(['INCREASE', 'DECREASE'])
+  adjustmentDirection?: 'INCREASE' | 'DECREASE';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  adjustmentReason?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  adjustmentSourceReference?: string;
 }

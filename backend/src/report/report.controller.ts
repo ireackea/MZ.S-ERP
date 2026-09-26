@@ -2,13 +2,14 @@
 // ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
 // ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Professional PDF Reporting - 2026-02-27
-import { Body, Controller, Get, Post, Query, UseGuards, BadRequestException } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, Req, UseGuards, BadRequestException } from '@nestjs/common';
 import { ReportService } from './report.service';
 import { ReportDto } from './dto/report.dto';
 import { GenerateReportDto } from './dto/generate-report.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { RbacGuard } from '../auth/rbac.guard';
+import { resolveWarehouseScope } from '../common/scope';
 
 @UseGuards(JwtAuthGuard, RbacGuard)
 @Controller('reports')
@@ -17,19 +18,19 @@ export class ReportController {
 
   @Permissions('reports.view')
   @Get()
-  async getReport(@Query() query: ReportDto) {
+  async getReport(@Query() query: ReportDto, @Req() req: any) {
     if (query.endDate && query.startDate && new Date(query.endDate) < new Date(query.startDate)) {
       throw new BadRequestException('تاريخ النهاية يجب أن يكون بعد تاريخ البداية.');
     }
-    return this.reportService.getFilteredTransactions(query);
+    return this.reportService.getFilteredTransactions(query, resolveWarehouseScope(req.user?.role));
   }
 
   @Permissions('reports.generate')
   @Post('generate')
-  async generate(@Body() dto: GenerateReportDto) {
+  async generate(@Body() dto: GenerateReportDto, @Req() req: any) {
     if (dto.dateTo && dto.dateFrom && new Date(dto.dateTo) < new Date(dto.dateFrom)) {
       throw new BadRequestException('تاريخ النهاية يجب أن يكون بعد تاريخ البداية.');
     }
-    return this.reportService.generate(dto);
+    return this.reportService.generate(dto, resolveWarehouseScope(req.user?.role));
   }
 }

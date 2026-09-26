@@ -1,6 +1,6 @@
 import { Item, OperationType, Transaction } from '../types';
-import { getOpeningQuantityByPeriod, upsertOpeningBalancesByPeriod } from './openingBalanceService';
 import { canonicalizeOperationType } from '../utils/operationTypes';
+import { stocktakingApi, type StocktakingApiSession } from './stocktakingApi';
 
 export interface StocktakingCountEntry {
   userName: string;
@@ -44,29 +44,41 @@ export interface MonthlyAuditRow {
   notes?: string;
 }
 
-const STOCKTAKING_SESSIONS_KEY = 'feed_factory_monthly_stocktaking_sessions';
+const sessionCache = new Map<string, MonthlyStocktakingSession>();
+const sessionIds = new Map<string, string>();
+const entryIds = new Map<string, string>();
 
-function readJson<T>(key: string, fallback: T): T {
-  const raw = localStorage.getItem(key);
-  if (!raw) return fallback;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
+const fromApiSession = (session: StocktakingApiSession): MonthlyStocktakingSession => {
+  session.entries.forEach((entry) => entryIds.set(`${session.id}:${entry.itemId}`, entry.id));
+  return {
+  monthKey: session.monthKey,
+  itemRecords: Object.fromEntries(session.entries.map((entry) => [entry.itemId, {
+    itemId: entry.itemId,
+    actualCount: entry.actualCount,
+    notes: entry.notes,
+    entries: entry.counts.map((count) => ({
+      userName: String(count.userId || 'unknown'),
+      value: count.value,
+      at: new Date(count.at).getTime(),
+    })),
+  }])),
+  closed: session.closed,
+  closedAt: session.closedAt ? new Date(session.closedAt).getTime() : undefined,
+  closedBy: session.closedById,
+  archivedPdfName: session.archivedPdfName,
+  archivedPdfMime: session.archivedPdfMime,
+  archivedPdfData: session.archivedPdfData,
+  };
+};
 
-function writeJson<T>(key: string, value: T) {
-  localStorage.setItem(key, JSON.stringify(value));
-}
+const toApiSession = (session: StocktakingApiSession) => session;
 
-function readSessions(): MonthlyStocktakingSession[] {
-  const rows = readJson<MonthlyStocktakingSession[]>(STOCKTAKING_SESSIONS_KEY, []);
-  return Array.isArray(rows) ? rows : [];
-}
-
-function writeSessions(rows: MonthlyStocktakingSession[]) {
-  writeJson(STOCKTAKING_SESSIONS_KEY, rows);
+export async function loadMonthlySession(monthKey: string, warehouseId = 'default'): Promise<MonthlyStocktakingSession> {
+  const remote = await stocktakingApi.get(monthKey, warehouseId) || await stocktakingApi.create(monthKey, warehouseId);
+  const normalized = fromApiSession(toApiSession(remote));
+  sessionIds.set(monthKey, remote.id);
+  sessionCache.set(monthKey, normalized);
+  return normalized;
 }
 
 export function getMonthBounds(monthKey: string): { start: Date; end: Date } {
@@ -93,35 +105,30 @@ export function getMonthLabel(monthKey: string): string {
 }
 
 export function getOrCreateMonthlySession(monthKey: string): MonthlyStocktakingSession {
-  const sessions = readSessions();
-  const existing = sessions.find((row) => row.monthKey === monthKey);
+  const existing = sessionCache.get(monthKey);
   if (existing) return existing;
   const created: MonthlyStocktakingSession = {
     monthKey,
     itemRecords: {},
     closed: false,
   };
-  sessions.push(created);
-  writeSessions(sessions);
+  sessionCache.set(monthKey, created);
   return created;
 }
 
 export function saveMonthlySession(session: MonthlyStocktakingSession): MonthlyStocktakingSession {
-  const sessions = readSessions();
-  const idx = sessions.findIndex((row) => row.monthKey === session.monthKey);
-  if (idx >= 0) sessions[idx] = session;
-  else sessions.push(session);
-  writeSessions(sessions);
+  sessionCache.set(session.monthKey, session);
   return session;
 }
 
-export function upsertItemCount(params: {
+export async function upsertItemCount(params: {
   monthKey: string;
   itemId: string;
   userName: string;
   value: number;
   notes?: string;
-}): MonthlyStocktakingSession {
+  resolveConflict?: boolean;
+}): Promise<MonthlyStocktakingSession> {
   const session = getOrCreateMonthlySession(params.monthKey);
   if (session.closed) return session;
 
@@ -143,7 +150,23 @@ export function upsertItemCount(params: {
     actualCount: Number(params.value),
   };
 
-  return saveMonthlySession(session);
+  const saved = saveMonthlySession(session);
+  const remoteId = sessionIds.get(params.monthKey);
+  if (!remoteId) return saved;
+  const persisted = params.resolveConflict && entryIds.get(`${remoteId}:${params.itemId}`)
+    ? await stocktakingApi.resolveEntry(remoteId, entryIds.get(`${remoteId}:${params.itemId}`)!, {
+      itemId: params.itemId,
+      actualCount: Number(params.value),
+      notes: params.notes,
+    })
+    : await stocktakingApi.upsertEntry(remoteId, {
+      itemId: params.itemId,
+      actualCount: Number(params.value),
+      notes: params.notes,
+    });
+  const normalized = fromApiSession(persisted);
+  sessionCache.set(params.monthKey, normalized);
+  return normalized;
 }
 
 export function saveManualSignedPdf(monthKey: string, fileName: string, mime: string, base64Data: string): MonthlyStocktakingSession {
@@ -164,12 +187,13 @@ export function computeMonthlyAuditRows(params: {
   monthKey: string;
   items: Item[];
   transactions: Transaction[];
+  openingBalances?: Record<string, number>;
 }): MonthlyAuditRow[] {
   const { start, end } = getMonthBounds(params.monthKey);
   const session = getOrCreateMonthlySession(params.monthKey);
 
   return params.items.map((item) => {
-    const openingBalance = getOpeningQuantityByPeriod(item.id, params.monthKey);
+    const openingBalance = params.openingBalances?.[item.id] ?? 0;
 
     const itemTransactions = params.transactions.filter((tx) => {
       if (tx.itemId !== item.id) return false;
@@ -210,14 +234,14 @@ export function computeMonthlyAuditRows(params: {
   });
 }
 
-export function closeMonth(params: {
+export async function closeMonth(params: {
   monthKey: string;
   approvedBy: string;
   rows: MonthlyAuditRow[];
   archivedPdfName: string;
   archivedPdfMime: string;
   archivedPdfData: string;
-}): { ok: boolean; reason?: string; session: MonthlyStocktakingSession } {
+}): Promise<{ ok: boolean; reason?: string; session: MonthlyStocktakingSession }> {
   const session = getOrCreateMonthlySession(params.monthKey);
   if (session.closed) {
     return { ok: false, reason: 'تم إغلاق هذا الشهر مسبقاً.', session };
@@ -228,19 +252,21 @@ export function closeMonth(params: {
     return { ok: false, reason: 'يوجد أصناف متضاربة، يجب حلها قبل الإغلاق.', session };
   }
 
-  const nextMonthKey = getNextMonthKey(params.monthKey);
-  upsertOpeningBalancesByPeriod(
-    nextMonthKey,
-    params.rows.map((row) => ({ item_id: row.itemId, quantity: row.theoreticalBalance }))
-  );
+  const remoteId = sessionIds.get(params.monthKey);
+  if (!remoteId) {
+    return { ok: false, reason: 'جلسة الجرد غير محفوظة على الخادم.', session };
+  }
 
-  session.closed = true;
-  session.closedAt = Date.now();
-  session.closedBy = params.approvedBy;
-  session.archivedPdfName = params.archivedPdfName;
-  session.archivedPdfMime = params.archivedPdfMime;
-  session.archivedPdfData = params.archivedPdfData;
-
-  const saved = saveMonthlySession(session);
-  return { ok: true, session: saved };
+  try {
+    const closed = await stocktakingApi.close(remoteId, {
+      archivedPdfName: params.archivedPdfName,
+      archivedPdfMime: params.archivedPdfMime,
+      archivedPdfData: params.archivedPdfData,
+    });
+    const normalized = fromApiSession(closed);
+    sessionCache.set(params.monthKey, normalized);
+    return { ok: true, session: normalized };
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.message : 'فشل إغلاق الجرد.', session };
+  }
 }

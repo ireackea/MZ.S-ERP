@@ -1,14 +1,11 @@
 // ENTERPRISE FIX: Phase 0 - التنظيف الأساسي والتحضير - 2026-03-13
 import { CATEGORIES as DEFAULT_CATEGORIES, INITIAL_ITEMS, UNITS } from '../constants';
 import type {
-	AuditLog,
 	Formula,
 	GridColumnPreference,
 	Item,
 	ItemSortSettings,
 	OperationAppearance,
-	Order,
-	Partner,
 	ReportColumnConfig,
 	StockCheck,
 	SystemSettings,
@@ -19,11 +16,10 @@ import type {
 	UserGridPreference,
 } from '../types';
 import { canonicalizeOperationType } from '../utils/operationTypes';
+import { assertStorageKeyAllowed } from './storageOwnership';
 
 const INVENTORY_STORE_KEY = 'ff_inventory_store_v1';
 const TRANSACTIONS_KEY = 'feed_factory_transactions';
-const PARTNERS_KEY = 'feed_factory_partners';
-const ORDERS_KEY = 'feed_factory_orders';
 const USERS_KEY = 'feed_factory_users';
 const TAGS_KEY = 'feed_factory_tags';
 const UNITS_KEY = 'feed_factory_units';
@@ -35,7 +31,6 @@ const OPERATION_PRINT_CONFIG_KEY = 'feed_factory_operation_print_config';
 const OPERATION_PRINT_TEMPLATES_KEY = 'feed_factory_operation_print_templates';
 const STOCKTAKING_PRINT_CONFIG_KEY = 'feed_factory_stocktaking_print_config';
 const STOCKTAKING_PRINT_TEMPLATES_KEY = 'feed_factory_stocktaking_print_templates';
-const AUDIT_LOGS_KEY = 'feed_factory_audit_logs';
 const OPENING_BALANCE_REPORT_CONFIG_KEY = 'feed_factory_opening_balance_report_config';
 const ITEM_SORT_SETTINGS_KEY = 'feed_factory_item_sort_settings';
 const FORMULAS_KEY = 'feed_factory_formulas';
@@ -60,6 +55,7 @@ type PersistedInventorySnapshot = Partial<{
 const canUseStorage = () => typeof window !== 'undefined' && typeof localStorage !== 'undefined';
 
 const readJson = <T,>(key: string, fallback: T): T => {
+	assertStorageKeyAllowed(key, 'localStorage');
 	if (!canUseStorage()) return fallback;
 	const raw = localStorage.getItem(key);
 	if (!raw) return fallback;
@@ -72,6 +68,7 @@ const readJson = <T,>(key: string, fallback: T): T => {
 };
 
 const writeJson = <T,>(key: string, value: T) => {
+	assertStorageKeyAllowed(key, 'localStorage');
 	if (!canUseStorage()) return;
 	localStorage.setItem(key, JSON.stringify(value));
 };
@@ -169,6 +166,7 @@ const mergeGridColumns = (base: GridColumnPreference[], overlay?: GridColumnPref
 };
 
 export const clearStrictEmptyBootFlag = () => {
+	assertStorageKeyAllowed(STRICT_EMPTY_BOOT_KEY, 'localStorage');
 	if (!canUseStorage()) return;
 	localStorage.removeItem(STRICT_EMPTY_BOOT_KEY);
 };
@@ -185,12 +183,6 @@ export const getItems = (): Item[] => {
 
 export const getTransactions = (): Transaction[] => readJson<Transaction[]>(TRANSACTIONS_KEY, []);
 export const saveTransactions = (transactions: Transaction[]) => writeJson(TRANSACTIONS_KEY, transactions);
-
-export const getPartners = (): Partner[] => readJson<Partner[]>(PARTNERS_KEY, []);
-export const savePartners = (partners: Partner[]) => writeJson(PARTNERS_KEY, partners);
-
-export const getOrders = (): Order[] => readJson<Order[]>(ORDERS_KEY, []);
-export const saveOrders = (orders: Order[]) => writeJson(ORDERS_KEY, orders);
 
 export const getUsers = (): User[] => {
 	const persistedSnapshot = readPersistedInventorySnapshot();
@@ -289,16 +281,9 @@ export const saveStockChecks = (checks: StockCheck[]) => writeJson(STOCK_CHECKS_
 export const getFormulas = (): Formula[] => readJson<Formula[]>(FORMULAS_KEY, []);
 export const saveFormulas = (formulas: Formula[]) => writeJson(FORMULAS_KEY, formulas);
 
-export const getAuditLogs = (): AuditLog[] => readJson<AuditLog[]>(AUDIT_LOGS_KEY, []);
-export const addAuditLog = (log: Omit<AuditLog, 'id' | 'timestamp'>) => {
-	const current = getAuditLogs();
-	const next: AuditLog = {
-		...log,
-		id: crypto.randomUUID(),
-		timestamp: Date.now(),
-	};
-	writeJson(AUDIT_LOGS_KEY, [...current.slice(-499), next]);
-};
+// FC-AUD-001 — the localStorage audit log (`feed_factory_audit_logs`) was
+// removed. Audit evidence that a user can edit or clear is not evidence; the
+// server-side trail lives in PostgreSQL and is read via GET /audit/logs.
 
 export const getUserGridPreferences = (): UserGridPreference[] => readJson<UserGridPreference[]>(USER_GRID_PREFERENCES_KEY, []);
 export const saveUserGridPreferences = (rows: UserGridPreference[]) => writeJson(USER_GRID_PREFERENCES_KEY, rows);

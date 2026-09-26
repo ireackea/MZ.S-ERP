@@ -4,6 +4,13 @@
 // ENTERPRISE FIX: Legacy Migration Phase 3 - Professional PDF Reporting - 2026-02-27
 import { BadRequestException, Injectable } from '@nestjs/common';
 import * as puppeteer from 'puppeteer';
+// FC-API-002 — the printer must not re-derive movement direction; it reuses the
+// canonical classifier so a printed report can never disagree with the API.
+import {
+  isInboundType,
+  isOutboundType,
+  isStockAdjustmentType,
+} from '../common/operation-type';
 
 export type PrintableReportType = 'dashboard' | 'items' | 'transactions';
 export type PrintReportPayload = {
@@ -245,22 +252,21 @@ export class ReportService {
 
     if (type === 'transactions') {
       const rows = this.extractRows(data, type);
-      const inbound = rows.filter((r) => {
-        const v = String(r.type || '').toLowerCase();
-        return (
-          v.includes('in') ||
-          v.includes('inbound') ||
-          v.includes('incoming') ||
-          v.includes('production') ||
-          v.includes('وارد') ||
-          v.includes('استلام') ||
-          v.includes('إضافة')
-        );
-      }).length;
+      // FC-API-002 — the previous implementation guessed direction with a bare
+      // `type.includes('in')`, so 'inbox' / 'maintenance' / 'dispatch' were all
+      // counted as inbound and every printed total was wrong. The canonical
+      // classifier is used instead.
+      const inbound = rows.filter((row) => isInboundType(row.type)).length;
+      const outbound = rows.filter((row) => isOutboundType(row.type)).length;
+      const adjustment = rows.filter((row) => isStockAdjustmentType(row.type)).length;
+      const unclassified = Math.max(0, rowCount - inbound - outbound - adjustment);
+
       return [
         { label: 'Total Rows', value: String(rowCount) },
         { label: 'Inbound Rows', value: String(inbound) },
-        { label: 'Outbound Rows', value: String(Math.max(0, rowCount - inbound)) },
+        { label: 'Outbound Rows', value: String(outbound) },
+        { label: 'Adjustment Rows', value: String(adjustment) },
+        ...(unclassified > 0 ? [{ label: 'Unclassified Rows', value: String(unclassified) }] : []),
       ];
     }
 

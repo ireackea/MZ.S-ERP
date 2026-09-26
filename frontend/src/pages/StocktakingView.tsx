@@ -6,13 +6,14 @@
 // ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
 // Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
 
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { Item, Transaction } from '../types';
 import { AlertTriangle, Download, Eye, EyeOff, FileDown, Filter, Save, Upload } from 'lucide-react';
 import {
   computeMonthlyAuditRows,
   getMonthBounds,
   getOrCreateMonthlySession,
+  loadMonthlySession,
   isItemConflicted,
   saveMonthlySession,
   upsertItemCount,
@@ -21,6 +22,7 @@ import { toast } from '@services/toastService';
 import { useInventoryStore } from '../store/useInventoryStore';
 import { exportRowsToExcel, readFirstWorksheetRows } from '../utils/excelWorkbook';
 import StocktakingAuditPane from './stocktaking/StocktakingAuditPane';
+import { getOpeningBalances } from '../services/openingBalanceService';
 import { formatNumber, getAuditEntryStatus } from './stocktaking/shared';
 
 interface StocktakingProps {
@@ -62,11 +64,40 @@ const Stocktaking: React.FC<StocktakingProps> = ({
   const [draftCounts, setDraftCounts] = useState<Record<string, string>>({});
   const [draftUsers, setDraftUsers] = useState<Record<string, string>>({});
   const [draftNotes, setDraftNotes] = useState<Record<string, string>>({});
-  const [sessionVersion, setSessionVersion] = useState(0);
+  const [session, setSession] = useState(() => getOrCreateMonthlySession(monthKey));
+  const [openingBalances, setOpeningBalances] = useState<Record<string, number>>({});
 
   const importInputRef = useRef<HTMLInputElement>(null);
 
-  const session = useMemo(() => getOrCreateMonthlySession(monthKey), [monthKey, sessionVersion]);
+  useEffect(() => {
+    let active = true;
+    void loadMonthlySession(monthKey)
+      .then((loaded) => {
+        if (!active) return;
+        setSession(loaded);
+      })
+      .catch((error) => console.error('Failed to load stocktaking session', error));
+    return () => {
+      active = false;
+    };
+  }, [monthKey]);
+
+  useEffect(() => {
+    const year = Number(monthKey.split('-')[0]);
+    void getOpeningBalances(year)
+      .then((payload: any) => {
+        const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
+        setOpeningBalances(Object.fromEntries(rows.map((row: any) => [row.itemPublicId || String(row.itemId), Number(row.quantity || 0)])));
+      })
+      .catch((error) => console.error('Failed to load opening balances', error));
+  }, [monthKey]);
+
+  const refreshSession = () => {
+    void loadMonthlySession(monthKey)
+      .then(setSession)
+      .catch((error) => console.error('Failed to refresh stocktaking session', error));
+  };
+
   const { start, end } = useMemo(() => getMonthBounds(monthKey), [monthKey]);
 
   const zones = useMemo(() => {
@@ -80,11 +111,11 @@ const Stocktaking: React.FC<StocktakingProps> = ({
   }, [items, zoneFilter]);
 
   const auditRows = useMemo(() => {
-    const all = computeMonthlyAuditRows({ monthKey, items, transactions });
+    const all = computeMonthlyAuditRows({ monthKey, items, transactions, openingBalances });
     if (zoneFilter === 'all') return all;
     const zoneItemIds = new Set(zoneItems.map((item) => item.id));
     return all.filter((row) => zoneItemIds.has(row.itemId));
-  }, [monthKey, items, transactions, zoneFilter, zoneItems]);
+  }, [monthKey, items, transactions, openingBalances, zoneFilter, zoneItems]);
 
   const operationsRows = useMemo(() => {
     const byItemId = new Map(auditRows.map((row) => [row.itemId, row]));
@@ -123,7 +154,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
     return session.itemRecords[itemId]?.notes || '';
   };
 
-  const saveSingleItem = (itemId: string, resolveConflict = false) => {
+  const saveSingleItem = async (itemId: string, resolveConflict = false) => {
     if (isClosed) return;
 
     const rawCount = getDraftCount(itemId);
@@ -133,12 +164,13 @@ const Stocktaking: React.FC<StocktakingProps> = ({
       return;
     }
 
-    const updated = upsertItemCount({
+    const updated = await upsertItemCount({
       monthKey,
       itemId,
       userName: getDraftUser(itemId),
       value: parsed,
       notes: getDraftNote(itemId),
+      resolveConflict,
     });
 
     if (resolveConflict && updated.itemRecords[itemId]) {
@@ -146,12 +178,14 @@ const Stocktaking: React.FC<StocktakingProps> = ({
       saveMonthlySession(updated);
     }
 
-    setSessionVersion((prev) => prev + 1);
+    refreshSession();
     setStatusMessage('تم حفظ جرد هذا الصنف بنجاح.');
   };
 
-  const saveAllVisible = () => {
-    operationsRows.forEach(({ item }) => saveSingleItem(item.id));
+  const saveAllVisible = async () => {
+    for (const { item } of operationsRows) {
+      await saveSingleItem(item.id);
+    }
   };
 
   const exportTemplate = async () => {
@@ -196,7 +230,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
     const rows = await readFirstWorksheetRows(file);
     let importedCount = 0;
 
-    rows.forEach((row) => {
+    for (const row of rows) {
       const code = String(row.item_code || row['item code'] || '').trim();
       const name = String(row.item_name || row['item name'] || '').trim();
       const countRaw = String(row.actual_count || row['actual count'] || '').trim();
@@ -214,11 +248,11 @@ const Stocktaking: React.FC<StocktakingProps> = ({
 
       if (!item) return;
 
-      upsertItemCount({ monthKey, itemId: item.id, userName, value: parsedCount, notes });
+      await upsertItemCount({ monthKey, itemId: item.id, userName, value: parsedCount, notes });
       importedCount += 1;
-    });
+    }
 
-    setSessionVersion((prev) => prev + 1);
+    refreshSession();
     setStatusMessage(`تم استيراد ${importedCount} صنف بنجاح.`);
   };
 
@@ -399,7 +433,7 @@ const Stocktaking: React.FC<StocktakingProps> = ({
           companyLogoUrl={resolvedCompanyLogoUrl}
           conflictCount={conflictCount}
           isClosed={isClosed}
-          onSessionChanged={() => setSessionVersion((prev) => prev + 1)}
+           onSessionChanged={refreshSession}
           onStatusMessage={setStatusMessage}
         />
       )}

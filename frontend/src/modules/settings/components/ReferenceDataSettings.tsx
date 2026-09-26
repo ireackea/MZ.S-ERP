@@ -8,7 +8,6 @@ import type { UnloadingRuleDraft } from '../../../types';
 import UnloadingRulesPanel from './UnloadingRulesPanel';
 
 interface ReferenceDataSettingsProps {
-  forceAccess?: boolean;
 }
 
 type ImportSection = 'categories' | 'units' | 'unloadingRules';
@@ -136,7 +135,7 @@ const importTotal = (summary: ImportSummary, field: keyof ImportCounts) => (
   summary.categories[field] + summary.units[field] + summary.unloadingRules[field]
 );
 
-const ReferenceDataSettings: React.FC<ReferenceDataSettingsProps> = ({ forceAccess = false }) => {
+const ReferenceDataSettings: React.FC<ReferenceDataSettingsProps> = ({ }) => {
   const { hasPermission } = usePermissions();
   const items = useInventoryStore((state) => state.items);
   const categories = useInventoryStore((state) => state.categories);
@@ -148,8 +147,8 @@ const ReferenceDataSettings: React.FC<ReferenceDataSettingsProps> = ({ forceAcce
   const deleteUnit = useInventoryStore((state) => state.deleteUnit);
   const createUnloadingRule = useInventoryStore((state) => state.createUnloadingRule);
 
-  const canView = forceAccess || hasPermission('settings.view.general');
-  const canEdit = forceAccess || hasPermission('settings.update.system');
+  const canView = hasPermission('settings.view.general');
+  const canEdit = hasPermission('settings.update.system');
   const [newCategory, setNewCategory] = useState('');
   const [newUnit, setNewUnit] = useState('');
   const [pendingAction, setPendingAction] = useState<string | null>(null);
@@ -745,7 +744,7 @@ const ReferenceDataSettings: React.FC<ReferenceDataSettingsProps> = ({ forceAcce
         </section>
       </div>
 
-      <UnloadingRulesPanel forceAccess={forceAccess} />
+      <UnloadingRulesPanel />
     </div>
   );
 };

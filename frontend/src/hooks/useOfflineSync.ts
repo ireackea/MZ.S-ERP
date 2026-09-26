@@ -6,12 +6,16 @@ import { useSyncExternalStore } from 'react';
 import { mutationQueueService } from '../services/mutationQueueService';
 import { AUTH_SESSION_EVENT, getAuthUser } from '@services/authSession';
 import { toast } from '@services/toastService';
+import { assertStorageKeyAllowed } from '../services/storageOwnership';
 import { stopRealtimeSync, startRealtimeSync } from '../services/realtimeSync';
 
 type OfflineSyncSnapshot = {
   isOffline: boolean;
   isSyncing: boolean;
   pendingCount: number;
+  conflictCount: number;
+  failedCount: number;
+  deadLetterCount: number;
 };
 
 type BeforeInstallPromptEvent = Event & {
@@ -23,11 +27,15 @@ let snapshot: OfflineSyncSnapshot = {
   isOffline: typeof navigator !== 'undefined' ? !navigator.onLine : false,
   isSyncing: false,
   pendingCount: 0,
+  conflictCount: 0,
+  failedCount: 0,
+  deadLetterCount: 0,
 };
 
 const subscribers = new Set<() => void>();
 
 let activeConsumers = 0;
+let activeOwnerId = '';
 let pendingCountInterval: ReturnType<typeof setInterval> | null = null;
 let runtimeListenersBound = false;
 let serviceWorkerRegistrationAttempted = false;
@@ -46,7 +54,10 @@ const setSnapshot = (partial: Partial<OfflineSyncSnapshot>) => {
   if (
     nextSnapshot.isOffline === snapshot.isOffline &&
     nextSnapshot.isSyncing === snapshot.isSyncing &&
-    nextSnapshot.pendingCount === snapshot.pendingCount
+    nextSnapshot.pendingCount === snapshot.pendingCount &&
+    nextSnapshot.conflictCount === snapshot.conflictCount &&
+    nextSnapshot.failedCount === snapshot.failedCount &&
+    nextSnapshot.deadLetterCount === snapshot.deadLetterCount
   ) {
     return;
   }
@@ -58,24 +69,54 @@ const setSnapshot = (partial: Partial<OfflineSyncSnapshot>) => {
 const readSnapshot = () => snapshot;
 
 const refreshPendingCount = async () => {
-  const count = await mutationQueueService.getQueueSize();
-  setSnapshot({ pendingCount: count });
+  try {
+    const stats = await mutationQueueService.getQueueStats();
+    setSnapshot({
+      pendingCount: stats.total,
+      conflictCount: stats.conflicts,
+      failedCount: stats.failed,
+      deadLetterCount: stats.deadLetter,
+    });
+  } catch (error) {
+    console.error('Failed to read mutation queue stats:', error);
+  }
 };
 
 const hasAuthenticatedSession = () => Boolean(getAuthUser());
+
+const isTransactionMutation = (url: string) => url === '/transactions' || url.startsWith('/transactions/');
+
+const enqueueWithQuotaHandling = async (
+  url: string,
+  method: 'POST' | 'PUT' | 'DELETE' | 'PATCH',
+  body: any,
+  headers?: Record<string, string>,
+) => {
+  try {
+    await mutationQueueService.enqueue(url, method, body, headers);
+  } catch (error: any) {
+    if (String(error?.message || '').includes('QUOTA')) {
+      toast.warning('امتلأت مساحة التخزين المحلي. تم إيقاف حفظ العمليات بدون اتصال.');
+    }
+    throw error;
+  }
+};
 
 const ensureInstallPromptListener = () => {
   if (installPromptListenerBound || typeof window === 'undefined') {
     return;
   }
 
+  assertStorageKeyAllowed('ff_pw_first_visit');
   const firstVisit = localStorage.getItem('ff_pw_first_visit');
   if (!firstVisit) {
+    assertStorageKeyAllowed('ff_pw_first_visit');
     localStorage.setItem('ff_pw_first_visit', Date.now().toString());
     return;
   }
 
   const daysUsing = (Date.now() - parseInt(firstVisit, 10)) / (1000 * 60 * 60 * 24);
+  assertStorageKeyAllowed('ff_pw_prompt_shown');
   if (daysUsing <= 3 || localStorage.getItem('ff_pw_prompt_shown')) {
     return;
   }
@@ -89,6 +130,7 @@ const ensureInstallPromptListener = () => {
         label: 'تثبيت التطبيق',
         onClick: () => {
           void promptEvent.prompt();
+          assertStorageKeyAllowed('ff_pw_prompt_shown');
           localStorage.setItem('ff_pw_prompt_shown', 'true');
         },
       },
@@ -133,16 +175,16 @@ const configureRealtimeBackoff = () => {
   return socket;
 };
 
-const handleOnline = async () => {
-  setSnapshot({ isOffline: false });
-  configureRealtimeBackoff();
-
-  toast.success('تم استعادة الاتصال بالشبكة. ستبدأ مزامنة التغييرات الآن...');
+const syncQueue = async () => {
+  if (!hasAuthenticatedSession()) return;
   setSnapshot({ isSyncing: true });
-
   try {
-    await mutationQueueService.sync();
-    toast.success('تمت مزامنة التغييرات بنجاح.');
+    const result = await mutationQueueService.sync();
+    if (result && (result.failed > 0 || result.conflicts > 0 || result.blocked > 0 || result.deadLetter > 0)) {
+      toast.warning('تعذر مزامنة بعض التغييرات. راجع قائمة العمليات المعلقة.');
+    } else {
+      toast.success('تمت مزامنة التغييرات بنجاح.');
+    }
   } catch (error) {
     console.error('Offline sync failed:', error);
     toast.warning('تعذر إكمال مزامنة التغييرات. سيُعاد المحاولة عند توفر الاتصال بشكل مستقر.');
@@ -152,6 +194,13 @@ const handleOnline = async () => {
   }
 };
 
+const handleOnline = async () => {
+  setSnapshot({ isOffline: false });
+  configureRealtimeBackoff();
+  toast.success('تم استعادة الاتصال بالشبكة. ستبدأ مزامنة التغييرات الآن...');
+  await syncQueue();
+};
+
 const handleOffline = () => {
   setSnapshot({ isOffline: true, isSyncing: false });
   stopRealtimeSync();
@@ -159,12 +208,26 @@ const handleOffline = () => {
 };
 
 const handleAuthSessionChanged = () => {
+  const nextOwnerId = String(getAuthUser()?.id || '');
+  if (activeOwnerId && activeOwnerId !== nextOwnerId) {
+    void mutationQueueService.quarantineOwner(activeOwnerId);
+  }
+  activeOwnerId = nextOwnerId;
+  if (nextOwnerId) {
+    void mutationQueueService.resumeOwner(nextOwnerId).then(() => {
+      if (navigator.onLine) void syncQueue();
+    });
+  }
   if (readSnapshot().isOffline) {
     stopRealtimeSync();
     return;
   }
 
   configureRealtimeBackoff();
+};
+
+const handleServiceWorkerMessage = (event: MessageEvent) => {
+  if (event.data?.type === 'FEED_FACTORY_QUEUE_REPLAY') void syncQueue();
 };
 
 const startRuntime = () => {
@@ -177,6 +240,7 @@ const startRuntime = () => {
     return;
   }
 
+  activeOwnerId = String(getAuthUser()?.id || '');
   setSnapshot({ isOffline: !navigator.onLine });
   void refreshPendingCount();
 
@@ -187,6 +251,7 @@ const startRuntime = () => {
   window.addEventListener('online', handleOnline);
   window.addEventListener('offline', handleOffline);
   window.addEventListener(AUTH_SESSION_EVENT, handleAuthSessionChanged);
+  window.addEventListener('message', handleServiceWorkerMessage);
   runtimeListenersBound = true;
 
   if (navigator.onLine) {
@@ -218,6 +283,7 @@ const stopRuntime = () => {
     window.removeEventListener('online', handleOnline);
     window.removeEventListener('offline', handleOffline);
     window.removeEventListener(AUTH_SESSION_EVENT, handleAuthSessionChanged);
+    window.removeEventListener('message', handleServiceWorkerMessage);
     runtimeListenersBound = false;
   }
 
@@ -242,12 +308,19 @@ export const useOfflineSync = () => {
     url: string,
     method: 'POST' | 'PUT' | 'DELETE' | 'PATCH',
     body: any,
-    localAction: () => void | Promise<void>,
+    localAction?: () => void | Promise<void>,
+    headers?: Record<string, string>,
   ) => {
-    await localAction();
+    const transactionMutation = isTransactionMutation(url);
 
     if (readSnapshot().isOffline) {
-      await mutationQueueService.enqueue(url, method, body);
+      if (transactionMutation) {
+        toast.warning('حفظ الحركات بدون اتصال معطل مؤقتًا. سجّل الحركة عند عودة الاتصال.');
+        throw new Error('OFFLINE_TRANSACTION_POSTING_DISABLED');
+      }
+
+      await enqueueWithQuotaHandling(url, method, body, headers);
+      await localAction?.();
       await refreshPendingCount();
       toast.info('تم حفظ العملية محليًا لأنها نُفذت بدون اتصال.');
       return { offline: true };
@@ -255,11 +328,19 @@ export const useOfflineSync = () => {
 
     try {
       const { default: apiClient } = await import('../api/client');
-      await apiClient.request({ url, method, data: body });
-      return { offline: false };
+      const response = await apiClient.request({ url, method, data: body, headers });
+      await localAction?.();
+      return { offline: false, data: response.data };
     } catch (error: any) {
       if (!error.response) {
-        await mutationQueueService.enqueue(url, method, body);
+        if (transactionMutation) {
+          setSnapshot({ isOffline: true });
+          toast.warning('تعذر تأكيد الحركة على الخادم. لم يتم حفظها محليًا لتجنب التكرار.');
+          throw error;
+        }
+
+        await enqueueWithQuotaHandling(url, method, body, headers);
+        await localAction?.();
         await refreshPendingCount();
         setSnapshot({ isOffline: true });
         toast.warning('تعذر الوصول إلى الخادم. تم حفظ العملية محليًا إلى حين استعادة الاتصال.');
@@ -270,6 +351,12 @@ export const useOfflineSync = () => {
     }
   };
 
-  return { ...state, executeWithSync };
+  const retryFailed = async () => {
+    await mutationQueueService.retryOwner();
+    await refreshPendingCount();
+    if (!readSnapshot().isOffline) await syncQueue();
+  };
+
+  return { ...state, executeWithSync, retryFailed };
 };
 

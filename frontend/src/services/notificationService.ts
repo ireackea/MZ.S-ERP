@@ -1,9 +1,11 @@
 // ENTERPRISE FIX: Exact Legacy UI Restoration - 2026-02-27
 import { User } from '../types';
+import { assertStorageKeyAllowed } from './storageOwnership';
 
 const NOTIFICATION_LOGS_KEY = 'feed_factory_notification_logs';
 
 function readLogs(): Array<Record<string, any>> {
+  assertStorageKeyAllowed(NOTIFICATION_LOGS_KEY);
   const raw = localStorage.getItem(NOTIFICATION_LOGS_KEY);
   if (!raw) return [];
   try {
@@ -15,6 +17,7 @@ function readLogs(): Array<Record<string, any>> {
 }
 
 function saveLogs(logs: Array<Record<string, any>>) {
+  assertStorageKeyAllowed(NOTIFICATION_LOGS_KEY);
   localStorage.setItem(NOTIFICATION_LOGS_KEY, JSON.stringify(logs.slice(0, 500)));
 }
 

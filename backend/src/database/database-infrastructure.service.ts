@@ -1,5 +1,5 @@
 import { Injectable, InternalServerErrorException, Logger, OnModuleDestroy } from '@nestjs/common';
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 
 type SequenceTarget = {
   tableName: string;
@@ -20,7 +20,7 @@ export class DatabaseInfrastructureService implements OnModuleDestroy {
       throw new InternalServerErrorException('DATABASE_URL is required for database infrastructure operations.');
     }
 
-    this.pool = new Pool({ connectionString });
+    this.pool = new Pool({ connectionString, connectionTimeoutMillis: 5000, idleTimeoutMillis: 30000, max: 10 });
     return this.pool;
   }
 
@@ -29,16 +29,17 @@ export class DatabaseInfrastructureService implements OnModuleDestroy {
   }
 
   async probeConnection(): Promise<boolean> {
-    const client = await this.getPool().connect();
+    let client: PoolClient | undefined;
 
     try {
+      client = await this.getPool().connect();
       await client.query('SELECT 1');
       return true;
     } catch (error) {
       this.logger.warn(`Database reachability probe failed: ${String((error as Error)?.message || error)}`);
       return false;
     } finally {
-      client.release();
+      client?.release();
     }
   }
 

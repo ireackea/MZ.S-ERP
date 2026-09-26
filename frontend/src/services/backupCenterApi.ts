@@ -1,16 +1,11 @@
 // ENTERPRISE FIX: Exact Legacy UI Restoration - 2026-02-27
+// FC-SEC-003 — no shared secret may live in the client bundle.
+// The session HttpOnly cookie plus RbacGuard are the only authority; a
+// VITE_-prefixed token would be inlined into public JavaScript.
 import apiClient from '@api/client';
-
-const BACKUP_API_TOKEN =
-  typeof import.meta !== 'undefined' && import.meta.env?.VITE_BACKUP_API_TOKEN
-    ? String(import.meta.env.VITE_BACKUP_API_TOKEN)
-    : '';
 
 const withBackupHeaders = (headers?: Record<string, string>) => {
   const baseHeaders: Record<string, string> = { ...(headers || {}) };
-  if (BACKUP_API_TOKEN) {
-    baseHeaders['x-backup-token'] = BACKUP_API_TOKEN;
-  }
   return baseHeaders;
 };
 

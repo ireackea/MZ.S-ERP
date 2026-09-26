@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import UniversalColumnManager from '../../components/UniversalColumnManager';
 import { useInventoryStore } from '../../store/useInventoryStore';
+import { assertStorageKeyAllowed } from '../../services/storageOwnership';
 import type { GridColumnPreference, Item, ItemSortMode } from '../../types';
 import {
   SORTS,
@@ -213,6 +214,7 @@ const ItemsSmartCatalog: React.FC<ItemsSmartCatalogProps> = ({
   const [detailItemId, setDetailItemId] = useState<string | null>(null);
   const [categoryOrder, setCategoryOrder] = useState<string[]>(() => {
     try {
+      assertStorageKeyAllowed('items.categoryOrder');
       const saved = localStorage.getItem('items.categoryOrder');
       return saved ? JSON.parse(saved) : [];
     } catch {
@@ -299,6 +301,7 @@ const ItemsSmartCatalog: React.FC<ItemsSmartCatalogProps> = ({
     const [moved] = next.splice(index, 1);
     next.splice(targetIndex, 0, moved);
     setCategoryOrder(next);
+    assertStorageKeyAllowed('items.categoryOrder');
     localStorage.setItem('items.categoryOrder', JSON.stringify(next));
   };
 

@@ -7,10 +7,12 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import {
+  ALLOW_AUTHENTICATED_METADATA_KEY,
   IS_PUBLIC_KEY,
   PERMISSIONS_METADATA_KEY,
   ROLES_METADATA_KEY,
 } from './auth.constants';
+import { isKnownPermission } from './permission-catalog';
 
 type Principal = {
   role: string;
@@ -34,18 +36,36 @@ export class RbacGuard implements CanActivate {
         context.getClass(),
       ]) || [];
 
+    // FC-SEC-002: a route may only require permissions that exist in the catalog.
+    const undefinedPermissions = requiredPermissions.filter(
+      (permission) => !isKnownPermission(permission),
+    );
+    if (undefinedPermissions.length) {
+      throw new ForbiddenException(
+        `Route authorization metadata references unknown permission(s): ${undefinedPermissions.join(', ')}`,
+      );
+    }
+
     const requiredRoles =
       this.reflector.getAllAndOverride<string[]>(ROLES_METADATA_KEY, [
         context.getHandler(),
         context.getClass(),
       ]) || [];
-
-    if (!requiredPermissions.length && !requiredRoles.length) return true;
+    const allowAuthenticated = this.reflector.getAllAndOverride<boolean>(ALLOW_AUTHENTICATED_METADATA_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]) === true;
 
     const request = context.switchToHttp().getRequest();
     const principal = this.resolvePrincipal(request);
     if (!principal) {
       throw new ForbiddenException('Missing authenticated principal for RBAC check');
+    }
+
+    if (allowAuthenticated) return true;
+
+    if (!requiredPermissions.length && !requiredRoles.length) {
+      throw new ForbiddenException('Route authorization metadata is required');
     }
 
     if (!this.hasRole(principal.role, requiredRoles)) {

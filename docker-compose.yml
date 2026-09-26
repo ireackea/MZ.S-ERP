@@ -13,17 +13,28 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-feedfactory} -d ${POSTGRES_DB:-feed_factory_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   backend:
     build: ./backend
     restart: always
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
-      SYSTEM_RESET_TOKEN: ${SYSTEM_RESET_TOKEN:?SYSTEM_RESET_TOKEN is required}
       BACKUP_ENCRYPTION_SECRET: ${BACKUP_ENCRYPTION_SECRET:?BACKUP_ENCRYPTION_SECRET is required}
+      # FC-QA-002 — without this the restore endpoint answers 401 for every
+      # caller, so the restore path cannot be exercised at all.
+      BACKUP_RESTORE_PIN: ${BACKUP_RESTORE_PIN:?BACKUP_RESTORE_PIN is required}
+      # DEF-001 - over-issue policy: STRICT | CLAMP_AND_ALERT (default) | ALLOW
+      STOCK_DEFICIT_POLICY: ${STOCK_DEFICIT_POLICY:-CLAMP_AND_ALERT}
       METRICS_AUTH_TOKEN: ${METRICS_AUTH_TOKEN:?METRICS_AUTH_TOKEN is required}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:4173,http://127.0.0.1:4173}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4173,http://127.0.0.1:4173}
@@ -31,14 +42,27 @@ services:
       PORT: ${PORT:-3001}
     ports:
       - "3001:3001"
+    # FC-ITEM-001 — attachments must survive a container rebuild. Without this
+    # the volume is anonymous and every uploaded file is lost on `up --build`.
+    volumes:
+      - item_uploads:/app/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
 
   frontend:
     build: ./frontend
     restart: always
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
       - "4173:4173"
 
 volumes:
   postgres_data:
+  # FC-ITEM-001 — named volume so item attachments are not lost on rebuild.
+  item_uploads:

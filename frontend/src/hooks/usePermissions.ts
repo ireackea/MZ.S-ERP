@@ -9,49 +9,12 @@ const normalizePermissions = (permissions: unknown): string[] => {
   return [...new Set(permissions.filter((entry): entry is string => typeof entry === 'string'))];
 };
 
-const ROLE_BASED_FALLBACK_PERMISSIONS: Record<string, string[]> = {
-  SuperAdmin: ['*'],
-  superadmin: ['*'],
-  Admin: [
-    'users.*',
-    'settings.*',
-    'reports.*',
-    'backup.*',
-    'items.*',
-    'transactions.*',
-    'formulation.*',
-    'opening-balances.*',
-    'theme.*',
-    'monitoring.logs.write',
-  ],
-  admin: [
-    'users.*',
-    'settings.*',
-    'reports.*',
-    'backup.*',
-    'items.*',
-    'transactions.*',
-    'formulation.*',
-    'opening-balances.*',
-    'theme.*',
-    'monitoring.logs.write',
-  ],
-};
-
-const resolveRoleFallbackPermissions = (role: unknown): string[] => {
-  const key = String(role || '').trim();
-  return key ? ROLE_BASED_FALLBACK_PERMISSIONS[key] || [] : [];
-};
-
 export const usePermissions = () => {
   const { data: session } = useSession();
 
   const normalizedPermissions = useMemo(() => {
-    const sessionPermissions = normalizePermissions(session?.user?.permissions);
-    return sessionPermissions.length > 0
-      ? sessionPermissions
-      : resolveRoleFallbackPermissions(session?.user?.role);
-  }, [session?.user?.permissions, session?.user?.role]);
+    return normalizePermissions(session?.user?.permissions);
+  }, [session?.user?.permissions]);
 
   const permissionsKey = useMemo(
     () => normalizedPermissions.slice().sort().join('|'),

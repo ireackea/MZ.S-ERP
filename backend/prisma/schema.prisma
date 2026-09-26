@@ -57,6 +57,11 @@ model User {
   acceptedInvitation     Invitation?      @relation("InvitationRecipient")
   auditLogs              AuditLog[]       @relation("AuditActor")
   activeSessions         ActiveSession[]
+  idempotencyRecords     IdempotencyRecord[]
+  createdPartners        Partner[]         @relation("PartnerCreator")
+  createdOrders          Order[]           @relation("OrderCreator")
+  createdStocktaking     StocktakingSession[] @relation("StocktakingCreator")
+  stocktakingCounts      StocktakingCount[] @relation("StocktakingCounter")
 
   @@map("users")
 }
@@ -107,6 +112,21 @@ model ActiveSession {
   @@index([expiresAt])
   @@index([isRevoked])
   @@map("active_sessions")
+}
+
+model IdempotencyRecord {
+  id          String   @id @default(cuid())
+  actorId     String
+  operation   String
+  key         String
+  requestHash String
+  response    Json
+  createdAt   DateTime @default(now())
+  actor       User     @relation(fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@unique([actorId, operation, key])
+  @@index([createdAt])
+  @@map("idempotency_records")
 }
 
 model Permission {
@@ -198,11 +218,122 @@ model Item {
   targetFormulas  Formulation[]    @relation("FormulationTargetItem")
   formulaRows     FormulationItem[] @relation("FormulationIngredientItem")
   transactions    Transaction[]
+  orderItems      OrderItem[]
+  stocktakingEntries StocktakingEntry[]
+  stockDeficits     StockDeficit[]
 
   @@index([name])
   @@index([code])
   @@index([barcode])
   @@index([isArchived])
+}
+
+model Partner {
+  id           String   @id @default(uuid())
+  name         String
+  type         String
+  phone        String
+  address      String?
+  notes        String?
+  createdById  String?
+  createdBy    User?    @relation("PartnerCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  orders       Order[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([name])
+  @@index([type])
+  @@map("partners")
+}
+
+model Order {
+  id           String      @id @default(uuid())
+  orderNumber  String      @unique
+  type         String
+  partnerId    String
+  partner      Partner     @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  warehouseId  String?
+  date         DateTime
+  status       String      @default("pending")
+  totalAmount  Decimal?
+  notes        String?
+  createdById  String?
+  createdBy    User?       @relation("OrderCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  items        OrderItem[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([partnerId])
+  @@index([warehouseId])
+  @@index([status])
+  @@index([date])
+  @@map("orders")
+}
+
+model OrderItem {
+  id           String   @id @default(uuid())
+  orderId      String
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  itemId       Int
+  item         Item     @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  quantity     Decimal
+  unit         String?
+
+  @@unique([orderId, itemId])
+  @@index([itemId])
+  @@map("order_items")
+}
+
+model StocktakingSession {
+  id             String   @id @default(uuid())
+  monthKey       String
+  warehouseId    String   @default("default")
+  status         String   @default("open")
+  closedAt       DateTime?
+  closedById     String?
+  archivedPdfName String?
+  archivedPdfMime String?
+  archivedPdfData String?
+  createdById    String?
+  createdBy      User?    @relation("StocktakingCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  entries        StocktakingEntry[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([monthKey, warehouseId])
+  @@index([status])
+  @@map("stocktaking_sessions")
+}
+
+model StocktakingEntry {
+  id           String   @id @default(uuid())
+  sessionId    String
+  session      StocktakingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  itemId       Int
+  item         Item     @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  actualCount  Decimal?
+  notes        String?
+  counts       StocktakingCount[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([sessionId, itemId])
+  @@index([itemId])
+  @@map("stocktaking_entries")
+}
+
+model StocktakingCount {
+  id         String   @id @default(uuid())
+  entryId    String
+  entry      StocktakingEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  value      Decimal
+  countedById String?
+  countedBy  User?    @relation("StocktakingCounter", fields: [countedById], references: [id], onDelete: SetNull)
+  countedAt  DateTime @default(now())
+
+  @@index([entryId])
+  @@index([countedById])
+  @@map("stocktaking_counts")
 }
 
 model Formulation {
@@ -321,6 +452,9 @@ model Transaction {
   attachmentName     String?
   attachmentType     String?
   googleDriveLink    String?
+  adjustmentReason           String?
+  adjustmentSourceReference  String?
+  adjustmentDirection        String?
   createdByUserId    String?
   timestamp          BigInt?
   createdAt          DateTime @default(now())
@@ -334,4 +468,36 @@ model Transaction {
   @@index([type])
   @@index([unloadingRuleId])
   @@index([warehouseInvoice])
+}
+
+/// DEF-001 - a shortfall: demand the ledger recorded that no physical stock
+/// covered. The balance is clamped at zero and the unfulfilled remainder is
+/// recorded here, so `currentStock = ledgerNet + openDeficit` always holds and
+/// the movement is never silently rewritten. Incoming stock settles this before
+/// it becomes spendable.
+model StockDeficit {
+  id          Int      @id @default(autoincrement())
+  publicId    String   @unique
+  itemId      Int
+  item        Item     @relation(fields: [itemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  warehouseId String
+  /// Always positive: the magnitude that could not be covered.
+  quantity    Decimal
+  /// OPEN | SETTLED_BY_CORRECTION | SETTLED_BY_RECEIPT | WRITTEN_OFF
+  status      String   @default("OPEN")
+  /// The movement whose issue could not be covered.
+  sourceTransactionId String?
+  /// The receipt that settled it, when settled by an incoming movement.
+  settledByTransactionId String?
+  reason      String?
+  resolution  String?
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  resolvedAt  DateTime?
+  resolvedById String?
+
+  @@index([itemId, status])
+  @@index([status, createdAt])
+  @@index([warehouseId, status])
 }

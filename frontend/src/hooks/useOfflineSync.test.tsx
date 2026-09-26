@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   })),
   stopRealtimeSyncMock: vi.fn(),
   getQueueSizeMock: vi.fn(),
+  getQueueStatsMock: vi.fn(),
   syncMock: vi.fn(),
   enqueueMock: vi.fn(),
   getAuthUserMock: vi.fn(),
@@ -27,8 +28,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../services/mutationQueueService', () => ({
   mutationQueueService: {
     getQueueSize: mocks.getQueueSizeMock,
+    getQueueStats: mocks.getQueueStatsMock,
     sync: mocks.syncMock,
     enqueue: mocks.enqueueMock,
+    resumeOwner: vi.fn().mockResolvedValue(undefined),
+    retryOwner: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -51,10 +55,25 @@ const Consumer = () => {
   return <div>{`${isOffline ? 'offline' : 'online'}:${pendingCount}`}</div>;
 };
 
+const TransactionConsumer = () => {
+  const { executeWithSync } = useOfflineSync();
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void executeWithSync('/transactions/bulk', 'POST', { transactions: [] }).catch(() => undefined);
+      }}
+    >
+      Save transaction
+    </button>
+  );
+};
+
 describe('useOfflineSync', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getQueueSizeMock.mockResolvedValue(3);
+    mocks.getQueueStatsMock.mockResolvedValue({ total: 3, pending: 3, processing: 0, failed: 0, conflicts: 0, blocked: 0, deadLetter: 0 });
     mocks.syncMock.mockResolvedValue(undefined);
     mocks.enqueueMock.mockResolvedValue(undefined);
     mocks.registerMock.mockResolvedValue({ scope: '/' });
@@ -98,6 +117,25 @@ describe('useOfflineSync', () => {
     view.unmount();
 
     expect(mocks.stopRealtimeSyncMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not queue inventory transactions while offline', async () => {
+    Object.defineProperty(window.navigator, 'onLine', {
+      configurable: true,
+      value: false,
+    });
+
+    render(<TransactionConsumer />);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Save transaction' })).toBeInTheDocument();
+    });
+
+    screen.getByRole('button', { name: 'Save transaction' }).click();
+
+    await waitFor(() => {
+      expect(mocks.toastMock.warning).toHaveBeenCalled();
+    });
+    expect(mocks.enqueueMock).not.toHaveBeenCalled();
   });
 
   it('delays realtime startup until an authenticated session exists', async () => {

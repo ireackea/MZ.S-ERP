@@ -1,6 +1,7 @@
 // ENTERPRISE FIX: Exact Legacy UI Restoration - 2026-02-27
 // ENTERPRISE FIX: Runtime Recovery Hardening - 2026-02-28
 import apiClient from '@/api/client';
+import { assertStorageKeyAllowed } from '../../services/storageOwnership';
 
 export const mockNetworkDelay = (ms = 300) => new Promise((res) => setTimeout(res, ms));
 
@@ -15,7 +16,9 @@ export const getUserTheme = async (userId = 'demo') => {
   }
 
   await mockNetworkDelay(200);
-  const payload = localStorage.getItem(getFallbackKey(userId));
+  const fallbackKey = getFallbackKey(userId);
+  assertStorageKeyAllowed(fallbackKey);
+  const payload = localStorage.getItem(fallbackKey);
   return payload || 'classic';
 };
 
@@ -28,6 +31,8 @@ export const updateUserTheme = async (theme: string, userId = 'demo') => {
   }
 
   await mockNetworkDelay(250);
-  localStorage.setItem(getFallbackKey(userId), theme);
+  const fallbackKey = getFallbackKey(userId);
+  assertStorageKeyAllowed(fallbackKey);
+  localStorage.setItem(fallbackKey, theme);
   return { success: true, theme };
 };

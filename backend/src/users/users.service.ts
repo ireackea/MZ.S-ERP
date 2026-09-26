@@ -15,6 +15,7 @@ import * as path from 'node:path';
 import { Observable, Subject, map } from 'rxjs';
 import { PrismaService } from '../prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { resolvePermissionGrants } from '../auth/permission-catalog';
 import { AcceptInvitationDto } from './dto/accept-invitation.dto';
 import { BulkAssignRoleDto, BulkDeleteUsersDto } from './dto/bulk-actions.dto';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -49,28 +50,6 @@ type UserListRecord = Prisma.UserGetPayload<{
 
 type RoleRecord = Prisma.RoleGetPayload<{}>;
 
-// ENTERPRISE FIX: 2026-04-29 — Mirrors auth.service.ts DEFAULT_ROLES and
-// app-bootstrap.service.ts DEFAULT_ROLE_PERMISSIONS for the third self-heal
-// surface (current-user permissions endpoint). Keep all three in sync.
-const USERS_DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
-  SuperAdmin: ['*'],
-  Admin: [
-    'users.*',
-    'settings.*',
-    'reports.*',
-    'backup.*',
-    'items.*',
-    'transactions.*',
-    'formulation.*',
-    'opening-balances.*',
-    'theme.*',
-    'monitoring.logs.write',
-  ],
-  Manager: ['transactions.*', 'reports.view', 'items.view', 'formulation.view', 'opening-balances.view', 'backup.view'],
-  Operator: ['transactions.create', 'transactions.update', 'transactions.delete', 'transactions.view', 'items.view'],
-  Viewer: ['items.view', 'transactions.view', 'reports.view', 'formulation.view', 'opening-balances.view', 'backup.view'],
-};
-
 @Injectable()
 export class UsersService {
   private readonly updates$ = new Subject<{
@@ -84,6 +63,34 @@ export class UsersService {
 
   constructor(private readonly prisma: PrismaService) {
     this.auditService = new AuditService(this.prisma);
+  }
+
+  private assertSuperAdmin(actor?: ActorContext): void {
+    if (String(actor?.role || '').toLowerCase() !== 'superadmin') {
+      throw new ForbiddenException('Only SuperAdmin can manage roles and permissions');
+    }
+  }
+
+  // FC-SEC-002 — every role grant must exist in the single permission catalog.
+  // Legacy ids are migrated forward; anything still unrecognised is rejected so
+  // migration can never become a silent bypass.
+  private resolveCatalogPermissions(permissions: string[]): string[] {
+    const { grants, unknown } = resolvePermissionGrants(permissions);
+    if (unknown.length) {
+      throw new BadRequestException(
+        `Unknown permission(s): ${unknown.join(', ')}. Fetch GET /auth/permissions for the valid list.`,
+      );
+    }
+    return grants;
+  }
+
+  private assertRoleSelection(dto: { roleId?: string; roleName?: string }, actor?: ActorContext): void {
+    if (dto.roleId && dto.roleName) {
+      throw new BadRequestException('Provide roleId or roleName, not both');
+    }
+    if (dto.roleId || dto.roleName) {
+      this.assertSuperAdmin(actor);
+    }
   }
 
   stream(): Observable<MessageEvent> {
@@ -166,19 +173,21 @@ export class UsersService {
   // ENTERPRISE FIX: Phase 2 - Multi-User Sync & Unified User Management - 2026-03-02
   // SECURITY FIX: 2026-03-28 - Added permission validation for role management
   async createRole(dto: { name: string; description?: string; color?: string; permissions?: string[] }, actor?: ActorContext) {
+    this.assertSuperAdmin(actor);
     const exists = await this.prisma.role.findUnique({ where: { name: dto.name } });
     if (exists) {
       throw new BadRequestException('Role name already exists');
     }
     
     // SECURITY FIX: 2026-03-28 - Validate permissions don't include dangerous wildcards
-    const requestedPermissions = dto.permissions || [];
+    // FC-SEC-002/003 — legacy ids are migrated; unrecognised ids are rejected.
+    const requestedPermissions = this.resolveCatalogPermissions(dto.permissions || []);
     const hasWildcard = requestedPermissions.includes('*');
     
     if (hasWildcard && actor?.role?.toLowerCase() !== 'superadmin') {
       throw new ForbiddenException('Only SuperAdmin can create roles with wildcard (*) permissions');
     }
-    
+
     const role = await this.prisma.role.create({
       data: {
         name: dto.name,
@@ -191,6 +200,7 @@ export class UsersService {
   }
 
   async createUser(dto: CreateUserDto, actor: ActorContext) {
+    this.assertRoleSelection(dto, actor);
     const role = await this.resolveRole(dto.roleId, dto.roleName);
     const username = dto.username.trim();
 
@@ -234,6 +244,7 @@ export class UsersService {
   }
 
   async inviteUser(dto: InviteUserDto, actor: ActorContext) {
+    this.assertRoleSelection(dto, actor);
     const role = await this.resolveRole(dto.roleId, dto.roleName);
     const email = String(dto.email || '').trim().toLowerCase();
     if (!email) {
@@ -341,32 +352,6 @@ export class UsersService {
     // issued before the login self-heal was deployed), reload from DB and apply
     // role-based defaults so the UI never sees "0 granted permissions" for a
     // built-in role. This mirrors AuthService and AppBootstrapService behavior.
-    if (permissions.length === 0 && principal?.id) {
-      const dbUser = await this.prisma.user.findUnique({
-        where: { id: String(principal.id) },
-        include: { role: true },
-      });
-      if (dbUser?.role) {
-        const dbPerms = this.parsePermissions(dbUser.role.permissions);
-        if (dbPerms.length > 0) {
-          return { role: dbUser.role.name, permissions: dbPerms };
-        }
-        const defaults = USERS_DEFAULT_ROLE_PERMISSIONS[dbUser.role.name];
-        if (defaults && defaults.length > 0) {
-          // Non-blocking DB repair so subsequent logins are consistent.
-          this.prisma.role
-            .update({ where: { id: dbUser.role.id }, data: { permissions: JSON.stringify(defaults) } })
-            .catch((err: unknown) =>
-              console.warn(
-                '[UsersService] Non-blocking role-permissions repair failed:',
-                (err as Error)?.message || err,
-              ),
-            );
-          return { role: dbUser.role.name, permissions: [...defaults] };
-        }
-      }
-    }
-
     return {
       role,
       permissions,
@@ -505,6 +490,7 @@ export class UsersService {
 
     let roleId: string | undefined;
     if (dto.roleId || dto.roleName) {
+      this.assertRoleSelection(dto, actor);
       const role = await this.resolveRole(dto.roleId, dto.roleName);
       roleId = role.id;
     }
@@ -648,8 +634,8 @@ export class UsersService {
   }
 
   async updateRolePermissions(roleId: string, dto: UpdateRolePermissionsDto, actor: ActorContext) {
-    const uniquePermissions = [...new Set((dto.permissions || []).map((permission) => String(permission).trim()).filter(Boolean))];
-
+    this.assertSuperAdmin(actor);
+    const uniquePermissions = this.resolveCatalogPermissions(dto.permissions || []);
     // SECURITY FIX: 2026-04-29 — Anti-privilege-escalation hardening (OWASP A01).
     // 1) Only SuperAdmin can grant the global wildcard "*".
     // 2) Only SuperAdmin can modify the SuperAdmin role permissions.
@@ -680,12 +666,37 @@ export class UsersService {
       }
     }
 
-    const role = await this.prisma.role.update({
-      where: { id: roleId },
-      data: {
-        permissions: JSON.stringify(uniquePermissions),
-        description: dto.description === undefined ? undefined : dto.description || null,
-      },
+    const previousPermissions = this.parsePermissions(existingRole.permissions);
+
+    // FC-AUD-001 — the permission change and its audit record are ONE commit,
+    // so a privilege escalation can never land without a trace.
+    const { role } = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.role.update({
+        where: { id: roleId },
+        data: {
+          permissions: JSON.stringify(uniquePermissions),
+          description: dto.description === undefined ? undefined : dto.description || null,
+        },
+      });
+
+      await this.auditService.logItemAction(
+        actor.id,
+        'ROLE_PERMISSIONS_UPDATE',
+        'Role',
+        roleId,
+        {
+          roleName: existingRole.name,
+          before: { permissions: previousPermissions },
+          after: { permissions: uniquePermissions },
+          added: uniquePermissions.filter((p) => !previousPermissions.includes(p)),
+          removed: previousPermissions.filter((p) => !uniquePermissions.includes(p)),
+        },
+        actor.username,
+        'SUCCESS',
+        { client: tx, actorRole: actor.role },
+      );
+
+      return { role: updated };
     });
 
     await this.writeAudit({
@@ -710,6 +721,7 @@ export class UsersService {
   }
 
   async bulkAssignRole(dto: BulkAssignRoleDto, actor: ActorContext) {
+    this.assertSuperAdmin(actor);
     const role = await this.resolveRole(dto.roleId, undefined);
     const userIds = [...new Set((dto.userIds || []).map((id) => String(id).trim()).filter(Boolean))];
     if (!userIds.length) throw new BadRequestException('userIds is required');

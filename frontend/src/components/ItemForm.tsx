@@ -5,11 +5,9 @@
 // ENTERPRISE FIX: Legacy Migration Phase 2 - ItemForm Component - 2026-02-27
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { create } from 'zustand';
 import { Loader2, Save, X } from 'lucide-react';
 import { toast } from '@services/toastService';
-import apiClient from '@api/client';
-import { syncItems, type SyncItemPayload } from '@services/itemsService';
+import { createItemInApi, updateItemInApi } from '@services/itemsService';
 import type { DataScope, Item } from '../types';
 
 type FormMode = 'create' | 'edit';
@@ -37,13 +35,6 @@ type ItemFormValues = {
 };
 
 type ValidationErrors = Partial<Record<keyof ItemFormValues, string>>;
-
-type InventoryStoreState = {
-  items: Item[];
-  isSubmitting: boolean;
-  createItem: (item: Item) => Promise<Item>;
-  updateItem: (item: Item) => Promise<Item>;
-};
 
 type ItemFormProps = {
   isOpen: boolean;
@@ -84,94 +75,15 @@ const normalizeSavedItem = (raw: any, fallback: Item): Item => {
   return saved;
 };
 
-const toSyncPayload = (item: Item): SyncItemPayload => ({
-  publicId: String(item.id),
-  name: item.name,
-  code: item.code || undefined,
-  barcode: item.barcode || undefined,
-  unit: item.unit,
-  category: item.category,
-  minLimit: toNumber(item.minLimit, 0),
-  maxLimit: toNumber(item.maxLimit, 1000),
-  orderLimit: item.orderLimit == null ? undefined : toNumber(item.orderLimit, 0),
-  currentStock: toNumber(item.currentStock, 0),
-  description: item.englishName || undefined,
-});
-
-const toApiPayload = (item: Item) => ({
-  id: String(item.id),
-  publicId: String(item.id),
-  code: item.code || null,
-  barcode: item.barcode || null,
-  name: item.name,
-  englishName: item.englishName || null,
-  description: item.englishName || null,
-  category: item.category,
-  unit: item.unit,
-  zone: item.zone || null,
-  minLimit: toNumber(item.minLimit, 0),
-  maxLimit: toNumber(item.maxLimit, 1000),
-  orderLimit: item.orderLimit == null ? null : toNumber(item.orderLimit, 0),
-  currentStock: toNumber(item.currentStock, 0),
-  packageWeight: item.packageWeight == null ? null : toNumber(item.packageWeight, 0),
-  costPrice: item.costPrice == null ? null : toNumber(item.costPrice, 0),
-  co2PerUnit: item.co2PerUnit == null ? null : toNumber(item.co2PerUnit, 0),
-  waterUsagePerUnit: item.waterUsagePerUnit == null ? null : toNumber(item.waterUsagePerUnit, 0),
-  sustainabilityRating: item.sustainabilityRating || null,
-  warehouseId: item.warehouseId || null,
-  tags: item.tags || [],
-  lastUpdated: item.lastUpdated || new Date().toISOString(),
-});
-
-const saveItemWithApi = async (mode: FormMode, item: Item): Promise<Item> => {
-  try {
-    if (mode === 'create') {
-      const response = await apiClient.post('/items', toApiPayload(item));
-      return normalizeSavedItem(response.data, item);
-    }
-    const response = await apiClient.put(`/items/${encodeURIComponent(String(item.id))}`, toApiPayload(item));
-    return normalizeSavedItem(response.data, item);
-  } catch (error: any) {
-    const status = Number(error?.response?.status || 0);
-    if ([404, 405, 501].includes(status)) {
-      // Backward compatibility with current backend which uses /items/sync.
-      await syncItems([toSyncPayload(item)]);
-      return item;
-    }
-    throw error;
-  }
+const createItemWithApi = async (item: Item): Promise<Item> => {
+  const response = await createItemInApi(item);
+  return normalizeSavedItem(response, item);
 };
 
-export const useInventoryStore = create<InventoryStoreState>((set) => ({
-  items: [],
-  isSubmitting: false,
-
-  createItem: async (item) => {
-    set({ isSubmitting: true });
-    try {
-      const saved = await saveItemWithApi('create', item);
-      set((state) => ({
-        items: [...state.items.filter((row) => String(row.id) !== String(saved.id)), saved],
-      }));
-      return saved;
-    } finally {
-      set({ isSubmitting: false });
-    }
-  },
-
-  updateItem: async (item) => {
-    set({ isSubmitting: true });
-    try {
-      const saved = await saveItemWithApi('edit', item);
-      set((state) => ({
-        items: state.items.map((row) => (String(row.id) === String(saved.id) ? saved : row)),
-      }));
-      return saved;
-    } finally {
-      set({ isSubmitting: false });
-    }
-  },
-}));
+const updateItemWithApi = async (item: Item): Promise<Item> => {
+  const response = await updateItemInApi(String(item.id), item);
+  return normalizeSavedItem(response, item);
+};
 
 const buildInitialValues = (mode: FormMode, initialItem?: Partial<Item> | null): ItemFormValues => {
   const resolvedId = mode === 'create' ? crypto.randomUUID() : String(initialItem?.id || crypto.randomUUID());
@@ -330,7 +242,7 @@ const ItemForm: React.FC<ItemFormProps> = ({
   onSuccess,
   title,
 }) => {
-  const { createItem, updateItem, isSubmitting } = useInventoryStore();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [values, setValues] = useState<ItemFormValues>(() => buildInitialValues(mode, initialItem));
   const [errors, setErrors] = useState<ValidationErrors>({});
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -382,13 +294,16 @@ const ItemForm: React.FC<ItemFormProps> = ({
       return;
     }
     const item = valuesToItem(values);
+    setIsSubmitting(true);
     try {
-      const saved = mode === 'create' ? await createItem(item) : await updateItem(item);
+      const saved = mode === 'create' ? await createItemWithApi(item) : await updateItemWithApi(item);
       toast.success(mode === 'create' ? 'Item created successfully.' : 'Item updated successfully.');
       onSuccess?.(saved);
       onClose();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'Failed to save item.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 

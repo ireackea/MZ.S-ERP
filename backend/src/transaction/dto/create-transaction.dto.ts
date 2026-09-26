@@ -1,9 +1,14 @@
 import { Type } from 'class-transformer';
+import { IsDecimalString } from '../../common/decimal-validation';
+import type { DecimalString } from '../../common/decimal';
 import {
+  ArrayMaxSize,
   IsArray,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -26,10 +31,8 @@ export class CreateTransactionDto {
   @IsString()
   type!: string;
 
-  @Type(() => Number)
-  @IsNumber({ allowNaN: false, allowInfinity: false })
-  @Min(0)
-  quantity!: number;
+  @IsDecimalString()
+  quantity!: DecimalString;
 
   @IsString()
   supplierOrReceiver!: string;
@@ -47,28 +50,24 @@ export class CreateTransactionDto {
   supplierInvoice?: string;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber({ allowNaN: false, allowInfinity: false })
-  supplierNet?: number;
+  @IsDecimalString()
+  supplierNet?: DecimalString;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber({ allowNaN: false, allowInfinity: false })
-  difference?: number;
+  @IsDecimalString()
+  difference?: DecimalString;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber({ allowNaN: false, allowInfinity: false })
-  packageCount?: number;
+  @IsDecimalString()
+  packageCount?: DecimalString;
 
   @IsOptional()
   @IsString()
   weightSlip?: string;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber({ allowNaN: false, allowInfinity: false })
-  salaryOfWorker?: number;
+  @IsDecimalString()
+  salaryOfWorker?: DecimalString;
 
   @IsOptional()
   @IsString()
@@ -105,14 +104,12 @@ export class CreateTransactionDto {
   delayDuration?: number;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber({ allowNaN: false, allowInfinity: false })
-  delayPenalty?: number;
+  @IsDecimalString()
+  delayPenalty?: DecimalString;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber({ allowNaN: false, allowInfinity: false })
-  calculatedFine?: number;
+  @IsDecimalString()
+  calculatedFine?: DecimalString;
 
   @IsOptional()
   @IsString()
@@ -135,17 +132,28 @@ export class CreateTransactionDto {
   googleDriveLink?: string;
 
   @IsOptional()
-  @IsString()
-  createdByUserId?: string;
-
-  @IsOptional()
   @Type(() => Number)
   @IsNumber({ allowNaN: false, allowInfinity: false })
   timestamp?: number;
+
+  @IsOptional()
+  @IsIn(['INCREASE', 'DECREASE'])
+  adjustmentDirection?: 'INCREASE' | 'DECREASE';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  adjustmentReason?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  adjustmentSourceReference?: string;
 }
 
 export class BulkCreateTransactionsDto {
   @IsArray()
+  @ArrayMaxSize(5000)
   @ValidateNested({ each: true })
   @Type(() => CreateTransactionDto)
   transactions!: CreateTransactionDto[];

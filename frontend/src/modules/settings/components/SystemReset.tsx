@@ -1,6 +1,6 @@
 // ENTERPRISE FIX: Phase 7 - Advanced System Reset Module with Multi-Layer Security - 2026-04-29
 // Multi-stage workflow: Warning → Scope → Reason → Challenge → Confirmation → Execute → Progress
-// Two-factor verification: SYSTEM_RESET_TOKEN (env) + one-time challenge code (5 min TTL)
+// Two-factor verification: password re-authentication + one-time challenge code (5 min TTL)
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -23,6 +23,7 @@ import {
 import { usePermissions } from '@hooks/usePermissions';
 import { useSession } from '@hooks/useSession';
 import { hasGrantedPermission } from '@services/permissionAliases';
+import { resolveRoleFallbackPermissions } from '@services/rolePermissionFallbacks';
 import { toast } from '@services/toastService';
 import {
   systemResetService,
@@ -132,43 +133,9 @@ const PROGRESS_STEPS = [
 const stageOrder: StageKey[] = ['gate', 'scope', 'reason', 'challenge', 'confirm', 'progress', 'done'];
 const RESET_PERMISSION = 'admin.reset_system';
 
-const ROLE_BASED_FALLBACK_PERMISSIONS: Record<string, string[]> = {
-  SuperAdmin: ['*'],
-  superadmin: ['*'],
-  Admin: [
-    'users.*',
-    'settings.*',
-    'reports.*',
-    'backup.*',
-    'items.*',
-    'transactions.*',
-    'formulation.*',
-    'opening-balances.*',
-    'theme.*',
-    'monitoring.logs.write',
-  ],
-  admin: [
-    'users.*',
-    'settings.*',
-    'reports.*',
-    'backup.*',
-    'items.*',
-    'transactions.*',
-    'formulation.*',
-    'opening-balances.*',
-    'theme.*',
-    'monitoring.logs.write',
-  ],
-};
-
 const normalizePermissions = (permissions: unknown): string[] => {
   if (!Array.isArray(permissions)) return [];
   return [...new Set(permissions.filter((entry): entry is string => typeof entry === 'string'))];
-};
-
-const resolveRoleFallbackPermissions = (role: unknown): string[] => {
-  const key = String(role || '').trim();
-  return key ? ROLE_BASED_FALLBACK_PERMISSIONS[key] || [] : [];
 };
 
 const formatRemaining = (ms: number): string => {
@@ -188,8 +155,7 @@ const SystemReset: React.FC<SystemResetProps> = ({ currentUser }) => {
   const roleFallback = currentUserPermissions.length > 0 || sessionUserPermissions.length > 0
     ? []
     : resolveRoleFallbackPermissions(effectiveRole);
-  const effectivePermissions = [...new Set([...permissions, ...currentUserPermissions, ...sessionUserPermissions, ...roleFallback])];
-  const isSuperAdmin = effectiveRole.toLowerCase() === 'superadmin';
+  const effectivePermissions = [...new Set([...permissions, ...currentUserPermissions, ...sessionUserPermissions, ...roleFallback])];  const isSuperAdmin = effectiveRole.toLowerCase() === 'superadmin';
   const canViewReset = hasPermission(RESET_PERMISSION) || hasGrantedPermission(effectivePermissions, RESET_PERMISSION);
   const canExecuteReset = canViewReset && isSuperAdmin;
 
@@ -370,7 +336,7 @@ const SystemReset: React.FC<SystemResetProps> = ({ currentUser }) => {
             <ul className="mt-2 space-y-1.5 text-sm text-red-900/90 dark:text-red-100/90">
               <li className="flex items-center gap-2"><CheckCircle2 size={14} className="text-red-600" /> الصلاحية <code>admin.reset_system</code></li>
               <li className="flex items-center gap-2"><CheckCircle2 size={14} className="text-red-600" /> دور <strong>SuperAdmin</strong></li>
-              <li className="flex items-center gap-2"><CheckCircle2 size={14} className="text-red-600" /> رمز <code>SYSTEM_RESET_TOKEN</code> (يُحفظ في متغيرات البيئة)</li>
+              <li className="flex items-center gap-2"><CheckCircle2 size={14} className="text-red-600" /> إعادة إدخال كلمة مرور حسابك (يتحقق منها الخادم)</li>
               <li className="flex items-center gap-2"><CheckCircle2 size={14} className="text-red-600" /> القدرة على إعادة تكوين النظام بعد التصفير</li>
             </ul>
           </div>
@@ -581,12 +547,13 @@ const SystemReset: React.FC<SystemResetProps> = ({ currentUser }) => {
       </div>
 
       <label className="block space-y-2 text-sm font-bold text-slate-700 dark:text-slate-200">
-        <span className="flex items-center gap-1.5"><KeyRound size={14} /> رمز SYSTEM_RESET_TOKEN الثابت من ملف .env</span>
+        <span className="flex items-center gap-1.5"><KeyRound size={14} /> كلمة مرور حسابك لتأكيد الهوية</span>
         <input
+          type="password"
           value={confirmationCode}
           onChange={(e) => setConfirmationCode(e.target.value)}
-          placeholder="ليس رمز التحقق المؤقت — أدخل قيمة SYSTEM_RESET_TOKEN من .env"
-          autoComplete="off"
+          placeholder="أعد إدخال كلمة مرور SuperAdmin — لا يوجد رمز ثابت"
+          autoComplete="current-password"
           className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 font-mono text-sm focus:border-rose-400 focus:outline-none focus:ring-2 focus:ring-rose-400/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
         />
       </label>
@@ -605,7 +572,7 @@ const SystemReset: React.FC<SystemResetProps> = ({ currentUser }) => {
           onClick={executeReset}
           disabled={
             submitting ||
-            confirmationCode.trim().length < 16 ||
+            confirmationCode.trim().length < 8 ||
             !challenge ||
             challengeExpired ||
             !canExecuteReset

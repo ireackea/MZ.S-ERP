@@ -92,6 +92,7 @@ export class PrintReportDto {
 export class RenderHtmlPdfDto {
   @IsString()
   @IsNotEmpty()
+  @MaxLength(2_000_000)
   html!: string;
 
   @IsOptional()

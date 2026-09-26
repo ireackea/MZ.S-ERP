@@ -22,8 +22,7 @@ export type AuthLoginResponse = {
 
 export const login = async (username: string, password: string): Promise<AuthLoginResponse> => {
   try {
-    console.log('[authService] Login request:', { username });
-
+    // FC-SEC-003 — no credential, user identity, or permission logging in the client.
     const response = await apiClient.post<AuthLoginResponse>('/auth/login', { username, password });
     const payload = response.data;
 
@@ -33,18 +32,10 @@ export const login = async (username: string, password: string): Promise<AuthLog
 
     setAuthUser(payload.user);
 
-    console.log('[authService] Login successful:', {
-      userId: payload.user?.id,
-      username: payload.user?.username,
-      role: payload.user?.role,
-    });
-
     return payload;
   } catch (error: any) {
     console.error('[authService] Login failed:', {
-      message: error?.message,
       status: error?.response?.status,
-      data: error?.response?.data,
     });
     throw error;
   }

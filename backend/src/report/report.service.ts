@@ -1,14 +1,29 @@
 // ENTERPRISE FIX: Professional PDF Reporting - 2026-02-27
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import * as puppeteer from 'puppeteer';
 import { PrismaService } from '../prisma.service';
 import { GenerateReportDto } from './dto/generate-report.dto';
 import { ReportDto } from './dto/report.dto';
 import { PrintReportDto, RenderHtmlPdfDto } from './dto/print-report.dto';
+import { TimeService } from '../common/time/time.service';
+import { warehouseScopeCondition } from '../common/scope';
+import {
+  isInboundType,
+  isOutboundType,
+  isStockAdjustmentType,
+  movementDelta,
+  roundQuantity,
+} from '../common/operation-type';
 
 @Injectable()
 export class ReportService {
-  constructor(private readonly prisma: PrismaService) {}
+  private activePdfRenders = 0;
+  private readonly maxPdfRenders = 2;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly timeService: TimeService,
+  ) {}
 
   private resolvePdfMargins(preset?: 'narrow' | 'normal' | 'wide') {
     if (preset === 'narrow') {
@@ -22,41 +37,22 @@ export class ReportService {
     return { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' };
   }
 
+  // FC-API-002 — classification is delegated to the single canonical module
+  // (common/operation-type.ts) instead of a third local substring matcher.
   private isInboundType(type: string): boolean {
-    const lowerType = String(type || '').toLowerCase();
-    return (
-      lowerType.includes('in') ||
-      lowerType.includes('inbound') ||
-      lowerType.includes('incoming') ||
-      lowerType.includes('purchase') ||
-      lowerType.includes('import') ||
-      lowerType.includes('production') ||
-      lowerType.includes('وارد') ||
-      lowerType.includes('ادخال') ||
-      lowerType.includes('إدخال') ||
-      lowerType.includes('مرتجع') ||
-      lowerType.includes('return') ||
-      lowerType.includes('انتاج') ||
-      lowerType.includes('إنتاج')
-    );
+    return isInboundType(type);
   }
 
   private isOutboundType(type: string): boolean {
-    const lowerType = String(type || '').toLowerCase();
-    return (
-      lowerType.includes('out') ||
-      lowerType.includes('outbound') ||
-      lowerType.includes('outgoing') ||
-      lowerType.includes('sale') ||
-      lowerType.includes('export') ||
-      lowerType.includes('صادر') ||
-      lowerType.includes('صرف') ||
-      lowerType.includes('خروج') ||
-      lowerType.includes('هالك') ||
-      lowerType.includes('تالف') ||
-      lowerType.includes('waste') ||
-      lowerType.includes('damaged')
-    );
+    return isOutboundType(type);
+  }
+
+  private isStockAdjustmentType(type: string): boolean {
+    return isStockAdjustmentType(type);
+  }
+
+  private getMovementDelta(row: { type: string; quantity: number; adjustmentDirection?: string | null }): number {
+    return movementDelta(row);
   }
 
   private async resolveItemIds(publicIds?: string[]) {
@@ -71,17 +67,29 @@ export class ReportService {
     return items.map((item) => item.id);
   }
 
-  async getFilteredTransactions(dto: ReportDto) {
-    if (dto.startDate && dto.endDate && new Date(dto.endDate) < new Date(dto.startDate)) {
+  private parseReportDate(value: string, endOfDay = false): Date {
+    try {
+      return this.timeService.parseDate(value, endOfDay);
+    } catch {
+      throw new BadRequestException(`Invalid date format: ${value}`);
+    }
+  }
+
+  async getFilteredTransactions(dto: ReportDto, scope = 'default') {
+    const startDate = dto.startDate ? this.parseReportDate(dto.startDate) : undefined;
+    const endDate = dto.endDate ? this.parseReportDate(dto.endDate, true) : undefined;
+    if (startDate && endDate && endDate < startDate) {
       throw new BadRequestException('End date cannot be earlier than start date');
     }
 
-    const where: any = {};
+    const where: any = {
+      ...warehouseScopeCondition(scope),
+    };
 
-    if (dto.startDate || dto.endDate) {
+    if (startDate || endDate) {
       where.date = {};
-      if (dto.startDate) where.date.gte = new Date(dto.startDate);
-      if (dto.endDate) where.date.lte = new Date(dto.endDate);
+      if (startDate) where.date.gte = startDate;
+      if (endDate) where.date.lt = endDate;
     }
 
     const resolvedItemIds = await this.resolveItemIds(dto.itemIds);
@@ -120,10 +128,13 @@ export class ReportService {
 
     const data = rows.map((t) => ({
       id: t.id,
-      date: t.date instanceof Date ? t.date.toISOString().split('T')[0] : t.date,
+      date: t.date instanceof Date ? this.timeService.getBusinessDateKey(t.date) : t.date,
       warehouseInvoice: t.warehouseInvoice,
       itemId: t.item?.publicId || String(t.itemId),
       type: t.type,
+      adjustmentDirection: t.adjustmentDirection || undefined,
+      adjustmentReason: t.adjustmentReason || undefined,
+      adjustmentSourceReference: t.adjustmentSourceReference || undefined,
       quantity: Number(t.quantity),
       supplierOrReceiver: t.supplierOrReceiver,
       truckNumber: t.truckNumber,
@@ -136,22 +147,21 @@ export class ReportService {
     return { data, total };
   }
 
-  async generate(dto: GenerateReportDto) {
-    const dateFrom = dto.dateFrom ? new Date(dto.dateFrom) : undefined;
-    const dateTo = dto.dateTo ? new Date(dto.dateTo) : undefined;
+  async generate(dto: GenerateReportDto, scope = 'default') {
+    const dateFrom = dto.dateFrom ? this.parseReportDate(dto.dateFrom) : undefined;
+    const dateTo = dto.dateTo ? this.parseReportDate(dto.dateTo, true) : undefined;
 
-    if (dateFrom && Number.isNaN(dateFrom.getTime())) {
-      throw new BadRequestException('Invalid dateFrom format');
-    }
-    if (dateTo && Number.isNaN(dateTo.getTime())) {
-      throw new BadRequestException('Invalid dateTo format');
+    if (dateFrom && dateTo && dateTo < dateFrom) {
+      throw new BadRequestException('dateTo cannot be earlier than dateFrom');
     }
 
-    const where: any = {};
+    const where: any = {
+      ...warehouseScopeCondition(scope),
+    };
     if (dateFrom || dateTo) {
       where.date = {};
       if (dateFrom) where.date.gte = dateFrom;
-      if (dateTo) where.date.lte = dateTo;
+      if (dateTo) where.date.lt = dateTo;
     }
 
     const resolvedItemIds = await this.resolveItemIds(dto.itemIds);
@@ -163,6 +173,7 @@ export class ReportService {
             totalTransactions: 0,
             totalIn: 0,
             totalOut: 0,
+            totalAdjustment: 0,
             net: 0,
             itemCount: 0,
           },
@@ -172,7 +183,7 @@ export class ReportService {
       where.itemId = { in: resolvedItemIds };
     }
 
-    if (dto.warehouseIds && dto.warehouseIds.length > 0) {
+    if (scope === 'all' && dto.warehouseIds && dto.warehouseIds.length > 0) {
       where.warehouseId = { in: dto.warehouseIds };
     }
 
@@ -194,12 +205,13 @@ export class ReportService {
 
     const normalized = rows.map((row) => ({
       id: row.publicId || String(row.id),
-      date: row.date.toISOString().split('T')[0],
+      date: this.timeService.getBusinessDateKey(row.date),
       itemId: row.item?.publicId || String(row.itemId),
       itemName: row.item?.name || '',
       itemCode: row.item?.code || '',
       warehouseId: row.warehouseId || '',
       type: row.type,
+      adjustmentDirection: row.adjustmentDirection || undefined,
       quantity: Number(row.quantity || 0),
       supplierOrReceiver: row.supplierOrReceiver,
       warehouseInvoice: row.warehouseInvoice || '',
@@ -218,9 +230,7 @@ export class ReportService {
           currentStock: 0,
         };
 
-        const isInbound = this.isInboundType(row.type);
-
-        existing.currentStock += isInbound ? row.quantity : -row.quantity;
+        existing.currentStock += this.getMovementDelta(row);
         grouped.set(key, existing);
       });
 
@@ -246,6 +256,12 @@ export class ReportService {
               .reduce((sum, r) => sum + r.quantity, 0)
               .toFixed(3),
           ),
+          totalAdjustment: Number(
+            normalized
+              .filter((r) => this.isStockAdjustmentType(r.type))
+              .reduce((sum, r) => sum + this.getMovementDelta(r), 0)
+              .toFixed(3),
+          ),
           net: Number(inventoryData.reduce((sum, row) => sum + row.currentStock, 0).toFixed(3)),
         },
         chartData: inventoryData
@@ -261,6 +277,9 @@ export class ReportService {
     const totalOut = normalized
       .filter((r) => this.isOutboundType(r.type))
       .reduce((sum, r) => sum + r.quantity, 0);
+    const totalAdjustment = normalized
+      .filter((r) => this.isStockAdjustmentType(r.type))
+      .reduce((sum, r) => sum + this.getMovementDelta(r), 0);
 
     const chartMap = new Map<string, { date: string; in: number; out: number }>();
     normalized.forEach((row) => {
@@ -280,7 +299,8 @@ export class ReportService {
         totalTransactions: normalized.length,
         totalIn: Number(totalIn.toFixed(3)),
         totalOut: Number(totalOut.toFixed(3)),
-        net: Number((totalIn - totalOut).toFixed(3)),
+        totalAdjustment: Number(totalAdjustment.toFixed(3)),
+        net: Number((totalIn - totalOut + totalAdjustment).toFixed(3)),
         itemCount: new Set(normalized.map((r) => r.itemId)).size,
       },
       chartData: Array.from(chartMap.values()).sort((a, b) => a.date.localeCompare(b.date)),
@@ -319,7 +339,10 @@ export class ReportService {
   }
 
   private buildPrintHtml(dto: PrintReportDto): string {
-    const renderedAt = new Date().toLocaleString('en-GB', { hour12: false });
+    const renderedAt = new Intl.DateTimeFormat('en-GB', {
+      timeZone: this.timeService.businessTimeZone,
+      hour12: false,
+    }).format(this.timeService.now());
     const summaryHtml = Array.isArray(dto.summary) && dto.summary.length > 0
       ? `
         <section class="summary-grid">
@@ -577,15 +600,33 @@ export class ReportService {
   }
 
   async renderHtmlPdf(dto: RenderHtmlPdfDto): Promise<Buffer> {
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
+    if (this.activePdfRenders >= this.maxPdfRenders) {
+      throw new HttpException('PDF renderer is busy', HttpStatus.TOO_MANY_REQUESTS);
+    }
+    this.activePdfRenders += 1;
+    let browser: puppeteer.Browser | undefined;
 
     try {
+      browser = await puppeteer.launch({
+        headless: true,
+        timeout: 15_000,
+        protocolTimeout: 20_000,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      });
       const page = await browser.newPage();
+      page.setDefaultTimeout(15_000);
+      page.setDefaultNavigationTimeout(15_000);
       await page.setJavaScriptEnabled(false);
-      await page.setContent(dto.html, { waitUntil: 'networkidle0' });
+      await page.setRequestInterception(true);
+      page.on('request', (request) => {
+        const requestUrl = request.url();
+        if (requestUrl === 'about:blank' || requestUrl.startsWith('data:') || requestUrl.startsWith('file:')) {
+          void request.continue();
+          return;
+        }
+        void request.abort();
+      });
+      await page.setContent(dto.html, { waitUntil: 'domcontentloaded', timeout: 15_000 });
 
       const pdf = await page.pdf({
         format: dto.paperSize || 'A4',
@@ -595,11 +636,16 @@ export class ReportService {
         preferCSSPageSize: true,
         scale: dto.scale || 1,
         margin: this.resolvePdfMargins(dto.margins),
+        timeout: 15_000,
       });
-
-      return Buffer.from(pdf);
+      const buffer = Buffer.from(pdf);
+      if (buffer.length > 10 * 1024 * 1024 || buffer.subarray(0, 5).toString() !== '%PDF-') {
+        throw new BadRequestException('Generated PDF is invalid or too large');
+      }
+      return buffer;
     } finally {
-      await browser.close();
+      await browser?.close();
+      this.activePdfRenders = Math.max(0, this.activePdfRenders - 1);
     }
   }
 }

@@ -312,7 +312,6 @@ const syncPayload = (i: Item): SyncItemPayload => ({
   maxLimit: n(i.maxLimit, 1000),
   orderLimit: i.orderLimit == null ? undefined : n(i.orderLimit, 0),
   packageWeight: i.packageWeight == null ? undefined : n(i.packageWeight, 0),
-  currentStock: n(i.currentStock, 0),
   description: i.englishName || undefined,
 });
 

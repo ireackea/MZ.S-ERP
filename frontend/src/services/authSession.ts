@@ -1,3 +1,5 @@
+import { assertStorageKeyAllowed } from './storageOwnership';
+
 export const AUTH_USER_STORAGE_KEY = 'feed_factory_jwt_user';
 export const AUTH_SESSION_EVENT = 'feed_factory_auth_session_changed';
 
@@ -48,6 +50,7 @@ export const clearAllAuthData = () => {
 export const getAuthUser = (): AuthSessionUser | null => {
   if (typeof window === 'undefined') return null;
 
+  assertStorageKeyAllowed(AUTH_USER_STORAGE_KEY);
   const raw = window.localStorage.getItem(AUTH_USER_STORAGE_KEY);
   if (!raw) return null;
 
@@ -61,6 +64,7 @@ export const getAuthUser = (): AuthSessionUser | null => {
 
 export const setAuthUser = (user: AuthSessionUser | null) => {
   if (typeof window === 'undefined') return;
+  assertStorageKeyAllowed(AUTH_USER_STORAGE_KEY);
 
   if (!user) {
     window.localStorage.removeItem(AUTH_USER_STORAGE_KEY);

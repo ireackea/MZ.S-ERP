@@ -1,4 +1,5 @@
-// ENTERPRISE FIX: Phase 3 - Audit Logging & Advanced Security - 2026-03-03
+import { assertStorageKeyAllowed } from './storageOwnership';
+
 const FINGERPRINT_KEY = 'feed_factory_device_fingerprint';
 
 const toHex = (buffer: ArrayBuffer) =>
@@ -37,10 +38,12 @@ export const generateDeviceFingerprint = async (): Promise<string> => {
 };
 
 export const getDeviceFingerprint = async (): Promise<string> => {
+  assertStorageKeyAllowed(FINGERPRINT_KEY);
   const existing = localStorage.getItem(FINGERPRINT_KEY);
   if (existing) return existing;
 
   const generated = await generateDeviceFingerprint();
+  assertStorageKeyAllowed(FINGERPRINT_KEY);
   localStorage.setItem(FINGERPRINT_KEY, generated);
   return generated;
 };

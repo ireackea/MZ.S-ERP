@@ -15,4 +15,10 @@ export class BalancesController {
   async getComputedBalances(@Query() query: ComputedBalancesDto) {
     return this.transactionService.getComputedBalances(query.financialYear);
   }
+
+  @Permissions('transactions.reconcile')
+  @Get('reconciliation')
+  async getStockReconciliation(@Query() query: ComputedBalancesDto) {
+    return this.transactionService.getStockReconciliation(query.financialYear);
+  }
 }

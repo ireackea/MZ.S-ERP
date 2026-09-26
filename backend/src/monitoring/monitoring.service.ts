@@ -1,6 +1,7 @@
 // ENTERPRISE FIX: Phase 7 - Advanced System Reset Module with Multi-Layer Security - 2026-04-29
 import { BadRequestException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { randomBytes, randomUUID } from 'node:crypto';
+import * as bcrypt from 'bcryptjs';
 import { AuditService } from '../audit/audit.service';
 import { BackupService } from '../backup/backup.service';
 import { DatabaseInfrastructureService } from '../database/database-infrastructure.service';
@@ -95,13 +96,24 @@ export class MonitoringService {
   }
 
   // SECURITY FIX: 2026-03-28 - Removed hardcoded reset code
-  private getSystemResetToken(): string {
-    const token = String(process.env.SYSTEM_RESET_TOKEN || '').trim();
-    if (!token || token.length < 16) {
-      this.logger.error('SYSTEM_RESET_TOKEN not configured or too short (min 16 chars)');
-      throw new Error('إعداد إعادة الضبط غير مكتمل. يرجى ضبط SYSTEM_RESET_TOKEN بطول 16 حرفًا على الأقل.');
-    }
-    return token;
+  // FC-SEC-003: the long-lived SYSTEM_RESET_TOKEN shared secret is gone. A reset
+  // now requires the acting SuperAdmin to re-enter their own password, which the
+  // backend verifies against the stored bcrypt hash. No secret is ever typed
+  // into, or held by, the browser.
+  private async assertResetReauthenticated(user: any, confirmationCode: string): Promise<boolean> {
+    const userId = String(user?.id || '').trim();
+    if (!userId) return false;
+
+    const record = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { passwordHash: true },
+    });
+    if (!record?.passwordHash) return false;
+
+    const candidate = String(confirmationCode || '');
+    if (!candidate) return false;
+
+    return bcrypt.compare(candidate, record.passwordHash);
   }
 
   private getResetActorKey(user: any): string {
@@ -387,9 +399,9 @@ export class MonitoringService {
       });
     }
 
-    // 4) Long-lived token.
-    const expectedToken = this.getSystemResetToken();
-    if (dto.confirmationCode !== expectedToken) {
+    // 4) Re-authentication: the acting SuperAdmin must re-enter their password.
+    const reauthenticated = await this.assertResetReauthenticated(user, dto.confirmationCode);
+    if (!reauthenticated) {
       const state = this.registerInvalidResetAttempt(actorKey, now);
       this.logger.warn(`Invalid reset confirmation by ${actorLabel}; blockedUntil=${state.blockedUntil}`);
       await this.recordResetAudit({
@@ -410,7 +422,7 @@ export class MonitoringService {
 
       throw new UnauthorizedException({
         code: 'SYSTEM_RESET_INVALID_CODE',
-        message: 'رمز التأكيد غير صحيح. يرجى التواصل مع مدير النظام.',
+        message: 'كلمة المرور غير صحيحة. يرجى إعادة إدخال كلمة مرور حسابك.',
       });
     }
 

@@ -249,7 +249,7 @@ describe('phase 3 visual proof after cleanup', () => {
     console.log('[phase3-visual-proof] items');
     await navigateToPath(appPage, '/items');
     await waitForPath(appPage, '/items');
-    await waitForVisibleText(appPage, 'إدارة الأصناف');
+    await waitForVisibleText(appPage, 'سجل الأصناف التشغيلي');
     await waitForTextToDisappear(appPage, 'جاري التحميل...');
     await waitForTextToDisappear(appPage, 'مرحبا بعودتك');
     await delay(1000);

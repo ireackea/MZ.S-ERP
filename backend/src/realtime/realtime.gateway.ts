@@ -203,7 +203,17 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
   }
 
   broadcastSync(event: RealtimeSyncEvent) {
-    this.server.emit('inventory:sync', event);
+    if (!event.scope || event.scope === 'all' || event.scope === 'default') {
+      this.server.emit('inventory:sync', event);
+      return;
+    }
+
+    for (const client of this.server?.sockets?.sockets?.values?.() || []) {
+      const user = client?.data?.user;
+      if (user?.role === 'SuperAdmin') {
+        client.emit('inventory:sync', event);
+      }
+    }
   }
 
   getConnectedClientsCount() {

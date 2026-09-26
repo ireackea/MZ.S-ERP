@@ -55,6 +55,18 @@ import {
     isExcelTimeFractionNoise,
 } from './operations/shared';
 
+const transactionIdempotencyKey = (rows: Transaction[]) => {
+    const signature = rows
+        .map((row) => [row.date, row.type, row.warehouseInvoice || '', row.itemId, row.quantity, row.supplierInvoice || ''].join(':'))
+        .join('|');
+    let hash = 2166136261;
+    for (let index = 0; index < signature.length; index += 1) {
+        hash ^= signature.charCodeAt(index);
+        hash = Math.imul(hash, 16777619);
+    }
+    return `tx-${(hash >>> 0).toString(16)}`;
+};
+
 const DailyOperations: React.FC<DailyOperationsProps> = ({
     items: itemsProp,
     transactions: transactionsProp,
@@ -74,8 +86,6 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
     const { executeWithSync } = useOfflineSync();
     const storeItems = useInventoryStore((state) => state.items);
     const storeTransactions = useInventoryStore((state) => state.transactions);
-    const setInventoryTransactions = useInventoryStore((state) => state.setTransactions);
-    const updateStockFromTransaction = useInventoryStore((state) => state.updateStockFromTransaction);
     const loadAll = useInventoryStore((state) => state.loadAll);
     const lastLoadedAt = useInventoryStore((state) => state.lastLoadedAt);
     const storedOperationPrintConfig = useInventoryStore((state) => state.operationPrintConfig);
@@ -90,12 +100,6 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
     const exportSheetsToExcel = useInventoryStore((state) => state.exportSheetsToExcel);
     const items = storeItems.length > 0 ? storeItems : (itemsProp || []);
     const transactions = storeTransactions.length > 0 ? storeTransactions : (transactionsProp || []);
-
-    const appendTransactionsLocally = async (rows: Transaction[]) => {
-        const nextRows = [...transactions, ...rows];
-        setInventoryTransactions(nextRows);
-        rows.forEach((row) => updateStockFromTransaction(row, 'add'));
-    };
 
     const addTransactionsWithOfflineProof = async (rows: Transaction[]) => {
         const payload = {
@@ -132,12 +136,15 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
             })),
         };
 
-        const result = await executeWithSync('/transactions/bulk', 'POST', payload, async () => {
-            await appendTransactionsLocally(rows);
-        });
+        const result = await executeWithSync(
+            '/transactions/bulk',
+            'POST',
+            payload,
+            undefined,
+            { 'Idempotency-Key': transactionIdempotencyKey(rows) },
+        );
 
-        if (!(result as { offline?: boolean }).offline) {
-            setInventoryTransactions(transactions);
+        if (!result.offline) {
             onAddTransaction(rows);
         }
 
@@ -672,7 +679,11 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
             } as Transaction;
         });
 
-        await addTransactionsWithOfflineProof(newTransactions);
+        try {
+            await addTransactionsWithOfflineProof(newTransactions);
+        } catch {
+            return;
+        }
 
         // 6. Reset
         setInvoiceHeader(prev => ({
@@ -797,7 +808,11 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
             timestamp: Date.now()
         };
 
-        await addTransactionsWithOfflineProof([newTransaction]);
+        try {
+            await addTransactionsWithOfflineProof([newTransaction]);
+        } catch {
+            return;
+        }
         const newForms = [...batchForms];
         newForms[index] = getEmptyForm();
         setBatchForms(newForms);
@@ -2040,7 +2055,11 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
     };
 
     const commitImport = async () => {
-        await addTransactionsWithOfflineProof(importPreview.valid);
+        try {
+            await addTransactionsWithOfflineProof(importPreview.valid);
+        } catch {
+            return;
+        }
         onImport?.(importPreview.valid.length);
         setImportStep('finish');
     };

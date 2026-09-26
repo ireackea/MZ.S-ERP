@@ -15,6 +15,7 @@ import {
 } from '../services/storage';
 import { getGridModuleDefinition } from '../services/gridModules';
 import { toast } from '@services/toastService';
+import { assertStorageKeyAllowed } from '@services/storageOwnership';
 import StatementPrintPanel from './statement/StatementPrintPanel';
 import StatementViewContent from './statement/StatementViewContent';
 import {
@@ -89,6 +90,7 @@ const Statement: React.FC<StatementProps> = ({
 
   useEffect(() => {
     try {
+      assertStorageKeyAllowed(PRINT_PRESET_STORAGE_KEY);
       const raw = localStorage.getItem(PRINT_PRESET_STORAGE_KEY);
       if (!raw) return;
 
@@ -460,6 +462,7 @@ const Statement: React.FC<StatementProps> = ({
   );
 
   const saveCurrentPrintSettings = () => {
+    assertStorageKeyAllowed(PRINT_PRESET_STORAGE_KEY);
     localStorage.setItem(PRINT_PRESET_STORAGE_KEY, JSON.stringify(printConfig));
     toast.success('تم حفظ إعدادات الطباعة الحالية بنجاح.');
   };
@@ -467,6 +470,7 @@ const Statement: React.FC<StatementProps> = ({
   const resetPrintSettings = () => {
     const allKeys = printableColumnsCatalog.map((column) => column.key);
     setPrintConfig({ ...DEFAULT_PRINT_CONFIG, printColumnKeys: allKeys });
+    assertStorageKeyAllowed(PRINT_PRESET_STORAGE_KEY);
     localStorage.removeItem(PRINT_PRESET_STORAGE_KEY);
     toast.success('تمت استعادة الإعدادات الافتراضية للطباعة.');
   };

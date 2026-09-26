@@ -3,11 +3,16 @@
 
 // ENTERPRISE FIX: Exact Legacy UI Restoration - 2026-02-27
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/react';
 import { screen } from '@testing-library/dom';
+import { MemoryRouter } from 'react-router-dom';
 import App from '../App';
 import React from 'react';
+
+vi.mock('../hooks/useAppBootstrap', () => ({
+  useAppBootstrap: vi.fn(),
+}));
 
 // Mock the Storage API since we are in a test environment
 const localStorageMock = (function () {
@@ -52,7 +57,9 @@ describe('App Component', () => {
     // We wrap in StrictMode as per index.tsx
     render(
       <React.StrictMode>
-        <App />
+        <MemoryRouter>
+          <App />
+        </MemoryRouter>
       </React.StrictMode>
     );
     // Basic check to see if the main layout loaded (Sidebar title)

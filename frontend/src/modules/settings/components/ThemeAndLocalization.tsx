@@ -6,13 +6,12 @@ import i18n from '../../../i18n';
 import ThemeSettings from '../pages/ThemeSettings';
 
 interface ThemeAndLocalizationProps {
-  forceAccess?: boolean;
 }
 
-const ThemeAndLocalization: React.FC<ThemeAndLocalizationProps> = ({ forceAccess = false }) => {
+const ThemeAndLocalization: React.FC<ThemeAndLocalizationProps> = ({ }) => {
   const { hasPermission } = usePermissions();
 
-  if (!forceAccess && !hasPermission('settings.view.localization')) {
+  if (!hasPermission('settings.view.localization')) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
         <div className="mb-2 flex items-center gap-2 font-bold"><ShieldAlert size={18} />لا تملك صلاحية عرض الثيم واللغة</div>

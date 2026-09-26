@@ -22,21 +22,22 @@ interface LayoutProps {
   onLogout?: () => void;
 }
 
+// FC-SEC-002 — section gates use canonical catalog ids.
 const SECTION_PERMISSIONS: Record<string, string> = {
-  dashboard: 'inventory.view.stock',
+  dashboard: 'dashboard.view',
   orders: 'sales.view.orders',
-  operations: 'inventory.view.operations',
-  'stock-card': 'inventory.reports.stock_card',
+  operations: 'transactions.view',
+  'stock-card': 'reports.view',
   reports: 'reports.view',
-  statement: 'inventory.reports.statement',
-  balances: 'inventory.view.stock',
-  'opening-balance': 'inventory.view.opening_balances',
+  statement: 'reports.view',
+  balances: 'transactions.view',
+  'opening-balance': 'opening-balances.view',
   partners: 'partners.view',
-  items: 'inventory.view.items',
+  items: 'items.view',
   formulation: 'formulation.view',
   stocktaking: 'inventory.view.stocktaking',
-  settings: 'settings.view',
-  users: 'users.view.management',
+  settings: 'settings.view.general',
+  users: 'users.view',
 };
 
 const Layout: React.FC<LayoutProps> = ({ children, currentUser, onLogout }) => {
@@ -45,7 +46,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, onLogout }) => {
   const [conflictModalItem, setConflictModalItem] = useState<any>(null);
 
   const location = useLocation();
-  const { isOffline, pendingCount } = useOfflineSync();
+  const { isOffline, pendingCount, conflictCount, failedCount, deadLetterCount } = useOfflineSync();
 
   useEffect(() => {
     const handleConflictEvent = (e: any) => {
@@ -153,6 +154,9 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, onLogout }) => {
                     {pendingCount} عمليات معلقة
                   </span>
                 )}
+                {conflictCount > 0 && <span className="text-xs font-bold text-amber-600">{conflictCount} تعارض</span>}
+                {failedCount > 0 && <span className="text-xs font-bold text-red-600">{failedCount} فاشلة</span>}
+                {deadLetterCount > 0 && <span className="text-xs font-bold text-red-700">{deadLetterCount} dead-letter</span>}
               </div>
 
             {currentUser && (

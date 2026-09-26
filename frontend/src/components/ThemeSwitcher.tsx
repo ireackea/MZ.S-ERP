@@ -6,6 +6,7 @@
 import React, { useEffect, useMemo } from 'react';
 import { Palette } from 'lucide-react';
 import { useThemeStore, type ThemeKey } from '@/shared/store/theme.store';
+import { assertStorageKeyAllowed } from '../services/storageOwnership';
 
 const THEME_LOCAL_KEY = 'ff_theme_preference_v1';
 
@@ -66,6 +67,7 @@ const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ className, compact = fals
 
   useEffect(() => {
     try {
+      assertStorageKeyAllowed(THEME_LOCAL_KEY);
       const persisted = localStorage.getItem(THEME_LOCAL_KEY) as ThemeKey | null;
       if (persisted && ['classic', 'material', 'fiori', 'fluent'].includes(persisted) && persisted !== theme) {
         setTheme(persisted);
@@ -85,6 +87,7 @@ const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ className, compact = fals
     root.classList.remove('classic', 'material', 'fiori', 'fluent');
     root.classList.add(theme);
     root.setAttribute('data-theme', theme);
+    assertStorageKeyAllowed(THEME_LOCAL_KEY);
     localStorage.setItem(THEME_LOCAL_KEY, theme);
   }, [theme]);
 

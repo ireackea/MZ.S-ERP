@@ -6,7 +6,6 @@ import { useInventoryStore } from '../../../store/useInventoryStore';
 import type { UnloadingRule, UnloadingRuleDraft } from '../../../types';
 
 interface UnloadingRulesPanelProps {
-  forceAccess?: boolean;
 }
 
 const createEmptyDraft = (): UnloadingRuleDraft => ({
@@ -16,7 +15,7 @@ const createEmptyDraft = (): UnloadingRuleDraft => ({
   is_active: true,
 });
 
-const UnloadingRulesPanel: React.FC<UnloadingRulesPanelProps> = ({ forceAccess = false }) => {
+const UnloadingRulesPanel: React.FC<UnloadingRulesPanelProps> = ({ }) => {
   const { hasPermission } = usePermissions();
   const unloadingRules = useInventoryStore((state) => state.unloadingRules);
   const transactions = useInventoryStore((state) => state.transactions);
@@ -24,8 +23,8 @@ const UnloadingRulesPanel: React.FC<UnloadingRulesPanelProps> = ({ forceAccess =
   const updateUnloadingRule = useInventoryStore((state) => state.updateUnloadingRule);
   const deleteUnloadingRule = useInventoryStore((state) => state.deleteUnloadingRule);
 
-  const canView = forceAccess || hasPermission('settings.view.general');
-  const canEdit = forceAccess || hasPermission('settings.update.system');
+  const canView = hasPermission('settings.view.general');
+  const canEdit = hasPermission('settings.update.system');
   const [draft, setDraft] = useState<UnloadingRuleDraft>(createEmptyDraft);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);

@@ -8,10 +8,9 @@ import type { SystemSettings } from '../../../types';
 interface GeneralSettingsProps {
   settings: SystemSettings;
   onUpdateSettings: (settings: SystemSettings) => void;
-  forceAccess?: boolean;
 }
 
-const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, onUpdateSettings, forceAccess = false }) => {
+const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, onUpdateSettings, }) => {
   const { hasPermission } = usePermissions();
   const canView = hasPermission('settings.view.general');
   const canEdit = hasPermission('settings.update.system');
@@ -21,7 +20,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, onUpdateSet
     setForm(settings);
   }, [settings]);
 
-  if (!forceAccess && !canView) {
+  if (!canView) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
         <div className="mb-2 flex items-center gap-2 font-bold"><ShieldAlert size={18} />لا تملك صلاحية عرض الإعدادات العامة</div>
@@ -36,7 +35,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, onUpdateSet
 
   const handleSave = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!forceAccess && !canEdit) {
+    if (!canEdit) {
       toast.error('لا تملك صلاحية تعديل الإعدادات العامة.');
       return;
     }

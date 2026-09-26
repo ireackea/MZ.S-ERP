@@ -1,7 +1,7 @@
 // ENTERPRISE FIX: Arabic Encoding Auto-Fixed - 2026-03-13
 // ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Legacy Migration Phase 5 - Final Stabilization & Production - 2026-02-27
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma, Transaction as DbTransaction } from '@prisma/client';
 import { createHash, randomUUID } from 'crypto';
 // AuditService: مُضافة لتسجيل جميع عمليات المعاملات المالية (إنشاء/تحديث/حذف)
@@ -13,6 +13,56 @@ import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { DeleteTransactionsDto } from './dto/delete-transactions.dto';
 import { ListTransactionsDto } from './dto/list-transactions.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
+import { StockAdjustmentDto, StockAdjustmentDirection } from './dto/stock-adjustment.dto';
+import { TimeService } from '../common/time/time.service';
+import { warehouseScopeCondition } from '../common/scope';
+import { movementDelta } from '../common/operation-type';
+import {
+  DECIMAL_SCALE,
+  assertDecimalFieldsExact,
+  parseDecimal,
+  parseOptionalDecimal,
+  serializeDecimal,
+} from '../common/decimal';
+import {
+  DEFAULT_DEFICIT_POLICY,
+  DEFICIT_POLICIES,
+  StockOverIssueError,
+  planMovement,
+  type DeficitPolicy,
+} from '../common/stock-deficit';
+
+/** The only deficit status that still counts against the balance. */
+const DEFICIT_OPEN = 'OPEN';
+
+/**
+ * FC-DEF-001 — recognise a serialisable-isolation write conflict.
+ *
+ * Prisma reports P2034 directly, but the Postgres driver adapter wraps driver
+ * errors in a DriverAdapterError that keeps the original as a nested cause, so a
+ * check of `error.code` alone misses every conflict coming from this deployment.
+ * Two concurrent movements against the same item hit exactly this path.
+ */
+const isWriteConflict = (error: unknown, depth = 0): boolean => {
+  if (!error || typeof error !== 'object' || depth > 4) return false;
+  const candidate = error as { code?: unknown; cause?: unknown; originalCode?: unknown; message?: unknown };
+  if (candidate.code === 'P2034' || candidate.originalCode === 'P2034') return true;
+  if (typeof candidate.message === 'string'
+    && /write conflict|serialization failure|could not serialize/i.test(candidate.message)) {
+    return true;
+  }
+  return isWriteConflict(candidate.cause, depth + 1);
+};
+import {
+  expandOperationTypeAliases,
+  resolveCanonicalOperationType,
+} from '../common/operation-type-aliases';
+
+/** The Decimal columns on `Transaction` that must cross the boundary exactly. */
+const TRANSACTION_DECIMAL_FIELDS = [
+  'quantity', 'supplierNet', 'difference', 'packageCount',
+  'salaryOfWorker', 'delayPenalty', 'calculatedFine',
+] as const;
 
 type TxWithItem = DbTransaction & {
   item: {
@@ -35,7 +85,136 @@ export class TransactionService {
     private readonly realtimeService: RealtimeService,
     // AuditService مُحقونة (injected) عبر NestJS DI — لا تُنشأ يدوياً
     private readonly auditService: AuditService,
+    private readonly timeService: TimeService,
   ) {}
+
+  private stableSerialize(value: unknown): string {
+    if (value === null || typeof value !== 'object') {
+      return JSON.stringify(value) ?? 'null';
+    }
+    if (Array.isArray(value)) {
+      return `[${value.map((entry) => this.stableSerialize(entry)).join(',')}]`;
+    }
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${this.stableSerialize(record[key])}`).join(',')}}`;
+  }
+
+  private normalizeIdempotencyKey(value: string | undefined): string {
+    const key = String(value || '').trim();
+    if (key.length < 8 || key.length > 200 || !/^[A-Za-z0-9._:-]+$/.test(key)) {
+      throw new BadRequestException('Idempotency-Key must be 8-200 safe characters');
+    }
+    return key;
+  }
+
+  /**
+   * FC-AUD-001 — the identity recorded in the audit row.
+   *
+   * Prefers the client-visible publicId so the audit trail can be correlated
+   * with an API response or a UI reference; falls back to the row id.
+   */
+  private auditEntityId(rows: Array<{ publicId?: string | null; id?: string | number }>): string {
+    if (rows.length === 1) {
+      return String(rows[0]?.publicId || rows[0]?.id || 'unknown');
+    }
+    const publicIds = rows.map((row) => row.publicId).filter(Boolean);
+    return publicIds.length ? `bulk-${publicIds.length}` : `bulk-${rows.length}`;
+  }
+
+  private async executeIdempotently<T>(
+    actorId: string,
+    operation: string,
+    idempotencyKey: string | undefined,
+    payload: unknown,
+    work: (tx: Prisma.TransactionClient) => Promise<T>,
+    /**
+     * FC-AUD-001 — audit writes registered here run inside the SAME transaction
+     * as the business change, so a committed mutation always has its audit row
+     * and a rolled-back one leaves no trace.
+     */
+    audit?: (tx: Prisma.TransactionClient, result: T) => Promise<void>,
+  ): Promise<{ value: T; replayed: boolean }> {
+    const key = this.normalizeIdempotencyKey(idempotencyKey);
+    const requestHash = createHash('sha256').update(this.stableSerialize(payload)).digest('hex');
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const value = await this.prisma.$transaction(async (tx) => {
+          const record = await tx.idempotencyRecord.create({
+            data: {
+              actorId,
+              operation,
+              key,
+              requestHash,
+              response: {} as Prisma.InputJsonValue,
+            },
+          });
+          const result = await work(tx);
+          if (audit) {
+            await audit(tx, result);
+          }
+          await tx.idempotencyRecord.update({
+            where: { id: record.id },
+            data: { response: result as Prisma.InputJsonValue },
+          });
+          return result;
+        }, {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          maxWait: 10_000,
+          timeout: 30_000,
+        });
+
+        return { value, replayed: false };
+      } catch (error: any) {
+        if (error?.code === 'P2002') {
+          const existing = await this.prisma.idempotencyRecord.findUnique({
+            where: { actorId_operation_key: { actorId, operation, key } },
+          });
+          if (!existing) throw error;
+          if (existing.requestHash !== requestHash) {
+            throw new ConflictException('Idempotency key was already used with a different payload');
+          }
+          return { value: existing.response as unknown as T, replayed: true };
+        }
+        if (isWriteConflict(error) && attempt < 2) continue;
+        // A write conflict that survives the retries is a concurrency problem,
+        // not a server fault. Surfacing it as a 500 told the client the system
+        // was broken when the only thing wrong was that two movements touched
+        // the same item at the same moment and one of them has to be retried.
+        if (isWriteConflict(error)) {
+          throw new ConflictException(
+            'Transaction could not acquire a consistent database state. Retry the request.',
+          );
+        }
+        throw error;
+      }
+    }
+
+    throw new ConflictException('Transaction could not acquire a consistent database state');
+  }
+
+  private assertKnownOperationType(type: string): void {
+    const canonical = this.canonicalOperationType(type);
+    if (!['وارد', 'صادر', 'انتاج', 'هالك', 'مرتجع', 'STOCK_ADJUSTMENT'].includes(canonical)) {
+      throw new BadRequestException(`Unsupported operation type: ${type}`);
+    }
+  }
+
+  private assertStockAdjustmentFields(input: {
+    adjustmentDirection?: StockAdjustmentDirection | string | null;
+    adjustmentReason?: string | null;
+    adjustmentSourceReference?: string | null;
+  }): void {
+    if (!['INCREASE', 'DECREASE'].includes(String(input.adjustmentDirection || '').toUpperCase())) {
+      throw new BadRequestException('Stock adjustment direction must be INCREASE or DECREASE');
+    }
+    if (String(input.adjustmentReason || '').trim().length < 3) {
+      throw new BadRequestException('Stock adjustment reason is required');
+    }
+    if (!String(input.adjustmentSourceReference || '').trim()) {
+      throw new BadRequestException('Stock adjustment sourceReference is required');
+    }
+  }
 
   private includeItem() {
     return {
@@ -58,80 +237,71 @@ export class TransactionService {
     return Number.isFinite(parsed) ? parsed : undefined;
   }
 
-  private toDate(value: string | Date): Date {
-    const date = value instanceof Date ? value : new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      throw new BadRequestException('Invalid transaction date');
-    }
-    return date;
+  /**
+   * FC-DATA-001 — a null-preserving decimal parse for optional money fields.
+   * `undefined`/`null` must stay absent so Prisma leaves the column alone.
+   */
+  private optionalDecimal(value: unknown, field: string): Prisma.Decimal | null | undefined {
+    if (value === undefined) return undefined;
+    if (value === null || value === '') return null;
+    return parseDecimal(value, field);
   }
 
-  private normalizeType(type: string): string {
-    return String(type || '').trim().toLowerCase();
+  private toDate(value: string | Date): Date {
+    try {
+      return this.timeService.parseDate(value);
+    } catch {
+      throw new BadRequestException('Invalid transaction date');
+    }
   }
 
   private canonicalOperationType(type: string): string {
-    const raw = String(type || '').trim();
-    if (!raw) return raw;
-
-    const normalized = this.normalizeType(raw);
-    const aliases: Array<{ canonical: string; values: string[] }> = [
-      {
-        canonical: 'وارد',
-        values: ['1', 'in', 'incoming', 'import', 'purchase', 'receive', 'receipt', 'وارد', 'استلام', 'ادخال', 'إدخال', 'شراء', 'مشتريات'],
-      },
-      {
-        canonical: 'صادر',
-        values: ['2', 'out', 'outgoing', 'export', 'sale', 'dispatch', 'consumption', 'صادر', 'صرف', 'بيع', 'مبيعات', 'خروج', 'تحويل_صادر'],
-      },
-      {
-        canonical: 'انتاج',
-        values: ['3', 'prod', 'production', 'manufacturing', 'انتاج', 'إنتاج', 'تصنيع'],
-      },
-      {
-        canonical: 'هالك',
-        values: ['4', 'waste', 'damaged', 'scrap', 'loss', 'هالك', 'تالف'],
-      },
-      {
-        canonical: 'مرتجع',
-        values: ['5', 'return', 'returned', 'مرتجع', 'إرجاع', 'ارجاع'],
-      },
-    ];
-
-    for (const entry of aliases) {
-      if (entry.values.some((value) => normalized.includes(value.toLowerCase()))) {
-        return entry.canonical;
-      }
-    }
-
-    return raw;
+    // FC-API-002 — the alias table is owned by common/operation-type-aliases so
+    // the reports cannot drift from the stock model.
+    return resolveCanonicalOperationType(type);
   }
 
   private expandOperationTypeAliases(type: string): string[] {
-    switch (this.canonicalOperationType(type)) {
-      case 'وارد':
-        return ['وارد', 'استلام', 'import', 'incoming', 'in', 'purchase'];
-      case 'صادر':
-        return ['صادر', 'صرف', 'تحويل_صادر', 'export', 'outgoing', 'out', 'sale'];
-      case 'انتاج':
-        return ['انتاج', 'إنتاج', 'تصنيع', 'production', 'manufacturing'];
-      case 'هالك':
-        return ['هالك', 'تالف', 'waste', 'damaged', 'scrap'];
-      case 'مرتجع':
-        return ['مرتجع', 'إرجاع', 'ارجاع', 'return', 'returned'];
-      default:
-        return [String(type || '').trim()].filter(Boolean);
-    }
+    // FC-API-002 — expanded from the shared alias table.
+    return expandOperationTypeAliases(type);
   }
 
-  private toDelta(type: string, quantity: number): number {
+  /**
+   * DEF-001 — the over-issue policy. Configurable so an operator can tighten it
+   * to STRICT once the deficit queue is being worked, without a code change.
+   * An unrecognised value falls back to the safe default rather than to ALLOW.
+   */
+  private get deficitPolicy(): DeficitPolicy {
+    const configured = String(process.env.STOCK_DEFICIT_POLICY || '').trim().toUpperCase();
+    if (DEFICIT_POLICIES.includes(configured as DeficitPolicy)) {
+      return configured as DeficitPolicy;
+    }
+    if (configured) {
+      this.logger.warn(`Unknown STOCK_DEFICIT_POLICY "${configured}"; using ${DEFAULT_DEFICIT_POLICY}`);
+    }
+    return DEFAULT_DEFICIT_POLICY;
+  }
+
+  private toDelta(type: string, quantity: number, adjustmentDirection?: StockAdjustmentDirection | string | null): number {    // FC-API-002 — the stock sign is derived from the canonical classifier, so
+    // the ledger and every report aggregate use the same rule.
     if (!Number.isFinite(quantity)) return 0;
+    return movementDelta({ type, quantity, adjustmentDirection });
+  }
 
-    const canonical = this.canonicalOperationType(type);
-    if (canonical === 'وارد' || canonical === 'انتاج' || canonical === 'مرتجع') return Math.abs(quantity);
-    if (canonical === 'صادر' || canonical === 'هالك') return -Math.abs(quantity);
-
-    return quantity;
+  /**
+   * FC-DATA-001 — the same classifier, but in Decimal. Used by the update path,
+   * where the stock correction is a difference of two quantities and a float
+   * would leave a residue on the ledger.
+   */
+  private toDecimalDelta(
+    type: string,
+    quantity: Prisma.Decimal,
+    adjustmentDirection?: StockAdjustmentDirection | string | null,
+  ): Prisma.Decimal {
+    const signed = movementDelta({ type, quantity: 1, adjustmentDirection }) < 0
+      ? quantity.negated()
+      : quantity;
+    return signed.toDecimalPlaces(DECIMAL_SCALE, Prisma.Decimal.ROUND_HALF_UP);
   }
 
   private transactionWhereByIdentifier(identifier: string): Prisma.TransactionWhereInput {
@@ -283,22 +453,195 @@ export class TransactionService {
     return resolved;
   }
 
+  /**
+   * FC-INV-001 / DEF-001 — the single place `Item.currentStock` is written.
+   *
+   * Every movement goes through `planMovement`, which clamps the balance at zero
+   * and reports the unfulfilled remainder. The remainder is written to
+   * `StockDeficit` in the same transaction as the movement, so the invariant
+   * `currentStock = ledgerNet + openDeficit` cannot be broken by a partial write:
+   * either the movement, the clamped balance and the deficit all commit, or none
+   * of them do.
+   */
   private async applyStockDeltas(
     client: Prisma.TransactionClient,
-    stockDeltaByItemId: Map<number, number>,
+    // FC-DATA-001 — a delta may be a Decimal (stocktaking variance) or a plain
+    // number, and both must reach the column without a float round trip.
+    stockDeltaByItemId: Map<number, Prisma.Decimal | number>,
+    context: {
+      warehouseId?: string;
+      actorId?: string;
+      sourceTransactionId?: string;
+    } = {},
   ): Promise<void> {
     for (const [itemId, delta] of stockDeltaByItemId.entries()) {
-      if (!Number.isFinite(delta) || delta === 0) {
+      const decimal = delta instanceof Prisma.Decimal
+        ? delta
+        : new Prisma.Decimal(String(delta));
+      if (!decimal.isFinite() || decimal.isZero()) {
         continue;
       }
 
-      await client.item.update({
+      // Read the balance and the outstanding debt together: the plan depends on
+      // both, and reading them separately would race with a concurrent movement.
+      const current = await client.item.findUnique({
         where: { id: itemId },
-        data: {
-          currentStock: { increment: delta },
-        },
+        select: { currentStock: true },
       });
+      if (!current) {
+        throw new NotFoundException(`Item not found for id: ${itemId}`);
+      }
+
+      const openDeficits = await client.stockDeficit.findMany({
+        where: { itemId, status: DEFICIT_OPEN },
+        select: {
+          id: true,
+          quantity: true,
+          createdAt: true,
+          warehouseId: true,
+          sourceTransactionId: true,
+          reason: true,
+          createdById: true,
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+      const openDeficitTotal = openDeficits.reduce(
+        (total, entry) => total.plus(entry.quantity),
+        new Prisma.Decimal(0),
+      );
+
+      const plan = (() => {
+        try {
+          return planMovement(current.currentStock, openDeficitTotal, decimal, this.deficitPolicy);
+        } catch (error) {
+          if (error instanceof StockOverIssueError) {
+            // STRICT policy: this is the caller's problem to fix, so it must be a
+            // 400 naming the item, not an opaque 500 from the domain layer.
+            throw new BadRequestException(
+              `Issue exceeds the available balance: ${error.requested.toFixed(DECIMAL_SCALE)} requested, `
+              + `${error.available.toFixed(DECIMAL_SCALE)} available`,
+            );
+          }
+          throw error;
+        }
+      })();
+
+      if (plan.absorbedByOpenDeficits.gt(0) && openDeficits.length > 0) {
+        // Incoming stock pays down the oldest debt first (FIFO), so an alert is
+        // not left open behind a newer one that already paid off. A partial
+        // payment closes the amount it covered and opens a fresh record for the
+        // remainder, so the queue always shows the true outstanding amount
+        // instead of silently rounding a debt to zero.
+        let remaining = plan.absorbedByOpenDeficits;
+        for (const entry of openDeficits) {
+          if (remaining.lte(0)) break;
+          const applied = entry.quantity.gt(remaining) ? remaining : entry.quantity;
+          const leftover = entry.quantity.minus(applied);
+          remaining = remaining.minus(applied);
+
+          await client.stockDeficit.update({
+            where: { id: entry.id },
+            data: {
+              quantity: applied,
+              status: 'SETTLED_BY_RECEIPT',
+              settledByTransactionId: context.sourceTransactionId,
+              resolvedAt: new Date(),
+              resolvedById: context.actorId,
+              resolution: 'Settled automatically by an incoming movement',
+            },
+          });
+
+          if (leftover.gt(0)) {
+            await client.stockDeficit.create({
+              data: {
+                publicId: `deficit-${randomUUID()}`,
+                itemId,
+                warehouseId: context.warehouseId || entry.warehouseId || 'default',
+                quantity: leftover,
+                status: DEFICIT_OPEN,
+                sourceTransactionId: entry.sourceTransactionId,
+                reason: entry.reason,
+                createdById: entry.createdById,
+              },
+            });
+          }
+        }
+      }
+
+      if (plan.appliedDelta.gt(0) || plan.appliedDelta.lt(0)) {
+        await client.item.update({
+          where: { id: itemId },
+          data: {
+            // FC-DATA-001 — Decimal increment, and DEF-001 — clamped at zero by
+            // planMovement, so this column can never receive a negative result
+            // unless the ALLOW policy is explicitly configured.
+            currentStock: { increment: plan.appliedDelta },
+          },
+        });
+      }
+
+      if (plan.newDeficit.gt(0)) {
+        await client.stockDeficit.create({
+          data: {
+            publicId: `deficit-${randomUUID()}`,
+            itemId,
+            warehouseId: context.warehouseId || 'default',
+            quantity: plan.newDeficit,
+            status: DEFICIT_OPEN,
+            sourceTransactionId: context.sourceTransactionId,
+            reason: 'Issue exceeded the available balance at the time of the movement',
+            createdById: context.actorId,
+          },
+        });
+        this.logger.warn(
+          `DEF-001 stock deficit of ${plan.newDeficit.toFixed(DECIMAL_SCALE)} recorded for item ${itemId}`,
+        );
+      }
     }
+  }
+
+  async applyStocktakingVariance(
+    client: Prisma.TransactionClient,
+    input: {
+      itemId: number;
+      expected: number;
+      actual: number;
+      actorId: string;
+      date: Date;
+      sourceReference: string;
+      reason: string;
+    },
+  ): Promise<string | null> {
+    // FC-DATA-001 — the variance is a Decimal subtraction, not
+    // `Number(actual) - Number(expected)`, which would turn 0.3 - 0.1 into
+    // 0.19999999999999998 and persist that as the stock correction.
+    const delta = parseDecimal(input.actual, 'stocktaking.actual')
+      .minus(parseDecimal(input.expected, 'stocktaking.expected'))
+      .toDecimalPlaces(DECIMAL_SCALE, Prisma.Decimal.ROUND_HALF_UP);
+    if (delta.isZero()) return null;
+    const magnitude = delta.abs();
+
+    const created = await client.transaction.create({
+      data: {
+        publicId: `stocktaking-${randomUUID()}`,
+        date: input.date,
+        item: { connect: { id: input.itemId } },
+        type: 'STOCK_ADJUSTMENT',
+        quantity: magnitude,
+        supplierOrReceiver: 'Stocktaking reconciliation',
+        notes: input.reason,
+        adjustmentReason: input.reason,
+        adjustmentSourceReference: input.sourceReference,
+        adjustmentDirection: delta.isPositive() ? 'INCREASE' : 'DECREASE',
+        createdByUserId: input.actorId,
+      },
+    });
+    await this.applyStockDeltas(client, new Map([[input.itemId, delta]]), {
+      warehouseId: 'default',
+      actorId: input.actorId,
+      sourceTransactionId: created.publicId,
+    });
+    return created.publicId;
   }
 
   private resolvePreferredPublicId(dto: Partial<CreateTransactionDto>, index = 0): string {
@@ -320,22 +663,26 @@ export class TransactionService {
   }
 
   private mapToFrontend(row: TxWithItem) {
-    const timestamp = row.timestamp == null ? row.date.getTime() : Number(row.timestamp);
+    const transactionDate = row.date instanceof Date ? row.date : this.timeService.parseDate(row.date);
+    const timestamp = row.timestamp == null ? transactionDate.getTime() : Number(row.timestamp);
 
     return {
       id: row.publicId,
-      date: row.date.toISOString().split('T')[0],
+      date: this.timeService.getBusinessDateKey(transactionDate),
       itemId: row.item.publicId || String(row.itemId),
       warehouseId: row.warehouseId || undefined,
       warehouseInvoice: row.warehouseInvoice || '',
       supplierInvoice: row.supplierInvoice || undefined,
       type: this.canonicalOperationType(row.type),
-      quantity: this.toNumber(row.quantity) ?? 0,
-      supplierNet: this.toNumber(row.supplierNet),
-      difference: this.toNumber(row.difference),
-      packageCount: this.toNumber(row.packageCount),
+      // FC-DATA-001 — serializeDecimal, not this.toNumber: a float would undo the
+      // precision the write path just guaranteed, and JSON would emit exponent
+      // notation for large values, breaking the ledger invariant downstream.
+      quantity: serializeDecimal(row.quantity) ?? '0.000',
+      supplierNet: serializeDecimal(row.supplierNet),
+      difference: serializeDecimal(row.difference),
+      packageCount: serializeDecimal(row.packageCount),
       weightSlip: row.weightSlip || undefined,
-      salaryOfWorker: this.toNumber(row.salaryOfWorker),
+      salaryOfWorker: serializeDecimal(row.salaryOfWorker),
       supplierOrReceiver: row.supplierOrReceiver,
       truckNumber: row.truckNumber || undefined,
       trailerNumber: row.trailerNumber || undefined,
@@ -345,13 +692,16 @@ export class TransactionService {
       unloadingRuleId: row.unloadingRuleId || undefined,
       unloadingDuration: row.unloadingDuration || undefined,
       delayDuration: row.delayDuration || undefined,
-      delayPenalty: this.toNumber(row.delayPenalty),
-      calculatedFine: this.toNumber(row.calculatedFine),
+      delayPenalty: serializeDecimal(row.delayPenalty),
+      calculatedFine: serializeDecimal(row.calculatedFine),
       notes: row.notes || undefined,
       attachmentData: row.attachmentData || undefined,
       attachmentName: row.attachmentName || undefined,
       attachmentType: row.attachmentType || undefined,
       googleDriveLink: row.googleDriveLink || undefined,
+      adjustmentReason: row.adjustmentReason || undefined,
+      adjustmentSourceReference: row.adjustmentSourceReference || undefined,
+      adjustmentDirection: row.adjustmentDirection || undefined,
       createdByUserId: row.createdByUserId || undefined,
       timestamp: Number.isFinite(timestamp) ? timestamp : row.date.getTime(),
       item: {
@@ -365,13 +715,15 @@ export class TransactionService {
     };
   }
 
-  async list(dto: ListTransactionsDto) {
+  async list(dto: ListTransactionsDto, scope = 'default') {
     const page = Math.max(1, Number(dto.page || 1));
     const limit = Math.min(10000, Math.max(1, Number(dto.limit || 500)));
     const skip = (page - 1) * limit;
 
     try {
-      const where: Prisma.TransactionWhereInput = {};
+      const where: Prisma.TransactionWhereInput = {
+        ...warehouseScopeCondition(scope),
+      };
 
       if (dto.type) where.type = { in: this.expandOperationTypeAliases(dto.type) };
 
@@ -429,12 +781,12 @@ export class TransactionService {
     }
   }
 
-  async getById(id: string) {
+  async getById(id: string, scope = 'default') {
     const identifier = String(id || '').trim();
     if (!identifier) throw new BadRequestException('Transaction id is required');
 
     const row = await this.prisma.transaction.findFirst({
-      where: this.transactionWhereByIdentifier(identifier),
+      where: { AND: [this.transactionWhereByIdentifier(identifier), warehouseScopeCondition(scope)] },
       include: this.includeItem(),
     });
 
@@ -450,8 +802,13 @@ export class TransactionService {
     itemId: number,
     unloadingRuleId?: string,
     forcedPublicId?: string,
+    actorId?: string,
   ): Prisma.TransactionCreateInput {
-    const quantity = Number(dto.quantity ?? 0);
+    // FC-DATA-001 — quantity and the money fields are parsed through the decimal
+    // boundary, so an imprecise float can never reach a Decimal column. A
+    // non-integer float is refused outright rather than silently rounded.
+    assertDecimalFieldsExact(dto as unknown as Record<string, unknown>, TRANSACTION_DECIMAL_FIELDS);
+    const quantity = parseDecimal(dto.quantity, 'quantity');
 
     return {
       publicId: forcedPublicId || String(dto.publicId || dto.id || '').trim() || randomUUID(),
@@ -462,11 +819,11 @@ export class TransactionService {
       supplierInvoice: dto.supplierInvoice,
       type: this.canonicalOperationType(dto.type),
       quantity,
-      supplierNet: dto.supplierNet,
-      difference: dto.difference,
-      packageCount: dto.packageCount,
+      supplierNet: this.optionalDecimal(dto.supplierNet, 'supplierNet'),
+      difference: this.optionalDecimal(dto.difference, 'difference'),
+      packageCount: this.optionalDecimal(dto.packageCount, 'packageCount'),
       weightSlip: dto.weightSlip,
-      salaryOfWorker: dto.salaryOfWorker,
+      salaryOfWorker: this.optionalDecimal(dto.salaryOfWorker, 'salaryOfWorker'),
       supplierOrReceiver: dto.supplierOrReceiver,
       truckNumber: dto.truckNumber,
       trailerNumber: dto.trailerNumber,
@@ -476,21 +833,24 @@ export class TransactionService {
       unloadingRule: unloadingRuleId ? { connect: { id: unloadingRuleId } } : undefined,
       unloadingDuration: dto.unloadingDuration,
       delayDuration: dto.delayDuration,
-      delayPenalty: dto.delayPenalty,
-      calculatedFine: dto.calculatedFine,
+      delayPenalty: this.optionalDecimal(dto.delayPenalty, 'delayPenalty'),
+      calculatedFine: this.optionalDecimal(dto.calculatedFine, 'calculatedFine'),
       notes: dto.notes,
       attachmentData: dto.attachmentData,
       attachmentName: dto.attachmentName,
       attachmentType: dto.attachmentType,
       googleDriveLink: dto.googleDriveLink,
-      createdByUserId: dto.createdByUserId,
+      adjustmentReason: dto.adjustmentReason,
+      adjustmentSourceReference: dto.adjustmentSourceReference,
+      adjustmentDirection: dto.adjustmentDirection,
+      createdByUserId: actorId,
       timestamp: dto.timestamp == null ? undefined : BigInt(Math.floor(dto.timestamp)),
     };
   }
 
   // actorId/actorUsername: تُمرّران من الـ controller لإثراء سجل التدقيق بهوية منفّذ العملية
-  async createOne(dto: CreateTransactionDto, actorId = 'system', actorUsername = 'system') {
-    const result = await this.createMany([dto], actorId, actorUsername);
+  async createOne(dto: CreateTransactionDto, actorId = 'system', actorUsername = 'system', idempotencyKey?: string, scope = 'default') {
+    const result = await this.createMany([dto], actorId, actorUsername, idempotencyKey, scope);
     if (!result.data.length) {
       throw new BadRequestException('Failed to create transaction');
     }
@@ -498,90 +858,119 @@ export class TransactionService {
   }
 
   // actorId/actorUsername: مُمرّران من الـ controller لنسب العملية لمنفّذها — القيمة الافتراضية 'system' تُستخدم في حالة الميغرةشن والمسارات الداخلية
-  async createMany(payload: CreateTransactionDto[], actorId = 'system', actorUsername = 'system') {
+  async createMany(payload: CreateTransactionDto[], actorId = 'system', actorUsername = 'system', idempotencyKey?: string, scope = 'default') {
     if (!Array.isArray(payload) || payload.length === 0) {
       return { data: [], total: 0 };
     }
 
-    const itemIdMap = await this.resolveItemIdMap(payload.map((dto) => dto.itemId));
-    const unloadingRuleIdMap = await this.resolveUnloadingRuleIdMap(payload.map((dto) => dto.unloadingRuleId));
+    const scopedPayload = scope === 'all' ? payload : payload.map((dto) => ({ ...dto, warehouseId: scope }));
+    const itemIdMap = await this.resolveItemIdMap(scopedPayload.map((dto) => dto.itemId));
+    const unloadingRuleIdMap = await this.resolveUnloadingRuleIdMap(scopedPayload.map((dto) => dto.unloadingRuleId));
+    const execution = await this.executeIdempotently(
+      actorId,
+      'transactions.create-many',
+      idempotencyKey,
+      scopedPayload,
+      async (tx) => {
+        const createdRows: TxWithItem[] = [];
+        const stockDeltaByItemId = new Map<number, number>();
 
-    const rows = await this.prisma.$transaction(async (tx) => {
-      const createdRows: TxWithItem[] = [];
-      const stockDeltaByItemId = new Map<number, number>();
+        for (const dto of scopedPayload) {
+          this.assertKnownOperationType(dto.type);
+          if (this.canonicalOperationType(dto.type) === 'STOCK_ADJUSTMENT') {
+            throw new BadRequestException('Use the stock adjustment endpoint for inventory corrections');
+          }
+          const itemIdentifier = String(dto.itemId || '').trim();
+          const itemId = itemIdMap.get(itemIdentifier);
+          if (!itemId) {
+            throw new NotFoundException(`Item not found for identifier: ${itemIdentifier}`);
+          }
 
-      for (const dto of payload) {
-        const itemIdentifier = String(dto.itemId || '').trim();
-        const itemId = itemIdMap.get(itemIdentifier);
-        if (!itemId) {
-          throw new NotFoundException(`Item not found for identifier: ${itemIdentifier}`);
+          const unloadingRuleIdentifier = String(dto.unloadingRuleId || '').trim();
+          const unloadingRuleId = unloadingRuleIdentifier
+            ? unloadingRuleIdMap.get(unloadingRuleIdentifier)
+            : undefined;
+
+          const quantity = Number(dto.quantity ?? 0);
+          const delta = this.toDelta(dto.type, quantity);
+
+          const created = await tx.transaction.create({
+            data: this.buildCreateData(dto, itemId, unloadingRuleId, undefined, actorId),
+            include: this.includeItem(),
+          });
+
+          stockDeltaByItemId.set(itemId, (stockDeltaByItemId.get(itemId) || 0) + delta);
+          createdRows.push(created as TxWithItem);
         }
 
-        const unloadingRuleIdentifier = String(dto.unloadingRuleId || '').trim();
-        const unloadingRuleId = unloadingRuleIdentifier
-          ? unloadingRuleIdMap.get(unloadingRuleIdentifier)
-          : undefined;
-
-        const quantity = Number(dto.quantity ?? 0);
-        const delta = this.toDelta(dto.type, quantity);
-
-        const created = await tx.transaction.create({
-          data: this.buildCreateData(dto, itemId, unloadingRuleId),
-          include: this.includeItem(),
+        await this.applyStockDeltas(tx, stockDeltaByItemId, {
+          warehouseId: scope,
+          actorId,
         });
-
-        stockDeltaByItemId.set(itemId, (stockDeltaByItemId.get(itemId) || 0) + delta);
-
-        createdRows.push(created as TxWithItem);
-      }
-
-      await this.applyStockDeltas(tx, stockDeltaByItemId);
-
-      return createdRows;
-    }, {
-      maxWait: 10_000,
-      timeout: 20_000,
-    });
+        return createdRows;
+      },
+      // FC-AUD-001 — committed in the same transaction as the stock movement.
+      // The audit row keys on publicId so an investigator can find it with the
+      // same id the API handed the caller, not an internal surrogate key.
+      async (tx, createdRows) => {
+        if (!createdRows.length) return;
+        await this.auditService.logItemAction(
+          actorId,
+          'TRANSACTION_CREATE',
+          'Transaction',
+          this.auditEntityId(createdRows),
+          {
+            count: createdRows.length,
+            scope,
+            publicIds: createdRows.map((row) => row.publicId).filter(Boolean).slice(0, 50),
+            requestId: idempotencyKey || null,
+          },
+          actorUsername,
+          'SUCCESS',
+          { client: tx, actorRole: actorUsername === 'system' ? 'system' : undefined },
+        );
+      },
+    );
 
     const response = {
-      data: rows.map((row) => this.mapToFrontend(row)),
-      total: rows.length,
+      data: execution.value.map((row) => this.mapToFrontend(row)),
+      total: execution.value.length,
     };
-    if (response.total > 0) {
+    if (!execution.replayed && response.total > 0) {
       this.realtimeService.emitSync(
         ['transactions', 'operations', 'dashboard', 'items', 'stocktaking'],
         'transactions.created',
-        { meta: { count: response.total } },
+        { meta: { count: response.total }, scope },
       );
-      // Audit fire-and-forget: لا يعرقل الاستجابة إذا فشل التسجيل — التدقيق عملية جانبية (side-effect)
-      // للمعاملة الواحدة: publicId صريح — للجماعية: معرّف مجمّع bulk-N
-      void this.auditService.logItemAction(
-        actorId,
-        'TRANSACTION_CREATE',
-        'Transaction',
-        response.total === 1 ? (response.data[0]?.id ?? 'unknown') : `bulk-${response.total}`,
-        { count: response.total },
-        actorUsername,
-      ).catch((err) => this.logger.error(`[Audit] TRANSACTION_CREATE failed: ${err?.message}`));
     }
     return response;
   }
 
-  async migrateFromLocal(payload: CreateTransactionDto[]) {
+  async migrateFromLocal(payload: CreateTransactionDto[], actorId = 'system', actorUsername = 'system', idempotencyKey?: string, scope = 'default') {
     if (!Array.isArray(payload) || payload.length === 0) {
       return { total: 0, migrated: 0, skipped: 0, data: [] };
     }
 
-    const itemIdMap = await this.resolveItemIdMap(payload.map((dto) => dto.itemId));
-    const unloadingRuleIdMap = await this.resolveUnloadingRuleIdMap(payload.map((dto) => dto.unloadingRuleId));
+    const scopedPayload = scope === 'all' ? payload : payload.map((dto) => ({ ...dto, warehouseId: scope }));
+    const itemIdMap = await this.resolveItemIdMap(scopedPayload.map((dto) => dto.itemId));
+    const unloadingRuleIdMap = await this.resolveUnloadingRuleIdMap(scopedPayload.map((dto) => dto.unloadingRuleId));
 
-    const result = await this.prisma.$transaction(async (tx) => {
+    const execution = await this.executeIdempotently(
+      actorId,
+      'transactions.migrate',
+      idempotencyKey,
+      scopedPayload,
+      async (tx) => {
       const createdRows: TxWithItem[] = [];
       const stockDeltaByItemId = new Map<number, number>();
       let skipped = 0;
 
-      for (let index = 0; index < payload.length; index += 1) {
+      for (let index = 0; index < scopedPayload.length; index += 1) {
         const dto = payload[index];
+        this.assertKnownOperationType(dto.type);
+        if (this.canonicalOperationType(dto.type) === 'STOCK_ADJUSTMENT') {
+          this.assertStockAdjustmentFields(dto);
+        }
         const preferredPublicId = this.resolvePreferredPublicId(dto, index);
 
         const exists = await tx.transaction.findUnique({
@@ -606,10 +995,10 @@ export class TransactionService {
           : undefined;
 
         const quantity = Number(dto.quantity ?? 0);
-        const delta = this.toDelta(dto.type, quantity);
+        const delta = this.toDelta(dto.type, quantity, dto.adjustmentDirection);
 
         const created = await tx.transaction.create({
-          data: this.buildCreateData(dto, itemId, unloadingRuleId, preferredPublicId),
+          data: this.buildCreateData(dto, itemId, unloadingRuleId, preferredPublicId, actorId),
           include: this.includeItem(),
         });
 
@@ -618,46 +1007,74 @@ export class TransactionService {
         createdRows.push(created as TxWithItem);
       }
 
-      await this.applyStockDeltas(tx, stockDeltaByItemId);
+      await this.applyStockDeltas(tx, stockDeltaByItemId, {
+        warehouseId: scope,
+        actorId,
+      });
 
       return {
-        data: createdRows,
+        total: payload.length,
+        migrated: createdRows.length,
         skipped,
+        data: createdRows.map((row) => this.mapToFrontend(row)),
       };
-    }, {
-      maxWait: 10_000,
-      timeout: 20_000,
-    });
+    },
+      // FC-AUD-001 — the audit row commits with the migrated rows themselves.
+      async (tx, result) => {
+        if (!result.migrated) return;
+        await this.auditService.logItemAction(
+          actorId,
+          'TRANSACTION_MIGRATE',
+          'Transaction',
+          `migrated-${result.migrated}`,
+          { migrated: result.migrated, skipped: result.skipped, requestId: idempotencyKey || null },
+          actorUsername,
+          'SUCCESS',
+          { client: tx },
+        );
+      },
+    );
 
-    const response = {
-      total: payload.length,
-      migrated: result.data.length,
-      skipped: result.skipped,
-      data: result.data.map((row) => this.mapToFrontend(row)),
-    };
-    if (response.migrated > 0) {
+    if (!execution.replayed && execution.value.migrated > 0) {
       this.realtimeService.emitSync(
         ['transactions', 'operations', 'dashboard', 'items', 'stocktaking'],
         'transactions.migrated',
-        { meta: { migrated: response.migrated, skipped: response.skipped } },
+        { meta: { migrated: execution.value.migrated, skipped: execution.value.skipped }, scope },
       );
     }
-    return response;
+    return execution.value;
   }
 
   // actorId/actorUsername: تُمرّران من الـ controller لتسجيل منفّذ التحديث في سجل التدقيق
-  async updateById(id: string, dto: UpdateTransactionDto, actorId = 'system', actorUsername = 'system') {
+  async updateById(id: string, dto: UpdateTransactionDto, actorId = 'system', actorUsername = 'system', idempotencyKey?: string, scope = 'default') {
     const identifier = String(id || '').trim();
     if (!identifier) throw new BadRequestException('Transaction id is required');
 
-    const updated = await this.prisma.$transaction(async (tx) => {
+    let beforeState: { type: unknown; quantity: string | null; itemId: unknown } | null = null;
+
+    const execution = await this.executeIdempotently(
+      actorId,
+      'transactions.update',
+      idempotencyKey,
+      { id: identifier, dto },
+      async (tx) => {
       const existing = await tx.transaction.findFirst({
-        where: this.transactionWhereByIdentifier(identifier),
+      where: { AND: [this.transactionWhereByIdentifier(identifier), warehouseScopeCondition(scope)] },
       });
 
       if (!existing) {
         throw new NotFoundException(`Transaction not found: ${identifier}`);
       }
+
+      // FC-AUD-001 — captured so the before/after pair can be recorded by the
+      // transaction-scoped audit callback below.
+      beforeState = {
+        type: existing.type,
+        // FC-DATA-001 — the audit snapshot records the exact stored value, not
+        // a float rendering of it, so the before/after pair is auditable.
+        quantity: serializeDecimal(existing.quantity),
+        itemId: existing.itemId,
+      };
 
       const nextItemId = dto.itemId ? await this.resolveItemId(dto.itemId, tx) : existing.itemId;
       const nextUnloadingRuleId = dto.unloadingRuleId === undefined
@@ -665,44 +1082,55 @@ export class TransactionService {
         : await this.resolveUnloadingRuleId(dto.unloadingRuleId, tx);
 
       const nextType = dto.type == null ? this.canonicalOperationType(existing.type) : this.canonicalOperationType(dto.type);
-      const nextQuantity = dto.quantity == null ? Number(existing.quantity) : Number(dto.quantity);
-      const oldDelta = this.toDelta(existing.type, Number(existing.quantity));
-      const newDelta = this.toDelta(nextType, nextQuantity);
-
-      if (existing.itemId === nextItemId) {
-        const netDelta = newDelta - oldDelta;
-        if (netDelta !== 0) {
-          await tx.item.update({
-            where: { id: existing.itemId },
-            data: { currentStock: { increment: netDelta } },
-          });
-        }
-      } else {
-        await tx.item.update({
-          where: { id: existing.itemId },
-          data: { currentStock: { increment: -oldDelta } },
-        });
-        await tx.item.update({
-          where: { id: nextItemId },
-          data: { currentStock: { increment: newDelta } },
+      this.assertKnownOperationType(nextType);
+      const nextAdjustmentDirection = dto.adjustmentDirection === undefined
+        ? nextType === 'STOCK_ADJUSTMENT' ? existing.adjustmentDirection || undefined : undefined
+        : dto.adjustmentDirection;
+      if (nextType === 'STOCK_ADJUSTMENT') {
+        this.assertStockAdjustmentFields({
+          adjustmentDirection: nextAdjustmentDirection,
+          adjustmentReason: dto.adjustmentReason ?? existing.adjustmentReason,
+          adjustmentSourceReference: dto.adjustmentSourceReference ?? existing.adjustmentSourceReference,
         });
       }
+      // FC-DATA-001 — the reversal/apply pair is Decimal arithmetic. Computing
+      // `newDelta - oldDelta` in a JS float would persist 0.6 as
+      // 0.5999999999999999 when a 0.1 movement is corrected to 0.7.
+      const previousQuantity = parseDecimal(existing.quantity, 'quantity');
+      const nextQuantity = dto.quantity == null ? previousQuantity : parseDecimal(dto.quantity, 'quantity');
+      const oldDelta = this.toDecimalDelta(existing.type, previousQuantity, existing.adjustmentDirection);
+      const newDelta = this.toDecimalDelta(nextType, nextQuantity, nextAdjustmentDirection);
+
+      const stockDeltaByItemId = new Map<number, Prisma.Decimal>();
+      if (existing.itemId === nextItemId) {
+        stockDeltaByItemId.set(existing.itemId, newDelta.minus(oldDelta));
+      } else {
+        stockDeltaByItemId.set(existing.itemId, oldDelta.negated());
+        stockDeltaByItemId.set(nextItemId, newDelta);
+      }
+      await this.applyStockDeltas(tx, stockDeltaByItemId, {
+        warehouseId: scope,
+        actorId,
+      });
 
       const row = await tx.transaction.update({
         where: { id: existing.id },
         data: {
           date: dto.date ? this.toDate(dto.date) : undefined,
           item: dto.itemId ? { connect: { id: nextItemId } } : undefined,
-          warehouseId: dto.warehouseId,
+          warehouseId: scope === 'all' ? dto.warehouseId : scope,
           warehouseInvoice: dto.warehouseInvoice,
           supplierInvoice: dto.supplierInvoice,
           type: dto.type === undefined ? undefined : this.canonicalOperationType(dto.type),
-          quantity: dto.quantity,
-          supplierNet: dto.supplierNet,
-          difference: dto.difference,
-          packageCount: dto.packageCount,
+          // FC-DATA-001 — the money columns take the same parsed values as the
+          // create path. A bare string would be coerced by the driver, which is
+          // the coercion this boundary exists to prevent.
+          quantity: dto.quantity === undefined ? undefined : nextQuantity,
+          supplierNet: this.optionalDecimal(dto.supplierNet, 'supplierNet'),
+          difference: this.optionalDecimal(dto.difference, 'difference'),
+          packageCount: this.optionalDecimal(dto.packageCount, 'packageCount'),
           weightSlip: dto.weightSlip,
-          salaryOfWorker: dto.salaryOfWorker,
+          salaryOfWorker: this.optionalDecimal(dto.salaryOfWorker, 'salaryOfWorker'),
           supplierOrReceiver: dto.supplierOrReceiver,
           truckNumber: dto.truckNumber,
           trailerNumber: dto.trailerNumber,
@@ -716,105 +1144,302 @@ export class TransactionService {
               : { disconnect: true },
           unloadingDuration: dto.unloadingDuration,
           delayDuration: dto.delayDuration,
-          delayPenalty: dto.delayPenalty,
-          calculatedFine: dto.calculatedFine,
+          delayPenalty: this.optionalDecimal(dto.delayPenalty, 'delayPenalty'),
+          calculatedFine: this.optionalDecimal(dto.calculatedFine, 'calculatedFine'),
           notes: dto.notes,
           attachmentData: dto.attachmentData,
           attachmentName: dto.attachmentName,
           attachmentType: dto.attachmentType,
-          googleDriveLink: dto.googleDriveLink,
-          createdByUserId: dto.createdByUserId,
-          timestamp: dto.timestamp == null ? undefined : BigInt(Math.floor(dto.timestamp)),
+           googleDriveLink: dto.googleDriveLink,
+           adjustmentReason: nextType === 'STOCK_ADJUSTMENT' ? dto.adjustmentReason ?? existing.adjustmentReason : null,
+           adjustmentSourceReference: nextType === 'STOCK_ADJUSTMENT' ? dto.adjustmentSourceReference ?? existing.adjustmentSourceReference : null,
+           adjustmentDirection: nextType === 'STOCK_ADJUSTMENT' ? nextAdjustmentDirection : null,
+           timestamp: dto.timestamp == null ? undefined : BigInt(Math.floor(dto.timestamp)),
         },
         include: this.includeItem(),
       });
 
-      return row as TxWithItem;
-    });
-
-    const response = this.mapToFrontend(updated);
-    this.realtimeService.emitSync(
-      ['transactions', 'operations', 'dashboard', 'items', 'stocktaking'],
-      'transactions.updated',
-      { meta: { id: response.id } },
+      return this.mapToFrontend(row as TxWithItem);
+    },
+      // FC-AUD-001 — audit commits with the stock re-balance it describes.
+      async (tx, response) => {
+        await this.auditService.logItemAction(
+          actorId,
+          'TRANSACTION_UPDATE',
+          'Transaction',
+          response.id ?? 'unknown',
+          {
+            type: response.type,
+            quantity: response.quantity,
+            itemId: response.itemId,
+            before: beforeState,
+            after: { type: response.type, quantity: response.quantity, itemId: response.itemId },
+            requestId: idempotencyKey || null,
+          },
+          actorUsername,
+          'SUCCESS',
+          { client: tx },
+        );
+      },
     );
-    // Audit fire-and-forget: تسجيل تحديث المعاملة مع تفاصيل التغيير للمسار المالي الكامل
-    void this.auditService.logItemAction(
-      actorId,
-      'TRANSACTION_UPDATE',
-      'Transaction',
-      response.id ?? 'unknown',
-      { type: response.type, quantity: response.quantity, itemId: response.itemId },
-      actorUsername,
-    ).catch((err) => this.logger.error(`[Audit] TRANSACTION_UPDATE failed: ${err?.message}`));
+
+    const response = execution.value;
+    if (!execution.replayed) {
+      this.realtimeService.emitSync(
+        ['transactions', 'operations', 'dashboard', 'items', 'stocktaking'],
+        'transactions.updated',
+        { meta: { id: response.id }, scope },
+      );
+    }
     return response;
   }
 
   // actorId/actorUsername تُمرّران للـ deleteMany لتسجيل العملية في سجل التدقيق
-  async deleteOne(id: string, actorId = 'system', actorUsername = 'system') {
-    return this.deleteMany({ ids: [id] }, actorId, actorUsername);
+  async deleteOne(id: string, actorId = 'system', actorUsername = 'system', idempotencyKey?: string, scope = 'default') {
+    return this.deleteMany({ ids: [id] }, actorId, actorUsername, idempotencyKey, scope);
   }
 
   // actorId/actorUsername: مُمرّران من الـ controller لتسجيل منفّذ الحذف
-  async deleteMany(dto: DeleteTransactionsDto, actorId = 'system', actorUsername = 'system') {
+  async deleteMany(dto: DeleteTransactionsDto, actorId = 'system', actorUsername = 'system', idempotencyKey?: string, scope = 'default') {
     const ids = Array.from(new Set((dto.ids || []).map((id) => String(id || '').trim()).filter(Boolean)));
     if (!ids.length) return { deleted: 0 };
 
     const idNumbers = ids.map((id) => Number(id)).filter((value) => Number.isInteger(value));
 
-    const result = await this.prisma.$transaction(async (tx) => {
+    const execution = await this.executeIdempotently(
+      actorId,
+      'transactions.delete',
+      idempotencyKey,
+      { ids },
+      async (tx) => {
       const rows = await tx.transaction.findMany({
         where: {
-          OR: [
-            { publicId: { in: ids } },
-            ...(idNumbers.length ? [{ id: { in: idNumbers } }] : []),
+          AND: [
+            warehouseScopeCondition(scope),
+            {
+              OR: [
+                { publicId: { in: ids } },
+                ...(idNumbers.length ? [{ id: { in: idNumbers } }] : []),
+              ],
+            },
           ],
         },
       });
 
+      const stockDeltaByItemId = new Map<number, number>();
       for (const row of rows) {
-        const delta = this.toDelta(row.type, Number(row.quantity));
-        await tx.item.update({
-          where: { id: row.itemId },
-          data: { currentStock: { increment: -delta } },
-        });
+        const delta = this.toDelta(row.type, Number(row.quantity), row.adjustmentDirection);
+        stockDeltaByItemId.set(
+          row.itemId,
+          (stockDeltaByItemId.get(row.itemId) || 0) - delta,
+        );
       }
+      await this.applyStockDeltas(tx, stockDeltaByItemId, {
+        warehouseId: scope,
+        actorId,
+      });
 
       const deleted = await tx.transaction.deleteMany({
         where: {
-          OR: [
-            { publicId: { in: ids } },
-            ...(idNumbers.length ? [{ id: { in: idNumbers } }] : []),
+          AND: [
+            warehouseScopeCondition(scope),
+            {
+              OR: [
+                { publicId: { in: ids } },
+                ...(idNumbers.length ? [{ id: { in: idNumbers } }] : []),
+              ],
+            },
           ],
         },
       });
 
-      return deleted.count;
-    });
+      return { deleted: deleted.count, entityId: this.auditEntityId(rows) };
+    },
+      // FC-AUD-001 — the reversal of stock and its audit record are one commit.
+      async (tx, result) => {
+        if (!result.deleted) return;
+        await this.auditService.logItemAction(
+          actorId,
+          'TRANSACTION_DELETE',
+          'Transaction',
+          result.entityId,
+          { deleted: result.deleted, requestId: idempotencyKey || null, requestedIds: ids },          actorUsername,
+          'SUCCESS',
+          { client: tx },
+        );
+      },
+    );
 
-    if (result > 0) {
+    const result = execution.value.deleted;
+    if (!execution.replayed && result > 0) {
       this.realtimeService.emitSync(
         ['transactions', 'operations', 'dashboard', 'items', 'stocktaking'],
         'transactions.deleted',
-        { meta: { count: result } },
+        { meta: { count: result }, scope },
       );
-      // Audit fire-and-forget: تسجيل الحذف المالي مع قائمة المعرّفات للمساءلة الكاملة
-      void this.auditService.logItemAction(
-        actorId,
-        'TRANSACTION_DELETE',
-        'Transaction',
-        ids.length === 1 ? ids[0] : `bulk-${ids.length}`,
-        { count: result, ids },
-        actorUsername,
-      ).catch((err) => this.logger.error(`[Audit] TRANSACTION_DELETE failed: ${err?.message}`));
     }
     return { deleted: result };
   }
 
+  async createStockAdjustment(
+    dto: StockAdjustmentDto,
+    actorId = 'system',
+    actorUsername = 'system',
+    idempotencyKey?: string,
+    scope = 'default',
+  ) {
+    this.assertStockAdjustmentFields({
+      adjustmentDirection: dto.adjustmentDirection,
+      adjustmentReason: dto.reason,
+      adjustmentSourceReference: dto.sourceReference,
+    });
+    const reason = String(dto.reason).trim();
+    const sourceReference = String(dto.sourceReference).trim();
+    const execution = await this.executeIdempotently(
+      actorId,
+      'transactions.stock-adjustment',
+      idempotencyKey,
+      dto,
+      async (tx) => {
+        const itemId = await this.resolveItemId(dto.itemId, tx);
+        // FC-DATA-001 — the adjustment magnitude is parsed once, through the
+        // decimal boundary. Coercing it to a number twice would round the value
+        // on the way to the column and again on the way to the stock delta.
+        const magnitude = parseDecimal(dto.quantity, 'quantity');
+        const created = await tx.transaction.create({
+          data: {
+            publicId: `stock-adjustment-${randomUUID()}`,
+            date: this.toDate(dto.date),
+            warehouseId: scope === 'all' ? 'default' : scope,
+            item: { connect: { id: itemId } },
+            type: 'STOCK_ADJUSTMENT',
+            quantity: magnitude,
+            supplierOrReceiver: 'Stock adjustment',
+            notes: reason,
+            adjustmentReason: reason,
+            adjustmentSourceReference: sourceReference,
+            adjustmentDirection: dto.adjustmentDirection,
+            createdByUserId: actorId,
+          },
+          include: this.includeItem(),
+        });
+        const delta = magnitude.mul(
+          String(dto.adjustmentDirection || '').trim().toUpperCase() === 'DECREASE' ? -1 : 1,
+        );
+        await this.applyStockDeltas(tx, new Map([[itemId, delta]]), {
+          warehouseId: scope === 'all' ? 'default' : scope,
+          actorId,
+          sourceTransactionId: created.publicId,
+        });
+        return this.mapToFrontend(created as TxWithItem);
+      },
+      // FC-AUD-001 — a stock correction without its audit row is unacceptable,
+      // so it commits inside the same transaction as the correction itself.
+      async (tx, created) => {
+        await this.auditService.logItemAction(
+          actorId,
+          'TRANSACTION_ADJUST',
+          'Transaction',
+          created.id,
+          {
+            itemId: created.itemId,
+            quantity: dto.quantity,
+            direction: dto.adjustmentDirection,
+            reason,
+            sourceReference,
+            requestId: idempotencyKey || null,
+          },
+          actorUsername,
+          'SUCCESS',
+          { client: tx },
+        );
+      },
+    );
+
+    if (!execution.replayed) {
+      this.realtimeService.emitSync(
+        ['transactions', 'operations', 'dashboard', 'items', 'stocktaking'],
+        'transactions.stock-adjusted',
+        { meta: { id: execution.value.id, itemId: execution.value.itemId }, scope },
+      );
+    }
+
+    return execution.value;
+  }
+
+  async getStockReconciliation(financialYear?: number) {
+    const computed = await this.getComputedBalances(financialYear);
+    const warning = (computed as { warning?: string }).warning;
+    if (warning) {
+      return {
+        financialYear: computed.financialYear,
+        total: 0,
+        consistent: false,
+        mismatches: [],
+        warning,
+      };
+    }
+
+    const items = await this.prisma.item.findMany({
+      select: { id: true, publicId: true, name: true, currentStock: true },
+      orderBy: { name: 'asc' },
+    });
+    // DEF-001 — the balance column is clamped at zero, so the ledger derived
+    // from the movements is lower by exactly the outstanding deficit. Folding the
+    // deficit in here is what keeps reconciliation meaningful: without it every
+    // item with a recorded shortfall would be reported as a permanent mismatch.
+    const deficits = await this.prisma.stockDeficit.groupBy({
+      by: ['itemId'],
+      where: { status: DEFICIT_OPEN },
+      _sum: { quantity: true },
+    });
+    const deficitByItemId = new Map<number, Prisma.Decimal>(
+      deficits.map((row) => [row.itemId, row._sum.quantity ?? new Prisma.Decimal(0)]),
+    );
+    const itemsByIdentifier = new Map<string, (typeof items)[number]>();
+    items.forEach((item) => {
+      itemsByIdentifier.set(String(item.id), item);
+      if (item.publicId) itemsByIdentifier.set(item.publicId, item);
+    });
+
+    const mismatches = computed.data.flatMap((row) => {
+      const item = itemsByIdentifier.get(String(row.itemId));
+      if (!item) {
+        return [{
+          itemId: row.itemId,
+          name: 'Unknown item',
+          cachedStock: null,
+          ledgerStock: Number(row.currentStock),
+          difference: null,
+        }];
+      }
+      const openDeficit = deficitByItemId.get(item.id) ?? new Prisma.Decimal(0);
+      const cachedStock = Number(item.currentStock);
+      // The ledger side plus the recorded debt must equal the balance column.
+      const ledgerStock = new Prisma.Decimal(String(row.currentStock)).plus(openDeficit).toNumber();
+      const difference = Number((cachedStock - ledgerStock).toFixed(3));
+      if (Math.abs(difference) < 0.0005) return [];
+      return [{
+        itemId: item.publicId || String(item.id),
+        name: item.name,
+        cachedStock,
+        ledgerStock,
+        openDeficit: openDeficit.toFixed(DECIMAL_SCALE),
+        difference,
+      }];
+    });
+
+    return {
+      financialYear: computed.financialYear,
+      total: computed.total,
+      consistent: mismatches.length === 0,
+      mismatches,
+    };
+  }
+
   async getComputedBalances(financialYear?: number) {
-    const year = Number(financialYear) || new Date().getFullYear();
-    const start = new Date(year, 0, 1);
-    const end = new Date(year + 1, 0, 1);
+    const year = Number(financialYear) || this.timeService.getFinancialYear();
+    const { start, end } = this.timeService.getFinancialYearRange(year);
     try {
       const [items, openingRows, transactionRows] = await Promise.all([
       this.prisma.item.findMany({
@@ -844,6 +1469,7 @@ export class TransactionService {
           itemId: true,
           type: true,
           quantity: true,
+          adjustmentDirection: true,
           updatedAt: true,
         },
       }),
@@ -860,7 +1486,7 @@ export class TransactionService {
 
       transactionRows.forEach((row) => {
         const previous = movementMap.get(row.itemId) ?? 0;
-        const delta = this.toDelta(row.type, Number(row.quantity ?? 0));
+        const delta = this.toDelta(row.type, Number(row.quantity ?? 0), row.adjustmentDirection);
         movementMap.set(row.itemId, previous + delta);
 
         const currentLast = lastUpdatedMap.get(row.itemId);

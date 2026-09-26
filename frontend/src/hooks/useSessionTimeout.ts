@@ -1,5 +1,6 @@
 // ENTERPRISE FIX: Phase 3 - Audit Logging & Advanced Security - 2026-03-03
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { assertStorageKeyAllowed } from '../services/storageOwnership';
 
 interface SessionTimeoutOptions {
   timeoutMinutes?: number;
@@ -18,11 +19,13 @@ export const useSessionTimeout = (options?: SessionTimeoutOptions) => {
   onTimeoutRef.current = options?.onTimeout;
 
   const updateActivity = useCallback(() => {
+    assertStorageKeyAllowed(STORAGE_KEY_LAST_ACTIVITY);
     const now = Date.now();
     localStorage.setItem(STORAGE_KEY_LAST_ACTIVITY, String(now));
   }, []);
 
   const getLastActivity = useCallback(() => {
+    assertStorageKeyAllowed(STORAGE_KEY_LAST_ACTIVITY);
     const raw = localStorage.getItem(STORAGE_KEY_LAST_ACTIVITY);
     const value = Number(raw);
     if (!Number.isFinite(value) || value <= 0) {

@@ -83,7 +83,7 @@ describe('Layout', () => {
       username: 'backend.scoped',
       role: 'manager',
       roleId: 'manager',
-      permissions: ['items.view', 'transactions.view', 'reports.view', 'opening-balances.view'],
+      permissions: ['items.view', 'transactions.view', 'reports.view', 'opening-balances.view', 'inventory.*'],
       active: true,
       isActive: true,
       status: 'active',
@@ -98,5 +98,25 @@ describe('Layout', () => {
     expect(screen.getAllByRole('link', { name: 'بطاقة الصنف' }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('link', { name: 'كشف حساب' }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('link', { name: 'أرصدة افتتاحية' }).length).toBeGreaterThan(0);
+  });
+
+  it('FC-SEC-002: يخفي الجرد لمن لا يملك صلاحية الجرد في الكتالوج', () => {
+    const withoutStocktaking = {
+      id: 'user-3',
+      name: 'No Stocktaking',
+      username: 'no.stocktaking',
+      role: 'manager',
+      roleId: 'manager',
+      permissions: ['items.view', 'transactions.view', 'reports.view', 'opening-balances.view'],
+      active: true,
+      isActive: true,
+      status: 'active',
+      scope: 'all',
+    } as User;
+
+    renderLayout(withoutStocktaking);
+
+    expect(screen.queryAllByRole('link', { name: 'الجرد' })).toHaveLength(0);
+    expect(screen.getAllByRole('link', { name: 'الأصناف' }).length).toBeGreaterThan(0);
   });
 });

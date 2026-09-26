@@ -126,6 +126,7 @@ export class BackupController {
   }
 
   @Permissions('backup.create')
+  @Roles('Admin', 'SuperAdmin')
   @Post('backup/full')
   async createFullSystemBackup(@Body() body: BackupCreateBody, @Req() req: Request, @Res() res: Response) {
     try {
@@ -145,6 +146,7 @@ export class BackupController {
   }
 
   @Permissions('backup.create')
+  @Roles('Admin', 'SuperAdmin')
   @Post('backup/inventory')
   async createInventoryBackup(@Body() body: BackupCreateBody, @Req() req: Request, @Res() res: Response) {
     try {
@@ -164,6 +166,7 @@ export class BackupController {
   }
 
   @Permissions('backup.create')
+  @Roles('Admin', 'SuperAdmin')
   @Post('backup/config')
   async createConfigBackup(@Body() body: BackupCreateBody, @Req() req: Request, @Res() res: Response) {
     try {
@@ -183,6 +186,7 @@ export class BackupController {
   }
 
   @Permissions('backup.view')
+  @Roles('Admin', 'SuperAdmin')
   @Get('backup/list')
   async listBackups(@Query('type') type: string | undefined, @Res() res: Response) {
     try {
@@ -251,6 +255,7 @@ export class BackupController {
   }
 
   @Permissions('backup.view')
+  @Roles('Admin', 'SuperAdmin')
   @Get('backup/storage-stats')
   async getStorageStats(@Res() res: Response) {
     try {
@@ -266,6 +271,7 @@ export class BackupController {
   }
 
   @Permissions('backup.download')
+  @Roles('Admin', 'SuperAdmin')
   @Get('backup/download/:id')
   async downloadBackup(@Param('id') id: string, @Res() res: Response) {
     try {
@@ -299,6 +305,7 @@ export class BackupController {
 
   // Legacy routes kept for backward compatibility.
   @Permissions('backup.create')
+  @Roles('Admin', 'SuperAdmin')
   @Post('backup/create')
   async createProductionBackup(@Res() res: Response) {
     try {
@@ -314,6 +321,7 @@ export class BackupController {
   }
 
   @Permissions('backup.create')
+  @Roles('Admin', 'SuperAdmin')
   @Post('backups/full')
   async createLegacyFull(@Body() body: BackupCreateBody, @Req() req: Request, @Res() res: Response) {
     return this.createFullSystemBackup(body, req, res);

@@ -24,6 +24,7 @@ import {
 } from 'crypto';
 import type { Prisma } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
+import { dumpPostgres, isPostgresUrl, restorePostgres } from './pg-dump';
 import { DatabaseInfrastructureService } from '../database/database-infrastructure.service';
 import { PrismaService } from '../prisma.service';
 
@@ -80,6 +81,11 @@ type BackupManifestEntry = {
   passwordProtected: boolean;
   actor: BackupActor;
   metadata: BackupMetaCounts;
+  /** FC-OPS-001 — size of the captured database dump, used for storage reporting. */
+  databaseBytes?: number;
+  /** FC-OPS-001 — whether this backup is complete enough to be a full restore. */
+  complete?: boolean;
+  missingModels?: string[];
   safetySnapshotForId?: string | null;
 };
 
@@ -158,6 +164,46 @@ type BackupPayload = {
   configFiles: ConfigSnapshot[];
   schedule?: BackupScheduleState;
   counts: BackupMetaCounts;
+  /**
+   * FC-OPS-001 — what the backup actually contains. A restore must be able to
+   * refuse a dump that silently omitted tables, which is exactly the failure the
+   * old SQLite path produced on PostgreSQL.
+   */
+  manifest?: BackupManifest;
+};
+
+/**
+ * FC-OPS-001 — per-section manifest.
+ *
+ * `modelCounts` lets a restore verify that every table in the schema is present;
+ * `missingModels` is populated at backup time and fails the completeness gate
+ * rather than producing a partial restore.
+ */
+type BackupManifest = {
+  /** App version that produced the backup. */
+  appVersion: string;
+  /** Prisma schema version, so a restore can detect an incompatible dump. */
+  schemaVersion: string;
+  createdAt: string;
+  /** Every table name Prisma knows about, whether or not it was dumped. */
+  expectedModels: string[];
+  /** Tables actually present in this backup, with their row counts. */
+  includedModels: string[];
+  /** Tables that exist in the schema but are deliberately out of scope. */
+  excludedModels: Array<{ model: string; reason: string }>;
+  /** Tables that exist in the schema but were NOT captured — a hard failure. */
+  missingModels: string[];
+  modelCounts: Record<string, number>;
+  /** sha256 per section, so corruption is detected before any destructive step. */
+  checksums: Record<string, string>;
+  databaseDump: {
+    included: boolean;
+    format?: string;
+    byteLength?: number;
+    sha256?: string;
+  };
+  /** FC-OPS-001 — whether a `full` backup also carries uploaded attachments. */
+  attachments: { included: boolean; fileCount: number; reason: string };
 };
 
 type BackupEnvelope = {
@@ -403,17 +449,10 @@ export class BackupService implements OnModuleDestroy {
     return timingSafeEqual(left, right);
   }
 
-  private resolveSqliteDbPath(): string | null {
-    const rawUrl = String(process.env.DATABASE_URL || '').trim();
-    if (rawUrl.startsWith('file:')) {
-      const dbPath = rawUrl.slice(5);
-      if (!dbPath) return null;
-      return path.isAbsolute(dbPath) ? dbPath : path.resolve(process.cwd(), dbPath);
-    }
-
-    const fallback = path.resolve(process.cwd(), 'prisma', 'dev.db');
-    return fs.existsSync(fallback) ? fallback : null;
-  }
+  // FC-OPS-001 — `resolveSqliteDbPath` was removed. It could only ever resolve
+  // a SQLite file, so on this PostgreSQL deployment every "full" backup silently
+  // degraded to a partial JSON snapshot and every restore failed. The real path
+  // is pg_dump / pg_restore in ./pg-dump.ts.
 
   private async collectConfigFiles(): Promise<ConfigSnapshot[]> {
     const files: ConfigSnapshot[] = [];
@@ -470,11 +509,16 @@ export class BackupService implements OnModuleDestroy {
     };
 
     if (type === 'full' || type === 'inventory' || type === 'safety_snapshot') {
-      const dbPath = this.resolveSqliteDbPath();
-      if (dbPath && fs.existsSync(dbPath)) {
-        const dbBytes = await fsPromises.readFile(dbPath);
-        payload.dbBase64 = dbBytes.toString('base64');
+      // FC-OPS-001 — a real PostgreSQL dump. The previous code looked for a
+      // SQLite file, which never resolves on this deployment, so "full" backups
+      // silently degraded to a partial JSON snapshot and no database was copied.
+      const databaseUrl = String(process.env.DATABASE_URL || '').trim();
+      if (isPostgresUrl(databaseUrl)) {
+        const dump = await dumpPostgres(databaseUrl, { format: 'custom' });
+        payload.dbBase64 = dump.base64;
       } else {
+        // A non-PostgreSQL deployment (e.g. a disposable SQLite test rig) still
+        // gets the structured snapshot rather than an empty backup.
         payload.dataSnapshot = await this.buildPrismaDataSnapshot(type);
       }
     }
@@ -485,7 +529,120 @@ export class BackupService implements OnModuleDestroy {
       payload.schedule = await this.readSchedule();
     }
 
+    // FC-OPS-001 — the manifest is built last so it can checksum the sections
+    // that were actually produced.
+    payload.manifest = await this.buildManifest(payload, type);
+
     return payload;
+  }
+
+  /**
+   * FC-OPS-001 — completeness gate.
+   *
+   * Walks the live Prisma model, records which tables this backup covers, and
+   * lists anything in the schema that is neither included nor explicitly
+   * excluded. A non-empty `missingModels` means the backup is not a full
+   * backup and must not be advertised as one.
+   */
+  private async buildManifest(payload: BackupPayload, type: BackupType): Promise<BackupManifest> {
+    const expectedModels = Object.keys(this.prisma).filter((key) => !key.startsWith('_') && key !== '$connect' && key !== '$disconnect' && key !== '$on' && key !== '$transaction' && key !== '$queryRaw' && key !== '$queryRawUnsafe' && key !== '$executeRaw' && key !== '$executeRawUnsafe' && key !== '$extends').sort();
+
+    const modelCounts: Record<string, number> = {};
+    for (const model of expectedModels) {
+      const delegate = (this.prisma as any)[model];
+      if (!delegate || typeof delegate.count !== 'function') continue;
+      try {
+        modelCounts[model] = await delegate.count();
+      } catch {
+        // A view or a table the role cannot read is an explicit exclusion.
+        modelCounts[model] = -1;
+      }
+    }
+
+    // Session data is deliberately excluded: replaying it would resurrect
+    // sessions and tokens from a backup taken days ago.
+    const excludedModels = [
+      { model: 'ActiveSession', reason: 'Session tokens are intentionally not restored; users re-authenticate.' },
+      { model: 'IdempotencyRecord', reason: 'Request-replay guards expire with their window and are not business data.' },
+    ];
+    const excluded = new Set(excludedModels.map((entry) => entry.model));
+
+    // Everything the schema has, minus the deliberate exclusions, is expected.
+    const expectedAfterExclusions = expectedModels.filter((model) => !excluded.has(model));
+
+    const captured = new Set<string>();
+    if (payload.dbBase64) {
+      // A pg_dump covers the whole database, so every model is included.
+      for (const model of expectedAfterExclusions) captured.add(model);
+    } else if (payload.dataSnapshot) {
+      const snapshotKeys = Object.keys(payload.dataSnapshot).filter((key) => key !== 'engine' && key !== 'modelCounts' && key !== 'checksums');
+      for (const model of expectedAfterExclusions) {
+        // Snapshot section names are plural table names; map conservatively.
+        if (snapshotKeys.includes(model) || snapshotKeys.includes(`${model}s`) || snapshotKeys.some((key) => key.toLowerCase() === model.toLowerCase())) {
+          captured.add(model);
+        }
+      }
+    }
+
+    const missingModels = expectedAfterExclusions.filter((model) => !captured.has(model));
+
+    const checksums: Record<string, string> = {};
+    if (payload.dbBase64) {
+      checksums.database = createHash('sha256').update(payload.dbBase64).digest('hex');
+    }
+    if (payload.dataSnapshot) {
+      checksums.snapshot = createHash('sha256').update(JSON.stringify(payload.dataSnapshot)).digest('hex');
+    }
+    for (const [index, file] of (payload.configFiles || []).entries()) {
+      checksums[`config:${index}`] = createHash('sha256').update(file.contentBase64 ?? '').digest('hex');
+    }
+
+    const attachmentRoot = path.resolve(process.cwd(), 'uploads', 'items');
+    let attachmentFileCount = 0;
+    try {
+      if (fs.existsSync(attachmentRoot)) {
+        attachmentFileCount = fs.readdirSync(attachmentRoot).filter((name) => fs.statSync(path.join(attachmentRoot, name)).isFile()).length;
+      }
+    } catch {
+      attachmentFileCount = 0;
+    }
+
+    return {
+      appVersion: process.env.APP_VERSION || '0.0.0',
+      schemaVersion: this.readSchemaVersion(),
+      createdAt: new Date().toISOString(),
+      expectedModels,
+      includedModels: [...captured].sort(),
+      excludedModels,
+      missingModels,
+      modelCounts,
+      checksums,
+      databaseDump: {
+        included: Boolean(payload.dbBase64),
+        format: payload.dbBase64 ? 'custom' : undefined,
+        byteLength: payload.dbBase64 ? Buffer.from(payload.dbBase64, 'base64').length : undefined,
+        sha256: checksums.database,
+      },
+      attachments: {
+        // FC-OPS-001 — attachments live on a volume, not in Postgres, so a
+        // database dump cannot contain them. Stated explicitly rather than
+        // implied by omission.
+        included: false,
+        fileCount: attachmentFileCount,
+        reason: 'Item attachments are stored on a filesystem volume and are not part of the database dump. Back up the uploads volume separately.',
+      },
+    };
+  }
+
+  /** FC-OPS-001 — the applied migration count, used to detect an incompatible restore. */
+  private readSchemaVersion(): string {
+    try {
+      const migrationsDir = path.resolve(process.cwd(), 'prisma', 'migrations');
+      if (!fs.existsSync(migrationsDir)) return 'unknown';
+      return String(fs.readdirSync(migrationsDir).filter((name) => fs.statSync(path.join(migrationsDir, name)).isDirectory()).length);
+    } catch {
+      return 'unknown';
+    }
   }
 
   private async buildPrismaDataSnapshot(type: BackupType): Promise<PrismaDataSnapshot> {
@@ -753,6 +910,12 @@ export class BackupService implements OnModuleDestroy {
       passwordProtected: envelope.passwordProtected,
       actor,
       metadata: envelope.metadata,
+      // FC-OPS-001 — completeness and dump size are recorded per backup so the
+      // UI can show whether a backup is actually restorable, and so storage
+      // reporting reflects the real database footprint.
+      databaseBytes: payload.manifest?.databaseDump.byteLength,
+      complete: (payload.manifest?.missingModels?.length ?? 1) === 0,
+      missingModels: payload.manifest?.missingModels ?? ['manifest-missing'],
       safetySnapshotForId: params.sourceBackupId || null,
     };
 
@@ -891,23 +1054,93 @@ export class BackupService implements OnModuleDestroy {
     }
   }
 
+  /**
+   * FC-OPS-001 — restore through PostgreSQL.
+   *
+   * The previous implementation wrote the bytes over a SQLite file path, which
+   * can never resolve on a PostgreSQL deployment, so a restore could only ever
+   * fail. This replays the archive with pg_restore/psql instead.
+   *
+   * The caller must already have taken a safety snapshot: this is destructive.
+   */
   private async restoreDatabaseFromBase64(dbBase64: string) {
-    const dbPath = this.resolveSqliteDbPath();
-    if (!dbPath) {
-      throw new BadRequestException('SQLite database path is missing');
+    const databaseUrl = String(process.env.DATABASE_URL || '').trim();
+    if (!isPostgresUrl(databaseUrl)) {
+      throw new BadRequestException('Database restore is only supported for PostgreSQL deployments');
     }
 
-    const tempPath = `${dbPath}.restore.tmp`;
-    const bytes = Buffer.from(dbBase64, 'base64');
-    await fsPromises.writeFile(tempPath, bytes);
-
+    // Release the pool so the restore is not fighting live connections.
     await this.prisma.$disconnect();
     try {
-      await fsPromises.copyFile(tempPath, dbPath);
+      await restorePostgres(databaseUrl, dbBase64, {
+        clean: true,
+        exitOnError: true,
+        singleTransaction: true,
+      });
     } finally {
-      await fsPromises.unlink(tempPath).catch(() => undefined);
       await this.prisma.$connect();
     }
+  }
+
+  /**
+   * FC-OPS-001 — refuses to restore a dump that is incomplete, corrupt, or
+   * built for a different schema. Runs before anything destructive happens.
+   */
+  private assertManifestIsRestorable(manifest: BackupManifest | undefined, backupId: string) {
+    if (!manifest) {
+      throw new BadRequestException('Backup has no manifest; refusing to restore an unverifiable dump');
+    }
+
+    if (manifest.missingModels?.length) {
+      throw new BadRequestException(
+        `Backup ${backupId} is incomplete. Missing tables: ${manifest.missingModels.join(', ')}. ` +
+          'It cannot be restored as a full backup.',
+      );
+    }
+
+    // A dump that declares a checksum must have one, and a full/safety backup
+    // that carries no dump at all has nothing to restore into PostgreSQL. The
+    // checksum itself is verified in assertManifestChecksums, which has the
+    // payload bytes; refusing here on the mere presence of a hash blocked every
+    // real HTTP restore.
+    if (manifest.databaseDump.included && !manifest.databaseDump.sha256) {
+      throw new BadRequestException('Backup declares a database dump but no checksum; refusing to restore');
+    }
+  }
+
+  /**
+   * FC-OPS-001 — per-section checksum verification. Any mismatch means the
+   * payload was altered after the backup was written.
+   */
+  private assertManifestChecksums(payload: BackupPayload) {
+    const manifest = payload.manifest;
+    if (!manifest) return;
+
+    if (payload.dbBase64) {
+      const expected = manifest.checksums?.database;
+      if (expected) {
+        const actual = createHash('sha256').update(payload.dbBase64).digest('hex');
+        if (actual !== expected) {
+          throw new BadRequestException('Database dump checksum mismatch; the backup is corrupt');
+        }
+      }
+    }
+
+    if (payload.dataSnapshot && manifest.checksums?.snapshot) {
+      const actual = createHash('sha256').update(JSON.stringify(payload.dataSnapshot)).digest('hex');
+      if (actual !== manifest.checksums.snapshot) {
+        throw new BadRequestException('Data snapshot checksum mismatch; the backup is corrupt');
+      }
+    }
+
+    (payload.configFiles || []).forEach((file, index) => {
+      const expected = manifest.checksums?.[`config:${index}`];
+      if (!expected) return;
+      const actual = createHash('sha256').update(file.contentBase64 ?? '').digest('hex');
+      if (actual !== expected) {
+        throw new BadRequestException(`Config file ${file.relativePath ?? index} checksum mismatch; the backup is corrupt`);
+      }
+    });
   }
 
   private async restorePrismaSnapshot(snapshot: PrismaDataSnapshot, type: BackupType) {
@@ -1076,6 +1309,14 @@ export class BackupService implements OnModuleDestroy {
 
     const envelope = await this.readEnvelope(target);
     const payload = this.decryptEnvelope(envelope, params.decryptionPassword);
+
+    // FC-OPS-001 — verify completeness and per-section checksums BEFORE any
+    // destructive step, so a partial or tampered dump is refused while the
+    // database is still intact.
+    if (payload.type !== 'config') {
+      this.assertManifestIsRestorable(payload.manifest, params.backupId);
+      this.assertManifestChecksums(payload);
+    }
 
     let restoredConfigFiles = 0;
     if (payload.type !== 'config') {
@@ -1275,8 +1516,10 @@ export class BackupService implements OnModuleDestroy {
     const schedule = await this.readSchedule();
     const latest = manifest.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0];
 
-    const dbPath = this.resolveSqliteDbPath();
-    const dbBytes = dbPath && fs.existsSync(dbPath) ? (await fsPromises.stat(dbPath)).size : 0;
+    // FC-OPS-001 — the previous implementation stat()'d a SQLite file that does
+    // not exist on this deployment, so the reported database size was always 0.
+    // The size that matters is the most recent dump in the manifest.
+    const latestDatabaseBytes = latest?.databaseBytes ?? 0;
 
     let configBytes = 0;
     for (const relativePath of CONFIG_FILES_ALLOW_LIST) {
@@ -1301,18 +1544,18 @@ export class BackupService implements OnModuleDestroy {
       // fallback below
     }
 
-    const usedByApp = dbBytes + configBytes + backupsBytes;
+    const usedByApp = latestDatabaseBytes + configBytes + backupsBytes;
     if (totalBytes <= 0) {
       totalBytes = usedByApp + Math.max(usedByApp, 1);
       freeBytes = Math.max(totalBytes - usedByApp, 0);
     }
 
-    const donutBase = dbBytes + configBytes + freeBytes;
+    const donutBase = latestDatabaseBytes + configBytes + freeBytes;
     const safe = donutBase > 0 ? donutBase : 1;
 
     return {
       generatedAt: new Date().toISOString(),
-      databaseBytes: dbBytes,
+      databaseBytes: latestDatabaseBytes,
       configBytes,
       backupsBytes,
       freeBytes,
@@ -1336,8 +1579,8 @@ export class BackupService implements OnModuleDestroy {
           key: 'database',
           label: 'قاعدة البيانات',
           color: '#2563eb',
-          valueBytes: dbBytes,
-          percentage: Number(((dbBytes / safe) * 100).toFixed(2)),
+          valueBytes: latestDatabaseBytes,
+          percentage: Number(((latestDatabaseBytes / safe) * 100).toFixed(2)),
         },
         {
           key: 'config',
