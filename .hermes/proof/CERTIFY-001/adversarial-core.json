@@ -1,7 +1,7 @@
 {
   "card": "FC-CERTIFY-001",
   "part": "adversarial probes: money, stock, time",
-  "generatedAt": "2026-09-26T22:36:16.638Z",
+  "generatedAt": "2026-09-26T23:30:50.545Z",
   "caveat": "Self-attack by the same agent that wrote the code. This is evidence of probing, NOT an independent verification. CERTIFY-001 requires a human verifier.",
   "totals": {
     "probes": 11,
