@@ -11,7 +11,9 @@
     "prisma:generate": "prisma generate --config prisma.config.ts",
     "prisma:migrate:dev": "prisma migrate dev --config prisma.config.ts",
     "prisma:migrate:prod": "prisma migrate deploy --config prisma.config.ts",
-    "prisma:seed": "ts-node prisma/seed.ts"
+    "prisma:seed": "ts-node prisma/seed.ts",
+    "test": "vitest",
+    "prisma:validate": "prisma validate"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.19",

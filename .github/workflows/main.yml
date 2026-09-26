@@ -14,42 +14,28 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
-    strategy:
-      matrix:
-        node-version: [20.x]
-
     steps:
     # 1. Checkout the code
     - name: Checkout repository
       uses: actions/checkout@v4
 
     # 2. Setup Node.js
-    - name: Use Node.js ${{ matrix.node-version }}
+    - name: Use Node.js 22
       uses: actions/setup-node@v4
       with:
-        node-version: ${{ matrix.node-version }}
+        node-version: 22.x
         cache: 'npm'
 
     # 3. Install Dependencies
     - name: Install dependencies
       run: npm ci --legacy-peer-deps
 
-    # 4. Linting (Check code quality)
-    - name: Lint code
-      continue-on-error: true 
-      run: npm run lint || echo "Linting skipped or not configured"
-      
-    # 5. Type Checking (TypeScript)
-    - name: TypeScript Check
-      run: npx tsc --noEmit
-
-    # 6. Run Tests
-    - name: Run Tests
-      run: npx vitest run
-
-    # 7. Build the Application
-    - name: Build Project
-      run: npm run build:full
+    # FC-QA-001 — one gate, shared with the manual workflow and with developers.
+    # Encoding, Prisma generate/validate, both typechecks, the audit contracts,
+    # backend and frontend unit tests, the full build, and compose validation.
+    # A failure here fails the build; nothing is allowed to swallow a non-zero exit.
+    - name: Verify (encoding, prisma, typecheck, tests, build, compose)
+      run: npm run ci:verify
 
   docker-build:
     runs-on: ubuntu-latest
@@ -110,15 +96,13 @@ jobs:
       uses: docker/scout-action@v1
       with:
         image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-backend:${{ github.sha }}
-        command: cves
-        continue-on-error: true
+         command: cves
 
     - name: Run Docker Scout on frontend
       uses: docker/scout-action@v1
       with:
         image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend:${{ github.sha }}
-        command: cves
-        continue-on-error: true
+         command: cves
 
   docker-compose-test:
     runs-on: ubuntu-latest
@@ -128,23 +112,82 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-    - name: Build images for testing
-      run: |
-        docker compose build
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
 
-    - name: Start services with Docker Compose
-      run: |
-        docker compose up -d
-        sleep 10
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
 
-    - name: Health check
-      run: |
-        docker compose ps
-        docker compose logs
+      - name: Build images for testing
+        run: |
+          docker compose build
 
-    - name: Cleanup
-      if: always()
-      run: docker compose down
+      - name: Start services with Docker Compose
+        run: |
+          docker compose up -d
+          timeout 180 bash -c 'until curl -fsS http://localhost:3001/api/health; do sleep 2; done'
+
+      - name: Health check
+        run: |
+          npm run health-check
+          npm run monitor:check
+          docker compose ps
+
+      - name: Phase 1 security E2E
+        run: npm run test:e2e:phase1
+
+      - name: Inventory stock boundary E2E
+        run: npm run test:e2e:inventory
+
+      - name: Stock adjustment and reconciliation E2E
+        run: npm run test:e2e:stock-adjustment
+
+      - name: DATA-003 business domains E2E
+        run: npm run test:e2e:data-003
+
+      - name: Official Items API E2E
+        run: npm run test:e2e:items-api
+
+      - name: Offline queue durability E2E
+        run: npm run test:e2e:offline-queue
+
+      - name: Scope isolation E2E
+        run: npm run test:e2e:scope
+
+      # FC-QA-001 — the E2E job must cover the cards that were accepted with
+      # only a local proof. Without these, a regression in backup/restore,
+      # decimal safety, audit durability, attachments or reports reaches main
+      # without any signal.
+      - name: Backup and restore round trip E2E
+        run: npm run test:e2e:backup
+
+      - name: Decimal-safe contract E2E
+        run: npm run test:e2e:data-001
+
+      - name: Audit durability E2E
+        run: npm run test:e2e:audit
+
+      - name: Attachment safety E2E
+        run: npm run test:e2e:attachments
+
+      - name: Reports contract E2E
+        run: npm run test:e2e:reports
+
+      - name: RBAC contract E2E
+        run: npm run test:e2e:rbac
+
+      - name: Stock deficit ledger E2E
+        run: npm run test:e2e:deficit
+
+      - name: Runtime proof (HTTP sequence, browser, offline)
+        run: npm run test:qa:runtime
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down
