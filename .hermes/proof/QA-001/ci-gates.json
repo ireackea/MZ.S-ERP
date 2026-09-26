@@ -1,0 +1,86 @@
+{
+  "card": "FC-QA-001",
+  "generatedAt": "2026-09-26T23:12:55.962Z",
+  "results": [
+    {
+      "name": "encoding",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": "5.0",
+      "why": "source files must be valid UTF-8",
+      "tail": "npm notice run feedfactory-pro@0.0.0 check:encoding\nnpm notice run node scripts/check-text-encoding.mjs\nText encoding check passed.\n"
+    },
+    {
+      "name": "prisma-generate",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": "3.1",
+      "why": "the client must match the schema",
+      "tail": "npm notice run feedfactory-pro@0.0.0 prisma:generate\nnpm notice run npm run prisma:generate --workspace=backend\nnpm notice run @feedfactory/backend@0.0.0 prisma:generate\nnpm notice run prisma generate --config prisma.config.ts\nLoaded Prisma config from prisma.config.ts.\n\nPrisma schema loaded from prisma\\schema.prisma.\n\n✔ Generated Prisma Client (v7.8.0) to .\\..\\node_modules\\@prisma\\client in 416ms\n\nStart by importing your Prisma Client (See: https://pris.ly/d/importing-client)\n\n\n"
+    },
+    {
+      "name": "prisma-validate",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": "2.5",
+      "why": "the schema must be loadable",
+      "tail": "npm notice run feedfactory-pro@0.0.0 prisma:validate\nnpm notice run npm run prisma:validate --workspace=backend\nnpm notice run @feedfactory/backend@0.0.0 prisma:validate\nnpm notice run prisma validate\nLoaded Prisma config from prisma.config.ts.\n\nPrisma schema loaded from prisma\\schema.prisma.\nThe schema at prisma\\schema.prisma is valid 🚀\n"
+    },
+    {
+      "name": "typecheck-backend",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": "9.6",
+      "why": "backend types must compile",
+      "tail": "npm notice run feedfactory-pro@0.0.0 npx\nnpm notice run tsc --noEmit -p backend/tsconfig.json\n"
+    },
+    {
+      "name": "typecheck-frontend",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": "11.8",
+      "why": "frontend types must compile",
+      "tail": "npm notice run feedfactory-pro@0.0.0 npx\nnpm notice run tsc --noEmit -p frontend/tsconfig.json\n"
+    },
+    {
+      "name": "audit-contracts",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": "3.4",
+      "why": "the audit suite guards every accepted card",
+      "tail": "adjustment contract persists reason, source, and direction (15.0028ms)\n✔ stock adjustment command and reconciliation are permissioned and idempotent (7.95ms)\n✔ inventory reports include stock adjustment movements (4.2256ms)\n✔ ordinary item sync cannot write currentStock (3.391ms)\n✔ bulk item import cannot write currentStock as ordinary metadata (2.6888ms)\n✔ item service has no direct currentStock write in sync or import paths (1.7613ms)\n✔ item form no longer submits unsupported product fields as if they were persisted (1.7744ms)\n✔ transaction service centralizes currentStock writes in the stock delta helper (2.7037ms)\n✔ the API contract test documents the current stock write boundary (1.5555ms)\n✔ storage inventory classifies business, queue, legacy, secret, and presentation state (4.9993ms)\n✔ unregistered browser storage keys fail closed (4.3168ms)\n✔ storage ADR makes server ownership and secret prohibition explicit (2.9053ms)\n✔ canonical time service owns Cairo business boundaries (5.6223ms)\n✔ business calculations use TimeService instead of local calendar construction (8.7106ms)\nℹ tests 138\nℹ suites 0\nℹ pass 138\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 2784.9801\n"
+    },
+    {
+      "name": "unit-backend",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": "3.7",
+      "why": "backend unit tests are mandatory, not optional",
+      "tail": "t-redaction.test.ts \u001b[2m(\u001b[22m\u001b[2m6 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 19\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m✓\u001b[39m src/auth/permission-catalog.test.ts \u001b[2m(\u001b[22m\u001b[2m9 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 186\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m✓\u001b[39m src/common/operation-type.test.ts \u001b[2m(\u001b[22m\u001b[2m20 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[33m 371\u001b[2mms\u001b[22m\u001b[39m\n       \u001b[33m\u001b[2m✓\u001b[22m\u001b[39m keeps totals exact across many rows \u001b[33m 328\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m✓\u001b[39m src/common/scope.test.ts \u001b[2m(\u001b[22m\u001b[2m2 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 11\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m✓\u001b[39m src/common/decimal.test.ts \u001b[2m(\u001b[22m\u001b[2m28 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 91\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m✓\u001b[39m src/common/time/time.service.test.ts \u001b[2m(\u001b[22m\u001b[2m4 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 13\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m✓\u001b[39m src/common/stock-deficit.test.ts \u001b[2m(\u001b[22m\u001b[2m14 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[33m 803\u001b[2mms\u001b[22m\u001b[39m\n       \u001b[33m\u001b[2m✓\u001b[22m\u001b[39m holds for a deterministic pseudo-random movement sequence \u001b[33m 781\u001b[2mms\u001b[22m\u001b[39m\n\n\u001b[2m Test Files \u001b[22m \u001b[1m\u001b[32m9 passed\u001b[39m\u001b[22m\u001b[90m (9)\u001b[39m\n\u001b[2m      Tests \u001b[22m \u001b[1m\u001b[32m108 passed\u001b[39m\u001b[22m\u001b[90m (108)\u001b[39m\n\u001b[2m   Start at \u001b[22m 01:12:04\n\u001b[2m   Duration \u001b[22m 2.10s\u001b[2m (transform 1.18s, setup 0ms, import 3.31s, tests 1.54s, environment 4ms)\u001b[22m\n\n"
+    },
+    {
+      "name": "unit-frontend",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": "14.8",
+      "why": "frontend unit tests are mandatory",
+      "tail": "e --trace-warnings ...` to show where the warning was created)\n \u001b[2m\u001b[90m↓\u001b[39m\u001b[22m src/utils/__tests__/wordSelectionTranslate.test.ts \u001b[2m(\u001b[22m\u001b[2m1 test\u001b[22m\u001b[2m | \u001b[22m\u001b[33m1 skipped\u001b[39m\u001b[2m)\u001b[22m\n(node:20380) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.\n(Use `node --trace-warnings ...` to show where the warning was created)\n \u001b[2m\u001b[90m↓\u001b[39m\u001b[22m src/shared/context/__tests__/ThemeContext.test.tsx \u001b[2m(\u001b[22m\u001b[2m1 test\u001b[22m\u001b[2m | \u001b[22m\u001b[33m1 skipped\u001b[39m\u001b[2m)\u001b[22m\n(node:20748) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.\n(Use `node --trace-warnings ...` to show where the warning was created)\n \u001b[2m\u001b[90m↓\u001b[39m\u001b[22m src/modules/settings/pages/__tests__/ThemeSettings.test.tsx \u001b[2m(\u001b[22m\u001b[2m1 test\u001b[22m\u001b[2m | \u001b[22m\u001b[33m1 skipped\u001b[39m\u001b[2m)\u001b[22m\n\n\u001b[2m Test Files \u001b[22m \u001b[1m\u001b[32m15 passed\u001b[39m\u001b[22m\u001b[2m | \u001b[22m\u001b[33m3 skipped\u001b[39m\u001b[90m (18)\u001b[39m\n\u001b[2m      Tests \u001b[22m \u001b[1m\u001b[32m46 passed\u001b[39m\u001b[22m\u001b[2m | \u001b[22m\u001b[33m3 skipped\u001b[39m\u001b[90m (49)\u001b[39m\n\u001b[2m   Start at \u001b[22m 01:12:07\n\u001b[2m   Duration \u001b[22m 13.49s\u001b[2m (transform 2.90s, setup 11.99s, import 6.18s, tests 9.72s, environment 49.57s)\u001b[22m\n\n"
+    },
+    {
+      "name": "build-full",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": "34.3",
+      "why": "both workspaces must build",
+      "tail": "               50.42 kB\ndist/assets/useOfflineSync-D_t_IXRF.js                 55.07 kB\ndist/assets/Statement-BszZSTFE.js                      56.32 kB\ndist/assets/useInventoryStore-Dwvq9D7Y.js              65.46 kB\ndist/assets/Items-CkD3debn.js                          74.59 kB\ndist/assets/proxy-DVt6ZwmK.js                         123.78 kB\ndist/assets/Operations-ClGnBkd6.js                    135.60 kB\ndist/assets/index.es-p2t128Tk.js                      153.17 kB\ndist/assets/html2canvas-DFoPNsY5.js                   201.05 kB\ndist/assets/index-BqX4_KmN.js                         228.47 kB\ndist/assets/jspdf.es.min-BSRE8VnR.js                  412.48 kB\ndist/assets/exceljs.min-StjWZWXL.js                   945.21 kB\n\n\u001b[33m\u001b[33m[PLUGIN_TIMINGS] Warning:\u001b[0m Your build spent significant time in plugins. Here is a breakdown:\n  - vite:esbuild-transpile (50%)\n  - vite:css (25%)\n  - vite:css-post (10%)\nSee https://rolldown.rs/options/checks#plugintimings for more details.\n\u001b[39m\n\u001b[32m✓ built in 3.74s\u001b[39m\nnpm notice run feedfactory-pro@0.0.0 backend:build\nnpm notice run npm run build --workspace=backend\nnpm notice run @feedfactory/backend@0.0.0 build\nnpm notice run tsc -p tsconfig.json\n"
+    },
+    {
+      "name": "compose-config",
+      "passed": true,
+      "exitCode": 0,
+      "seconds": "0.3",
+      "why": "the deployment path must be valid",
+      "tail": ""
+    }
+  ]
+}

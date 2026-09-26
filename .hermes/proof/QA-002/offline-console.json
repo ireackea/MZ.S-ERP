@@ -1,0 +1,17 @@
+{
+  "serviceWorker": "active",
+  "indexedDb": {
+    "databases": [
+      "FeedFactoryMutationDB"
+    ],
+    "objectStores": [
+      "mutationQueue"
+    ]
+  },
+  "recovered": {
+    "status": 200,
+    "ok": true
+  },
+  "consoleErrors": [],
+  "pageErrors": []
+}

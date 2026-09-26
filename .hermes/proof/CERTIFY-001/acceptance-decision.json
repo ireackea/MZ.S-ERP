@@ -1,0 +1,35 @@
+{
+  "card": "FC-CERTIFY-001",
+  "decision": "ACCEPTED",
+  "decidedAt": "2026-09-27T01:15:37.114346",
+  "decidedBy": "repository owner",
+  "whatWasAccepted": "The owner accepted the self-review as the verification method for CERTIFY-001. This is a recorded risk-acceptance decision. It is NOT a claim that an independent verifier examined this work, and no such verification occurred.",
+  "whyThisIsLegitimate": "The card asked for an independent verifier to raise the bar above 'it compiles'. The self-review was run under a deliberately stricter method - black-box property attacks rather than a re-read of the code - and it found five real defects that the original implementation and the original tests had all missed, including a security hole (an anonymous caller could read the deficit queue) and a concurrency bug that surfaced as a 500. A verification that finds nothing is weak evidence; this one found substance. The residual limitation is that the same agent designed, tested and reviewed, so a shared blind spot would be invisible in all three.",
+  "finalStateAtAcceptance": {
+    "ciGates": "10/10, exit 0",
+    "e2e": "43/43 across every suite",
+    "auditContracts": "pass",
+    "typecheck": "backend and frontend clean",
+    "prismaValidate": "valid",
+    "composeConfig": "valid",
+    "hygiene": "no tracked secrets, no generated artifacts, no active legacy import, one stock-write boundary, no raw SQL touching stock",
+    "adversarialProbes": "11/11, zero findings"
+  },
+  "residualRisksAccepted": [
+    "I wrote the design, the tests and this review, so a blind spot in my understanding of the warehouse domain would be invisible in all three. Specifically: whether an over-issue should clamp at all, or whether a pick should be blocked at the point of issue, is a business decision I inferred rather than one I was told.",
+    "The property test explores the arithmetic exhaustively but the sequence generator is mine, so it cannot prove the absence of a state I never imagined.",
+    "No human has read this code. A reviewer with fresh eyes would be the thing most likely to find a requirement I silently reinterpreted.",
+    "Concurrency was probed for two simultaneous issues on one item. Wider contention, and the interaction with the offline replay path, were not probed."
+  ],
+  "knownLimitationsNotFixed": [
+    "The Service Worker's own fetch cannot be cut by setOfflineMode, CDP emulation or request interception, so a genuine mid-request network interruption in the browser is still unproven; the durable queue is proven by offline-queue.spec.ts.",
+    "docker compose build (default target) still fails in this environment because the Puppeteer Chrome download is blocked. All verification used --target production, which is the same application code without the browser tooling."
+  ],
+  "operationalWarning": "The API contract is breaking: `quantity` on a transaction is now a decimal string. A client that sends a bare non-integer float receives 400. Any consumer outside this repository must be checked before rollout.",
+  "evidence": [
+    ".hermes/proof/CERTIFY-001/certification-report.json",
+    ".hermes/proof/CERTIFY-001/def-001-and-review.json",
+    ".hermes/proof/QA-001/ci-gates.json",
+    ".hermes/proof/QA-002/http-proof.json"
+  ]
+}

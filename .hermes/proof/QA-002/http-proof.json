@@ -1,0 +1,1569 @@
+{
+  "card": "FC-QA-002",
+  "generatedAt": "2026-09-26T18:15:08.611Z",
+  "backendUrl": "http://localhost:3001",
+  "dbCounts": {
+    "after": {
+      "items": 221,
+      "transactions": 81,
+      "audit_logs": 8973
+    }
+  },
+  "totals": {
+    "steps": 30,
+    "failed": 0
+  },
+  "steps": [
+    {
+      "name": "readiness: /api/health reports healthy with a live DB",
+      "at": "2026-09-26T18:15:00.716Z",
+      "status": 200,
+      "ok": true,
+      "note": "ready after 1 poll(s); no fixed sleep was used",
+      "attempts": [
+        {
+          "ms": 1790446500715,
+          "status": 200,
+          "dbConnected": true
+        }
+      ],
+      "body": {
+        "status": "healthy",
+        "uptime": 25.21,
+        "timestamp": "2026-09-26T18:15:00.703Z",
+        "dbConnected": true,
+        "memory": {
+          "rss": 235450368,
+          "heapUsed": 95959744,
+          "heapTotal": 119390208
+        }
+      }
+    },
+    {
+      "name": "DB row counts before",
+      "at": "2026-09-26T18:15:01.102Z",
+      "before": {
+        "items": 220,
+        "transactions": 78,
+        "audit_logs": 8940
+      }
+    },
+    {
+      "name": "metrics without a token is refused",
+      "at": "2026-09-26T18:15:01.115Z",
+      "status": 401,
+      "ok": true,
+      "body": {
+        "error": "Unauthorized access to metrics"
+      }
+    },
+    {
+      "name": "metrics with a wrong token is refused",
+      "at": "2026-09-26T18:15:01.121Z",
+      "status": 401,
+      "ok": true,
+      "body": {
+        "error": "Unauthorized access to metrics"
+      }
+    },
+    {
+      "name": "metrics with the real token answers",
+      "at": "2026-09-26T18:15:01.126Z",
+      "status": 200,
+      "ok": true,
+      "note": "Prometheus text format",
+      "body": "# HELP process_uptime_seconds Node.js process uptime in seconds.\n# TYPE process_uptime_seconds gauge\nprocess_uptime_seconds 25.632511201\n# HELP process_start_time_seconds Node.js process start time since unix epoch in seconds.\n# TYPE process_start_time_seconds gauge\nprocess_start_time_seconds 1790446479\n# HELP nodejs_heap_used_bytes Used heap size in bytes.\n# TYPE nodejs_heap_used_bytes gauge\nnode"
+    },
+    {
+      "name": "login returns 2xx and sets the session cookie",
+      "at": "2026-09-26T18:15:01.587Z",
+      "status": 201,
+      "ok": true,
+      "note": "cookie is the only credential; the body token is the literal string \"httpOnly\"",
+      "body": {
+        "accessToken": "httpOnly",
+        "tokenType": "Bearer",
+        "expiresIn": "24h",
+        "user": "superadmin",
+        "permissions": 1
+      }
+    },
+    {
+      "name": "the session resolves to a principal",
+      "at": "2026-09-26T18:15:01.662Z",
+      "status": 200,
+      "ok": true,
+      "body": {
+        "id": "dfc7e8c6-c30f-40df-a077-ebfd96278912",
+        "username": "superadmin",
+        "role": "SuperAdmin",
+        "permissions": [
+          "*"
+        ],
+        "name": "System SuperAdmin",
+        "sessionId": "d23e7855-e8d2-46d2-b574-5a2d0408424a"
+      }
+    },
+    {
+      "name": "a protected route refuses an anonymous caller",
+      "at": "2026-09-26T18:15:01.669Z",
+      "status": 401,
+      "ok": true,
+      "body": {
+        "message": "Login required via secure cookie",
+        "error": "Unauthorized",
+        "statusCode": 401
+      }
+    },
+    {
+      "name": "bootstrap reports startup flags",
+      "at": "2026-09-26T18:15:01.809Z",
+      "status": 200,
+      "ok": true,
+      "body": {
+        "hasItems": true,
+        "hasTransactions": true,
+        "hasOpeningBalances": true
+      }
+    },
+    {
+      "name": "item created",
+      "at": "2026-09-26T18:15:01.907Z",
+      "status": 201,
+      "ok": true,
+      "body": {
+        "publicId": "qa002-item-0idvk6",
+        "minLimit": "0.000",
+        "maxLimit": "999999999.999",
+        "currentStock": "0.000"
+      }
+    },
+    {
+      "name": "item decimals are serialized as strings, not floats",
+      "at": "2026-09-26T18:15:01.907Z",
+      "ok": true,
+      "note": "FC-DATA-001 wire form holds on the live API",
+      "body": {
+        "minLimit": "0.000",
+        "maxLimit": "999999999.999",
+        "currentStock": "0.000"
+      }
+    },
+    {
+      "name": "DB row count moved by exactly one item",
+      "at": "2026-09-26T18:15:02.270Z",
+      "ok": true,
+      "note": "items 220 -> 221",
+      "body": {
+        "before": 220,
+        "after": 221
+      }
+    },
+    {
+      "name": "movement وارد 10.5 accepted",
+      "at": "2026-09-26T18:15:02.392Z",
+      "status": 201,
+      "ok": true,
+      "body": {
+        "quantity": "10.500",
+        "type": "وارد"
+      }
+    },
+    {
+      "name": "movement صادر 0.5 accepted",
+      "at": "2026-09-26T18:15:02.467Z",
+      "status": 201,
+      "ok": true,
+      "body": {
+        "quantity": "0.500",
+        "type": "صادر"
+      }
+    },
+    {
+      "name": "replaying an Idempotency-Key does not double-post",
+      "at": "2026-09-26T18:15:02.553Z",
+      "status": 201,
+      "ok": true,
+      "note": "first=201/fd52c603-5173-45b2-ae3e-4299c48a7d9d replay=201/fd52c603-5173-45b2-ae3e-4299c48a7d9d",
+      "body": {
+        "firstId": "fd52c603-5173-45b2-ae3e-4299c48a7d9d",
+        "replayId": "fd52c603-5173-45b2-ae3e-4299c48a7d9d"
+      }
+    },
+    {
+      "name": "reusing a key with a different payload is refused",
+      "at": "2026-09-26T18:15:02.589Z",
+      "status": 409,
+      "ok": true,
+      "body": {
+        "message": "Idempotency key was already used with a different payload",
+        "error": "Conflict",
+        "statusCode": 409
+      }
+    },
+    {
+      "name": "the ledger balances: 10.5 received minus 0.5 issued plus 1.25 replayed once",
+      "at": "2026-09-26T18:15:02.624Z",
+      "ok": true,
+      "note": "currentStock=11.250 (a float would have produced 11.249999999999998)",
+      "body": {
+        "currentStock": "11.250"
+      }
+    },
+    {
+      "name": "computed balances respond",
+      "at": "2026-09-26T18:15:02.691Z",
+      "status": 200,
+      "ok": true,
+      "body": {
+        "financialYear": 2026,
+        "total": 221,
+        "data": [
+          {
+            "itemId": "d001-float-item-297116bb-69f6-4d7a-9250-e51c71799d9e",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-float-item-bfb4fa49-4d89-4e8d-b9f7-318b4f28cd5a",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-float-item-31e2c012-b3a4-4e1a-8952-22c66c318a3e",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-float-item-e7b160be-655f-41b0-a076-9ea84abc20e8",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-float-item-dae21714-08df-46aa-aba1-6f5877187e95",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-float-item-7937177e-bb71-46ea-aadd-537d51166674",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-float-item-623a1e4a-b41e-41b5-87a1-5bc3ff7caa12",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-float-item-12f9480c-3dbe-4fb1-b5ba-b7843326e576",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-float-item-348d9478-527c-4629-a04e-2be65682d511",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-float-item-c039c679-1cff-4532-8fb0-345652253b5e",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-float-item-2c42010d-5a3b-4cb7-8240-9421dec55262",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-float-item-aed0f59e-e616-4e96-b94a-9033308d0da8",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-float-item-71a7d960-88f7-47e5-9f63-4a95a37707ad",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-item-069fa3ee-e647-4907-8591-eb9dbd190fb5",
+            "currentStock": 0.1,
+            "lastUpdated": "2026-09-26T14:33:28.694Z"
+          },
+          {
+            "itemId": "d001-item-1ef03901-d629-4972-82d6-f36316ec0c0e",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-item-a3a1da21-a279-4055-b20c-59badbc2ddec",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-item-76c1e41e-e3ef-4c10-887c-17fd3deb895b",
+            "currentStock": 0.1,
+            "lastUpdated": "2026-09-26T14:34:45.068Z"
+          },
+          {
+            "itemId": "d001-item-78fb9e26-9c81-4c5a-a086-02408cc862c9",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-item-28e9c3e7-5e2f-4651-830a-483634f87fcb",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-item-6dd046e8-4fff-45ae-801c-41eeaf53bbc6",
+            "currentStock": 0.1,
+            "lastUpdated": "2026-09-26T14:34:31.946Z"
+          },
+          {
+            "itemId": "d001-item-5b098ac7-1b6e-486e-8513-437624274100",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-item-53adbc12-6c81-4ecb-ab8d-7e73745dfcaf",
+            "currentStock": 0.1,
+            "lastUpdated": "2026-09-26T14:49:38.534Z"
+          },
+          {
+            "itemId": "d001-item-3b3d58d9-779d-46ad-84e6-a27db0c9fc7d",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-item-3b13b782-6820-41b2-99d6-0724217b5bb6",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-item-180bb384-b29b-4dbb-b2f0-00b4867d7f03",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-item-06940345-2563-4adf-82d8-08a8d7640bfb",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-ledger-item-cb2fc6ff-fd26-4394-a23e-714607e66db3",
+            "currentStock": 0.1,
+            "lastUpdated": "2026-09-26T14:34:46.367Z"
+          },
+          {
+            "itemId": "d001-ledger-item-52a422ba-e929-4dd7-9004-4febc5ca91a2",
+            "currentStock": 0.1,
+            "lastUpdated": "2026-09-26T14:33:29.803Z"
+          },
+          {
+            "itemId": "d001-ledger-item-59b8aabc-b87f-4a4f-bbe3-8544c34f55c5",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-ledger-item-5e283f98-f195-4689-9714-f33067fda54f",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-ledger-item-5578a21b-fedd-448b-b6ea-8208b50b0751",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-ledger-item-c10690d0-285d-4da0-b58f-0713318b97a2",
+            "currentStock": 0.1,
+            "lastUpdated": "2026-09-26T14:34:32.956Z"
+          },
+          {
+            "itemId": "d001-ledger-item-b725a8b0-2241-4afb-9e4b-b4fa93f56648",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-ledger-item-00a9d771-c74e-442f-90dd-95398c255e60",
+            "currentStock": 0.1,
+            "lastUpdated": "2026-09-26T14:49:41.432Z"
+          },
+          {
+            "itemId": "d001-ledger-item-cb88bb5b-08e4-4f83-8068-bf96576a3ea2",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-ledger-item-00593cb6-f37e-4be2-95e3-9292312c3891",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-ledger-item-21b5efa3-03a6-4725-a881-91e5669d1c4d",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-ledger-item-96c1ea31-0580-4e13-b2dc-41fd2c855dcd",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-ledger-item-e66c3ee1-6fee-469a-9c8e-bbe6cc0f47c6",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-max-item-b17de9a9-8698-48e5-bacd-7b7b4f7c74d0",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-max-item-2b284d69-e0b0-45c9-b6e3-2f2562e1bdcf",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-max-item-a8e05c48-5c73-402c-816b-8d2ce6949596",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-max-item-4c7d8157-2589-48d0-a536-e0798fc46a5e",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-max-item-edc3bf61-03f1-49fe-bc33-989b3aa7179d",
+            "currentStock": 1000000000,
+            "lastUpdated": "2026-09-26T14:24:51.024Z"
+          },
+          {
+            "itemId": "d001-max-item-a7ece0ea-9673-4dcc-8902-877b21624cc4",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-max-item-8b945f75-ba8d-4ee2-87bf-31d0bbc66ae9",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-max-item-3bb1598a-4bb1-4ba1-9628-dcfb6a8a831f",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-max-item-29ff9f72-68ac-4252-9812-fd2d1bd84eec",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-max-item-154a70ed-af89-493e-98c0-69adbac51d50",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-max-item-23bf42b9-e106-4975-9f9e-af58daf2e116",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-max-item-428fecfc-e456-4057-a1cc-b66fb9edea2d",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-max-item-77262e08-0470-455e-bf6e-97a4e5ca78a6",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-money-item-2ccae4b9-7796-443a-9889-2cbe30ac5de4",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-money-item-1867a607-6231-4c8a-acde-cf0694e82751",
+            "currentStock": 5,
+            "lastUpdated": "2026-09-26T14:34:33.475Z"
+          },
+          {
+            "itemId": "d001-money-item-096bad56-fcec-4e25-a6a2-fdd3ccbf660c",
+            "currentStock": 5,
+            "lastUpdated": "2026-09-26T14:33:18.207Z"
+          },
+          {
+            "itemId": "d001-money-item-6e8f6942-240f-43a6-8e18-4594917fd460",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-money-item-035ddbdf-fca6-43a9-baa2-5c38dad85a34",
+            "currentStock": 5,
+            "lastUpdated": "2026-09-26T14:34:46.884Z"
+          },
+          {
+            "itemId": "d001-money-item-21b56511-def8-4928-b75e-348da64aa69a",
+            "currentStock": 5,
+            "lastUpdated": "2026-09-26T14:33:08.794Z"
+          },
+          {
+            "itemId": "d001-money-item-2cca5a62-dbdd-4703-b6c2-248442175c69",
+            "currentStock": 5,
+            "lastUpdated": "2026-09-26T14:32:59.523Z"
+          },
+          {
+            "itemId": "d001-money-item-5a017a27-841e-4b76-b75c-348a44c6fc29",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-money-item-579b3113-6caa-484a-8409-42f2ff08f068",
+            "currentStock": 5,
+            "lastUpdated": "2026-09-26T14:33:30.328Z"
+          },
+          {
+            "itemId": "d001-money-item-ab85e5cd-23d5-4571-b856-351399620d46",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-money-item-603566f5-b8a6-4739-b932-649f3c79ea47",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "d001-money-item-92f188ea-a63d-4a40-9b55-7183bf266250",
+            "currentStock": 5,
+            "lastUpdated": "2026-09-26T14:49:42.282Z"
+          },
+          {
+            "itemId": "d001-money-item-2512529b-1ef9-4ccb-8a75-51a9e2fc5a99",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "data-003-item-06fa0384-e98d-4220-a72a-d121081e7217",
+            "currentStock": 5,
+            "lastUpdated": "2026-09-26T03:41:08.775Z"
+          },
+          {
+            "itemId": "data-003-item-33c59984-ef0f-42d0-93ea-428cc9a3b57a",
+            "currentStock": 5,
+            "lastUpdated": "2026-09-26T05:27:52.064Z"
+          },
+          {
+            "itemId": "debug-adjustment-f2e61e26-27a4-4ebb-8e3e-0e25ec5dc1ad",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "phase1-item-ab3d877e-0aed-41fd-9b98-32f771ffc3c8",
+            "currentStock": 1,
+            "lastUpdated": "2026-09-25T03:47:48.695Z"
+          },
+          {
+            "itemId": "qa002-item-0idvk6",
+            "currentStock": 11.25,
+            "lastUpdated": "2026-09-26T18:15:02.500Z"
+          },
+          {
+            "itemId": "qa002-item-a8zb4b",
+            "currentStock": 11.25,
+            "lastUpdated": "2026-09-26T17:57:44.027Z"
+          },
+          {
+            "itemId": "qa002-item-n4l6tp",
+            "currentStock": 11.25,
+            "lastUpdated": "2026-09-26T17:55:46.024Z"
+          },
+          {
+            "itemId": "qa002-item-p1reef",
+            "currentStock": 10,
+            "lastUpdated": "2026-09-26T17:56:46.577Z"
+          },
+          {
+            "itemId": "qa002-item-x7r08w",
+            "currentStock": 11.25,
+            "lastUpdated": "2026-09-26T17:58:32.277Z"
+          },
+          {
+            "itemId": "probe-tx-1790433096715",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "probe-tx-1790432913567",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "probe-tx-1790432904291",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "probe-tx-1790432895666",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "probe-1790432058173",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-ccb49636-42d0-47b1-9a5a-4e679d7dabc8",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-d137476e-c0c1-4138-8f1b-45d1cb69afdb",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-f9c7a8e1-9830-492a-9fb3-bfe83566ba99",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-645e3aae-44b6-47ce-bfe0-d43ffe407f64",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-18e5bb7f-f772-49cb-b846-15c8ecbfbd6a",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-851562a3-931d-4805-95bf-00f14c31eccb",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-94384987-f0fd-400a-92e7-663b70afb6e6",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-3f2a4387-d4d0-4857-b5fd-d483fcfab1d7",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-130bab55-51ac-4824-8065-7d97cd107c10",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-1930f7cb-ef16-4ebb-ae9c-2252ca96632f",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-b9db4390-e573-42cd-81c3-fa04bb8ce954",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-1ad9f8a1-7633-48c4-bdb6-50a272374f4c",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-d16cd787-8b4b-412a-8dec-dab269592961",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-a6368c2a-d86b-444d-9c8c-6c16f7d2caaf",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-c1e71918-7677-4136-834e-131c49ddcaa7",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-64f82ce1-0094-4ff6-97fe-c380fd0a748b",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-2b506363-6521-4ae1-ac2c-e210a8f2df82",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-b323c78e-d63b-461b-8fbe-b7e48c7cc57e",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-585ccbed-4b35-4830-81a1-884fb5252cb8",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-e1467e02-f9af-4284-9acf-0005643a0927",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-5dd106d1-baaf-431a-a26b-3c8377df5e10",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-86bcebf8-a69c-48f3-a1b1-37d15ed1e2fd",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-f9783c47-5ef2-4947-b6f3-d686356c3dc7",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-c8c70958-7ff6-4d18-8981-7bac8149041b",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-beef3afe-c563-40aa-b13d-73af5139feaa",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-55138d82-5768-48f4-baac-09bf4fcbe978",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-02d97a5d-53f8-4650-a3cf-bcf236f0d391",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-5ca0017a-d6e0-4676-8315-eb64b2beb12d",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-b3867763-0553-460a-8121-54fa0a7c897b",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-3c04a7e6-3a07-4a2f-8927-c62d687a8f10",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-0121e4f3-007c-41d1-ad15-84457c31a6b2",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-c14300f3-028b-4835-8345-8a4f8807b624",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-885925b1-9914-4020-8060-4e7cba0730be",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-ef18d261-64ac-41a7-8670-6cce3efa4db7",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-3661d71f-88c4-4837-9365-cb17ee612d64",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-df0ba544-f17c-4dd0-b8b3-8bed964ae9a9",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-5fd06a53-9fab-42d9-ad13-d92f9a140ca3",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-2f74e8f6-27b9-437b-8b45-4fdc100f0c8c",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-2f554422-7b38-475a-bedf-7aeb39df1f4a",
+            "currentStock": 0,
+            "lastUpdated": "2026-06-25T00:58:37.623Z"
+          },
+          {
+            "itemId": "item-b90d8e08-e156-498a-b5b9-ef5cc6528623",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-92a30406-f9b8-4c7b-9840-01200646ce61",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-c8f4bc40-1950-43d7-97dd-3bc2dee839a9",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-97cdcf3a-79d6-4cd5-85b1-b22b195adcd8",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-14b0159c-2633-43fc-aad4-52b1d7257d2f",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-d0c4146d-9284-4799-bdf3-24d4c61d0070",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-e0b14804-c612-474d-89f2-4c3af2da3417",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-7356a8f8-b61a-4183-a6e3-a285973bff73",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-00dad11b-6233-4fcb-9841-0d0069b82821",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-66b7e533-3946-417d-aa76-a348052ed305",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-620ee4b6-df8c-490f-947e-f69e724cde72",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-5c586c15-146c-47b0-b757-b644f156338a",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-265da3f1-fe6c-43f6-ba53-6c8b4992ddf9",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-be5565cb-09b3-4dfb-addd-b4845203dab1",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-bd5ae67a-0086-481e-ac95-7d7f7aba18f0",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-e1fb8ba6-5c20-4433-a05f-41721808c914",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-9f4060bc-86ac-4cfb-b23b-27b45be590e7",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-dcd1c481-92ee-4b37-8fb6-4218f235ca90",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-2966e195-9e9f-4c1e-95ef-49550d158dbc",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-6d09f4c4-a366-4b62-9320-bc0ba44d5af6",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-a829053e-44f1-4ce9-bd26-89cb29209985",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-ce84c9dc-bd53-413c-95dc-65f748595a23",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-8fd46585-aaa0-4eb5-997e-560537d82fed",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-e92f1b83-c402-4648-ab39-d6ccc81fdaca",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-f16ad6aa-3102-4947-8d72-80a87fded82a",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-52075517-6560-4926-8292-25eb9166cd6c",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-a3eb08ed-9209-4629-9a9d-8792f202afdb",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-50d974b1-1d55-4418-bf6a-4dd1defd6abf",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-39a0b058-5cf8-4192-acd9-30397512ff98",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-0685b9ba-0e23-447f-b429-d35c588d26e8",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-ffec4ada-1094-4e55-8149-a0d77f6dcf31",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-f92b9714-23e9-4a0f-a509-8b00ee52fe4e",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-82099688-c5de-473b-bc24-dded18e8e012",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-ebc6a8b2-5df1-405f-b687-660e1b5b2546",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-76fbf8c7-d6bf-4b2c-9af6-4a72da2a4c57",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-b180a530-4e2a-49f9-9712-4573a788b88c",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-36bb92e1-de3a-48ad-8cb8-70422170672c",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-0ffb3cc9-34e6-4e80-9b85-67a2063e247b",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-ff909d26-5911-413c-80c9-b58d89675b70",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-86cff447-4fe3-4cf5-9f06-f791de68ebae",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-553d6797-169c-4fb7-a451-ec456b90e887",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-41a3c78b-e456-433d-bf45-025b7f8916c9",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-39958f87-f14f-48ef-abc2-25135478d9d6",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-70d0d0d0-fcd9-4fbe-99c1-609306a7b161",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-82162ceb-7296-40c6-8611-9a2c3fbc5125",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-73839d50-9663-42d0-a032-8eb20103bb62",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-c417ad37-4193-460c-a865-bd36881fb066",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-55d910a7-2bde-420e-aaa2-9b1094ceabd6",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-8cb33a22-72ee-4201-9c68-e6da3796c614",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-fdacfb73-68cb-438c-a14e-2fcf01cb50ef",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-a9deaf50-813f-491a-9b27-3679f1cf46a8",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-84b87d2b-969d-4b27-8a3c-36edf4bed1fd",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-f256fa50-b4db-47c4-a746-02bc44071c33",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-2e77efb7-582a-4e43-9b7f-4925fc476137",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-eed62fbd-77c5-45f7-b3ec-115ca1c56180",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-6bcd1f33-b2e1-41ae-84f2-ee069cabf82d",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-36aafef0-6448-4bf2-b20d-fcd46055841a",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-4ffb2f3b-f86c-44df-aac3-7cdc9da35cb5",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-575c4953-4d56-49a4-8761-0f404ddfd077",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-4273f286-358a-4574-8207-7238b6b7ebf3",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-f4bc7846-4839-4703-9c51-b723d2ab3dee",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-e2913bbe-0148-46ad-a2f2-d3559bec4cd4",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-0f7e3e88-bbab-4625-9a7d-cd6db762826e",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-c10cfbcf-1726-4226-82c6-03f086e32a9e",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-997e21d6-651c-46bb-b62b-98108f9bb99a",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-416e99b3-de7c-4d51-ac6e-e657fa3a4ccf",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-b131ab27-4d27-461d-8b09-3df504e33053",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-f65bfa90-e7ef-4b86-b289-70042bd0e298",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-3667bca6-9cc6-4309-b4fc-f29118fa4cc5",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-7924e393-d7ab-4cee-be0f-59ba25ea4d73",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-382fd50d-a9d1-48b6-86d5-c32265596126",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-88a3e99e-c94f-4116-a9eb-c26381545664",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-97c26e0d-bc92-412e-96d8-48c7bd750fad",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-b0bd6b39-79a0-4066-b9e4-43d79252dd9d",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-55a8e93e-abb3-4592-842f-ba8abc3b25d0",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-0efc2c4b-f3a4-4326-a0bd-c433330619a5",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-23ef1bfb-c95a-4409-8bb0-b08f62d7fa10",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-c68e7c71-4e5c-4800-8619-e3f4cba2ae8f",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-d4c95c8e-1570-4cbc-8b74-f7bd7ee624e6",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-7d64a072-147e-4c90-86c4-2cdb13b4f20c",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-3b8f8099-0aa0-49a1-8744-919f6a55b39d",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-9a23605e-5576-4c20-9896-83dd2b73234f",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-8d87dc2f-976f-4bcc-98ca-7a7240d64e30",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-cd851292-9d8b-4fe2-bff6-b46d3e606505",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-f0911e3a-1d76-4bc5-a6f1-50dda72358b7",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-f2454539-ea3e-42e9-b182-5ea97732a2b1",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-059f5b03-9309-434f-902a-ae4adb8e4a20",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-c9bf281e-0679-42a3-8691-16a5b4244d31",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-5e1096f6-61d4-4980-8b97-c357c1439c6e",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-743e041b-9f82-4d3b-bd20-8c8670e1666c",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-44ecb665-bc3b-475c-8ae4-7a27c55a5d84",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-238d2cd4-26ab-439c-9577-07cf8cfb854b",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-43bf643d-36d8-4bd6-852c-062973ff8386",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-44c8f7b5-7bb2-4f31-b8f5-59027b9e22a7",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-86db5d2a-86fe-48d7-80a8-f8331c30abea",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-543928fb-3173-4eb6-843b-0b466df81d0b",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-c920915f-c0c7-42e8-af1b-4dfc85863b25",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-90fe1dbf-51df-4816-ad7f-a4c3bb475274",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-d335f17d-9169-4157-84f2-a046e0cf637f",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-bd28e8e2-6d44-4213-b842-96d1d21603a4",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-17d76df7-8e51-4435-bb81-a2d45d0378de",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-820c968c-d7f2-4eee-afca-5bd908b122f3",
+            "currentStock": 0,
+            "lastUpdated": null
+          },
+          {
+            "itemId": "item-96de8a23-b9e7-4747-a25f-ca142dc4f81b",
+            "currentStock": 0,
+            "lastUpdated": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "reports accept real filtering and pagination",
+      "at": "2026-09-26T18:15:02.757Z",
+      "status": 200,
+      "ok": true,
+      "body": {
+        "total": 78
+      }
+    },
+    {
+      "name": "audit log is readable and paginated",
+      "at": "2026-09-26T18:15:02.805Z",
+      "status": 200,
+      "ok": true,
+      "note": "total=8969",
+      "body": {
+        "total": 8969,
+        "limit": 5,
+        "firstAction": "PERMISSION_CHECK"
+      }
+    },
+    {
+      "name": "the movements are in the audit trail",
+      "at": "2026-09-26T18:15:02.838Z",
+      "status": 200,
+      "ok": true,
+      "note": "transaction audit rows=230",
+      "body": {
+        "total": 230
+      }
+    },
+    {
+      "name": "a full backup is created",
+      "at": "2026-09-26T18:15:03.426Z",
+      "status": 200,
+      "ok": true,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "35c528c1-aba3-432e-ab9e-408c6a4d2823",
+          "fileName": "full_2026-09-26T18-15-03-410Z_35c528c1.ffbkp",
+          "type": "full",
+          "trigger": "manual",
+          "createdAt": "2026-09-26T18:15:03.409Z",
+          "sizeBytes": 909899,
+          "checksumSha256": "4dfeda878ce18c32d5f223b95a59223377ffe6711478efcd85bf498353a23bb7",
+          "integrity": "verified",
+          "passwordProtected": false,
+          "actor": {
+            "type": "user",
+            "mode": "manual",
+            "userId": "dfc7e8c6-c30f-40df-a077-ebfd96278912",
+            "username": "superadmin",
+            "role": "SuperAdmin"
+          },
+          "metadata": {
+            "users": 2,
+            "items": 221,
+            "openingBalances": 2,
+            "transactions": 81,
+            "configFiles": 0
+          },
+          "databaseBytes": 509702,
+          "complete": true,
+          "missingModels": [],
+          "safetySnapshotForId": null,
+          "integrityVerified": true,
+          "integrityLabel": "verified"
+        }
+      }
+    },
+    {
+      "name": "the newest backup is present and integrity-verified",
+      "at": "2026-09-26T18:15:03.449Z",
+      "status": 200,
+      "ok": true,
+      "note": "entries=1, newest integrity=verified, size=909899",
+      "body": {
+        "count": 1,
+        "newest": {
+          "id": "35c528c1-aba3-432e-ab9e-408c6a4d2823",
+          "fileName": "full_2026-09-26T18-15-03-410Z_35c528c1.ffbkp",
+          "type": "full",
+          "trigger": "manual",
+          "createdAt": "2026-09-26T18:15:03.409Z",
+          "sizeBytes": 909899,
+          "checksumSha256": "4dfeda878ce18c32d5f223b95a59223377ffe6711478efcd85bf498353a23bb7",
+          "integrity": "verified",
+          "passwordProtected": false,
+          "actor": {
+            "type": "user",
+            "mode": "manual",
+            "userId": "dfc7e8c6-c30f-40df-a077-ebfd96278912",
+            "username": "superadmin",
+            "role": "SuperAdmin"
+          },
+          "metadata": {
+            "users": 2,
+            "items": 221,
+            "openingBalances": 2,
+            "transactions": 81,
+            "configFiles": 0
+          },
+          "databaseBytes": 509702,
+          "complete": true,
+          "missingModels": [],
+          "safetySnapshotForId": null,
+          "integrityVerified": true,
+          "integrityLabel": "verified"
+        }
+      }
+    },
+    {
+      "name": "restore preview issues a token and takes a safety snapshot",
+      "at": "2026-09-26T18:15:04.052Z",
+      "status": 200,
+      "ok": true,
+      "note": "a restore may not proceed without the one-time token from this preview",
+      "body": {
+        "stage": "preview",
+        "requiresConfirmation": true,
+        "hasRestoreToken": true,
+        "safetySnapshotId": "41ea3257-789f-405a-94d2-a68f94c5cdc8",
+        "target": {
+          "id": "35c528c1-aba3-432e-ab9e-408c6a4d2823",
+          "fileName": "full_2026-09-26T18-15-03-410Z_35c528c1.ffbkp",
+          "type": "full",
+          "trigger": "manual",
+          "createdAt": "2026-09-26T18:15:03.409Z",
+          "sizeBytes": 909899,
+          "checksumSha256": "4dfeda878ce18c32d5f223b95a59223377ffe6711478efcd85bf498353a23bb7",
+          "integrity": "verified",
+          "passwordProtected": false,
+          "actor": {
+            "type": "user",
+            "mode": "manual",
+            "userId": "dfc7e8c6-c30f-40df-a077-ebfd96278912",
+            "username": "superadmin",
+            "role": "SuperAdmin"
+          },
+          "metadata": {
+            "users": 2,
+            "items": 221,
+            "openingBalances": 2,
+            "transactions": 81,
+            "configFiles": 0
+          },
+          "databaseBytes": 509702,
+          "complete": true,
+          "missingModels": [],
+          "safetySnapshotForId": null,
+          "integrityVerified": true,
+          "integrityLabel": "verified"
+        }
+      }
+    },
+    {
+      "name": "a restore without the confirmation token is refused",
+      "at": "2026-09-26T18:15:04.086Z",
+      "status": 400,
+      "ok": true,
+      "note": "confirmRestore alone must never be enough to wipe the database",
+      "body": {
+        "success": false,
+        "message": "Restore confirmation token is invalid",
+        "error": "Restore confirmation token is invalid"
+      }
+    },
+    {
+      "name": "a restore with the wrong PIN is refused",
+      "at": "2026-09-26T18:15:04.116Z",
+      "status": 401,
+      "ok": true,
+      "body": {
+        "success": false,
+        "message": "Invalid restore PIN",
+        "error": "Invalid restore PIN"
+      }
+    },
+    {
+      "name": "restore applies against the live database",
+      "at": "2026-09-26T18:15:07.879Z",
+      "status": 200,
+      "ok": true,
+      "note": "items 221 -> 221",
+      "body": {
+        "success": true,
+        "stage": "applied",
+        "data": {
+          "restoredBackupId": "35c528c1-aba3-432e-ab9e-408c6a4d2823",
+          "safetySnapshotId": "41ea3257-789f-405a-94d2-a68f94c5cdc8",
+          "restoredAt": "2026-09-26T18:15:07.502Z",
+          "restored": {
+            "users": 2,
+            "items": 221,
+            "openingBalances": 2,
+            "transactions": 81,
+            "configFiles": 0
+          }
+        },
+        "counts": {
+          "items": 221,
+          "transactions": 81,
+          "audit_logs": 8971
+        }
+      }
+    },
+    {
+      "name": "logout succeeds",
+      "at": "2026-09-26T18:15:07.924Z",
+      "status": 201,
+      "ok": true,
+      "body": {
+        "success": true,
+        "message": "Logged out successfully"
+      }
+    },
+    {
+      "name": "the session is dead after logout",
+      "at": "2026-09-26T18:15:07.932Z",
+      "status": 401,
+      "ok": true,
+      "body": {
+        "message": "Login required via secure cookie",
+        "error": "Unauthorized",
+        "statusCode": 401
+      }
+    },
+    {
+      "name": "container health at the end of the run",
+      "at": "2026-09-26T18:15:08.259Z",
+      "containers": [
+        "backend|Up 44 seconds (healthy)",
+        "frontend|Up 14 hours",
+        "postgres|Up 14 hours (healthy)"
+      ],
+      "note": "backend|Up 44 seconds (healthy) | frontend|Up 14 hours | postgres|Up 14 hours (healthy)"
+    }
+  ]
+}

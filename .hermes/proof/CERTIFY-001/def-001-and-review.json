@@ -1,0 +1,72 @@
+{
+  "card": "FC-DEF-001 + independent review of CERTIFY-001",
+  "generatedAt": "2026-09-27T00:59:58.031674",
+  "verdict": "DEF-001 accepted against every machine-verifiable criterion. CERTIFY-001 remains self-reviewed, and the residual risk of a self-review is stated below rather than papered over.",
+  "theInnoDesign": {
+    "whyNotJustClamp": "Clamping the balance alone breaks the books: the movement still records 999 while the balance shows 0, so every report that re-derives the balance from the movements disagrees with the item page. A number that looks right and books that do not balance is worse than a negative number.",
+    "invariant": "currentStock === ledgerNet + openDeficit",
+    "consequence": "Incoming stock settles debt before it becomes spendable, so a receipt cannot quietly turn an unfulfilled issue into phantom stock.",
+    "outcomes": [
+      "OPEN",
+      "SETTLED_BY_RECEIPT",
+      "SETTLED_BY_CORRECTION",
+      "WRITTEN_OFF"
+    ]
+  },
+  "verification": {
+    "unit": "14/14, including a deterministic randomised property test over 600 sequences x 25 steps x 3 policies asserting the invariant after every movement",
+    "contract": "11/11",
+    "e2e": "6/6",
+    "adversarialProbes": "11/11 with zero findings (was 10/11 with one finding before the fix)",
+    "ciGates": "10/10, exit 0",
+    "fullRegression": "43/43 E2E across every suite in the repository"
+  },
+  "findingsRaisedByThisReview": [
+    {
+      "id": "REV-1",
+      "severity": "HIGH - fixed",
+      "title": "The deficit queue was reachable by an anonymous caller",
+      "detail": "The new controller was missing @UseGuards(JwtAuthGuard, RbacGuard), so GET /api/stock-deficits answered 200 to an unauthenticated request and disclosed every item name and shortfall. A contract test asserts the guard is present.",
+      "foundBy": "the E2E case that checks the queue is private, which failed with 200 instead of 401"
+    },
+    {
+      "id": "REV-2",
+      "severity": "HIGH - fixed",
+      "title": "A partial settlement rounded a debt to zero",
+      "detail": "The first implementation closed the whole deficit row on a partial payment, so paying 300 of 989 silently erased the remaining 689. The remainder now opens a fresh record and stays visible.",
+      "foundBy": "reading the settle loop rather than the happy path, then driving it with a partial payment"
+    },
+    {
+      "id": "REV-3",
+      "severity": "HIGH - fixed",
+      "title": "A concurrent write conflict was reported as a 500",
+      "detail": "Two over-issues for the same item collide under serialisable isolation. Prisma reports P2034, but the Postgres driver adapter wraps it in a DriverAdapterError, so the existing `error.code === 'P2034'` check never matched and the conflict escaped as a server fault. isWriteConflict now inspects the nested cause, and a surviving conflict becomes a retryable 409.",
+      "foundBy": "an adversarial probe that issued two over-issues at the same instant and looked at the status codes"
+    },
+    {
+      "id": "REV-4",
+      "severity": "MEDIUM - fixed",
+      "title": "Writing a deficit off left the ledger unreconciled",
+      "detail": "Closing a deficit only relabelled the row, which broke currentStock === ledgerNet + openDeficit and turned the reconciliation permanently red. A write-off now also records an auditable correction movement that offsets the phantom demand, without touching the balance column because no goods arrived.",
+      "foundBy": "stock-adjustment.spec.ts failing on consistent === false, then reading the mismatch rows"
+    },
+    {
+      "id": "REV-5",
+      "severity": "MEDIUM - fixed",
+      "title": "The per-item deficit totals ignored the item filter",
+      "detail": "The aggregate for openCount/openQuantity queried every open deficit regardless of the requested item, so one item's page reported another item's debt.",
+      "foundBy": "the E2E case that reads a single item's deficit and got 2667 for an item that owed 989"
+    }
+  ],
+  "method": "Black-box property attacks against the six declared behaviours, deliberately not a re-read of the code: simulated hostile sequences, concurrent requests, and checks that the books reconcile after every state. The build was verified by executing it, not by inspecting it.",
+  "residualRiskOfSelfReview": [
+    "I wrote the design, the tests and this review, so a blind spot in my understanding of the warehouse domain would be invisible in all three. Specifically: whether an over-issue should clamp at all, or whether a pick should be blocked at the point of issue, is a business decision I inferred rather than one I was told.",
+    "The property test explores the arithmetic exhaustively but the sequence generator is mine, so it cannot prove the absence of a state I never imagined.",
+    "No human has read this code. A reviewer with fresh eyes would be the thing most likely to find a requirement I silently reinterpreted.",
+    "Concurrency was probed for two simultaneous issues on one item. Wider contention, and the interaction with the offline replay path, were not probed."
+  ],
+  "notProven": [
+    "The Service Worker's own fetch cannot be cut by setOfflineMode, CDP emulation or request interception, so a genuine mid-request network interruption in the browser is still unproven; the durable queue is proven by offline-queue.spec.ts.",
+    "docker compose build (default target) still fails in this environment because the Puppeteer Chrome download is blocked. All verification used --target production, which is the same application code without the browser tooling."
+  ]
+}

@@ -1,0 +1,88 @@
+{
+  "card": "FC-CERTIFY-001",
+  "part": "adversarial probes: access, drift, privacy",
+  "generatedAt": "2026-09-26T19:12:17.296Z",
+  "caveat": "Self-attack by the same agent that wrote the code. Evidence of probing, NOT independent verification.",
+  "totals": {
+    "probes": 15,
+    "findings": 0
+  },
+  "probes": [
+    {
+      "name": "exposure: /metrics is closed to an anonymous caller",
+      "ok": true,
+      "detail": "status=401"
+    },
+    {
+      "name": "exposure: /metrics rejects a wrong token",
+      "ok": true,
+      "detail": "status=401"
+    },
+    {
+      "name": "access: /api/items refuses an anonymous caller",
+      "ok": true,
+      "detail": "status=401"
+    },
+    {
+      "name": "access: /api/transactions refuses an anonymous caller",
+      "ok": true,
+      "detail": "status=401"
+    },
+    {
+      "name": "access: /api/reports refuses an anonymous caller",
+      "ok": true,
+      "detail": "status=401"
+    },
+    {
+      "name": "access: /api/audit/logs refuses an anonymous caller",
+      "ok": true,
+      "detail": "status=401"
+    },
+    {
+      "name": "access: /api/backup/list refuses an anonymous caller",
+      "ok": true,
+      "detail": "status=401"
+    },
+    {
+      "name": "access: the permission catalog is served to an authenticated admin",
+      "ok": true,
+      "detail": "permissions=57"
+    },
+    {
+      "name": "drift: GET /api/reports accepts pagination",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "name": "drift: GET /api/reports accepts a date filter",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "name": "drift: GET /api/reports rejects non-numeric pagination with 400",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "name": "drift: a well-formed item is accepted",
+      "ok": true,
+      "detail": "status=201"
+    },
+    {
+      "name": "drift: a non-numeric quantity is refused with 400",
+      "ok": true,
+      "detail": "status=400"
+    },
+    {
+      "name": "drift: a Decimal field is serialized as a string, not a JSON number",
+      "ok": true,
+      "detail": "maxLimit=\"999999999.999\""
+    },
+    {
+      "name": "privacy: the audit log redacts credentials",
+      "ok": true,
+      "detail": "no credential markers in the first page"
+    }
+  ],
+  "findings": []
+}

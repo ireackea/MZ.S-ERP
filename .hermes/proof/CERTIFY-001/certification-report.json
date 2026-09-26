@@ -1,0 +1,78 @@
+{
+  "card": "FC-CERTIFY-001",
+  "generatedAt": "2026-09-26T21:47:17.029685",
+  "verdict": "NOT CERTIFIED - all machine-verifiable gates pass, but CERTIFY-001 requires an INDEPENDENT verifier",
+  "blockingReasons": [
+    "Every line of production code, every test, and this self-attack were written by the same agent. Self-certification is not verification.",
+    "The Devil's Advocate run below is self-directed, so it cannot satisfy 'Independent Devil's Advocate run'."
+  ],
+  "gates": {
+    "ciRuntimeGates": {
+      "total": 10,
+      "passed": 10
+    },
+    "qa002HttpSteps": {
+      "total": 30,
+      "failed": 0
+    },
+    "adversarialCore": {
+      "probes": 10,
+      "findings": 1
+    },
+    "adversarialAccess": {
+      "probes": 15,
+      "findings": 0
+    }
+  },
+  "hygiene": {
+    "trackedSecrets": "none (.env.example only; real .env is gitignored)",
+    "trackedGeneratedArtifacts": "none (dist/ and node_modules/ untracked)",
+    "activeLegacyImports": "none (frontend authController.ts deleted, archive dir not imported)",
+    "directStockWrites": "exactly one boundary: transaction.service.ts applyStockDeltas; no raw SQL touches stock"
+  },
+  "findings": [
+    {
+      "id": "CERT-F1",
+      "severity": "HIGH - open question, not fixed",
+      "title": "Stock can go negative through an over-issue",
+      "detail": "A movement of 999 against a balance of 10 is accepted (201) and leaves currentStock = -989.000. The ledger stays arithmetically consistent (10 - 999 = -989), but nothing in the tree refuses a negative balance.",
+      "status": "OPEN - this is a business-policy decision, not a defect I can decide unilaterally. Needs an explicit rule: refuse, or clamp, or require an admin stock adjustment."
+    },
+    {
+      "id": "CERT-F2",
+      "severity": "HIGH - fixed during certification",
+      "title": "The stock-adjustment write path still coerced quantity through Number()",
+      "detail": "DATA-001 converted the ordinary movement path but left POST /transactions/stock-adjustments doing quantity: Number(dto.quantity), and PATCH /transactions/:id computed the stock correction as newDelta - oldDelta in a float.",
+      "fix": "Both now parse through parseDecimal and the update path subtracts two Prisma.Decimal values. Proven: correcting 0.1 to 0.7 leaves exactly 0.700, not 0.5999999999999999.",
+      "status": "FIXED - guarded by data-001-contract and stock-adjustment-contract, and by a new E2E probe."
+    },
+    {
+      "id": "CERT-F3",
+      "severity": "MEDIUM - fixed during QA-001",
+      "title": "The backup restore gate refused every real backup",
+      "detail": "assertManifestIsRestorable threw whenever a dump declared a checksum, which every real full backup does, so every HTTP restore returned 400. OPS-001's E2E missed it because it called pg_restore directly.",
+      "fix": "The gate now refuses only a dump with no checksum; the real verification stays in assertManifestChecksums, which has the payload bytes.",
+      "status": "FIXED - an applied restore against the live database now succeeds."
+    },
+    {
+      "id": "CERT-F4",
+      "severity": "MEDIUM - fixed during QA-001",
+      "title": "BACKUP_RESTORE_PIN was never configured or passed to the container",
+      "detail": "POST /api/backup/restore answered 401 for every caller, so the restore path was unreachable in this deployment.",
+      "fix": "Added to .env (gitignored) and to docker-compose.yml as a required variable.",
+      "status": "FIXED"
+    },
+    {
+      "id": "CERT-F5",
+      "severity": "LOW - fixed during CERTIFY-001",
+      "title": "Two E2E specs asserted Decimals as JavaScript numbers",
+      "detail": "inventory-boundary and stock-adjustment compared currentStock with toBe(0)/toBe(3.5) and posted quantity as a float. After DATA-001 the API returns strings, so these specs were asserting the old contract rather than catching a real regression.",
+      "fix": "Specs now post decimal strings and compare the string form.",
+      "status": "FIXED - but note this is exactly the kind of spec that hides a breaking change instead of reporting it."
+    }
+  ],
+  "notProven": [
+    "The Service Worker's own fetch cannot be cut by setOfflineMode, CDP emulation, or request interception, so a genuine mid-request network interruption in the browser is unproven. The durable queue itself is proven by tests/e2e/offline-queue.spec.ts.",
+    "docker compose build (the default target) still fails in this environment because the Chrome download for Puppeteer is blocked. All verification used --target production, which is the same application code without the browser tooling."
+  ]
+}

@@ -248,7 +248,6 @@ async function run() {
           minLimit: 0,
           maxLimit: 1000,
           orderLimit: 10,
-          currentStock: 20,
         },
       ],
     });
@@ -275,7 +274,7 @@ async function run() {
           timestamp: Date.now(),
         },
       ],
-    });
+    }, { headers: { 'Idempotency-Key': `${testPrefix}-create` } });
 
     const createdRows = parseTransactions(createTxRes.data);
     const createdTxId = createdRows[0]?.id ? String(createdRows[0].id) : '';
@@ -297,7 +296,7 @@ async function run() {
 
     const updateTxRes = await client.patch(`/transactions/${encodeURIComponent(createdTxId)}`, {
       quantity: 15,
-    });
+    }, { headers: { 'Idempotency-Key': `${testPrefix}-update` } });
     pushResult(
       'Update transaction quantity (10 -> 15)',
       updateTxRes.status >= 200 && updateTxRes.status < 300,
@@ -312,7 +311,7 @@ async function run() {
       stockAfterUpdate === null ? 'item missing' : `stock=${stockAfterUpdate}, expected=${baseline + 15}`,
     );
 
-    const deleteTxRes = await client.post('/transactions/delete', { ids: [createdTxId] });
+    const deleteTxRes = await client.post('/transactions/delete', { ids: [createdTxId] }, { headers: { 'Idempotency-Key': `${testPrefix}-delete` } });
     pushResult(
       'Delete transaction',
       deleteTxRes.status >= 200 && deleteTxRes.status < 300 && Number(deleteTxRes.data?.deleted ?? 0) >= 1,
@@ -424,7 +423,7 @@ async function run() {
             notes: tx.notes,
             timestamp: tx.timestamp,
           })),
-        });
+        }, { headers: { 'Idempotency-Key': `${migrationMarker}-create` } });
         const created = parseTransactions(res.data);
         created.forEach((row) => {
           if (row?.id) txIdsToCleanup.push(String(row.id));
@@ -452,7 +451,7 @@ async function run() {
     try {
       const uniqueTxIds = Array.from(new Set(txIdsToCleanup.filter(Boolean)));
       if (uniqueTxIds.length) {
-        await client.post('/transactions/delete', { ids: uniqueTxIds });
+        await client.post('/transactions/delete', { ids: uniqueTxIds }, { headers: { 'Idempotency-Key': `cleanup-${testPrefix}` } });
       }
     } catch (cleanupError) {
       console.error('Transaction cleanup warning:', String(cleanupError?.message || cleanupError));

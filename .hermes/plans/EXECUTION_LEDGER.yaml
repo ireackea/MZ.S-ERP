@@ -1,0 +1,97 @@
+# MZ.S-ERP — سجل التنفيذ الذري (Execution Ledger)
+
+cycle: 1
+mode: autonomous
+phase: phase-1
+last_card_completed: DEF-001
+next_card: none (only REF-001 remains, and it is optional P2)
+blocked: false
+obstacles: []
+spine_order:
+  - FND-001
+  - FND-004
+  - DATA-001
+  - INV-001
+  - API-001
+  - SEC-001
+  - SEC-002
+  - SEC-003
+  - OPS-001
+  - QA-002
+completed: 20
+total_planned: 21
+status_board:
+  FND-001: TESTED
+  FND-004: TESTED
+  DATA-001: TESTED
+  INV-001: TESTED
+  INV-002: TESTED
+  API-001: TESTED
+  SEC-001: TESTED
+  SEC-002: TESTED
+  SEC-003: TESTED
+  FND-002: TESTED
+  DATA-003: TESTED
+  DATA-004: TESTED
+  OPS-001: TESTED
+  QA-002: TESTED
+  QA-001: TESTED
+  AUD-001: TESTED
+  ITEM-001: TESTED
+  DATA-002: TESTED
+  API-002: TESTED
+  REF-001: PLANNED
+  DEF-001: TESTED
+  CERTIFY-001: ACCEPTED
+
+## ملاحظات التنفيذ (audit trail)
+
+- 2026-09-26: امتلأ قرص C مؤقتا أثناء كتابة `backend/src/audit/audit.service.ts` فأتلف الملف
+  (0 بايت). استُعيد من git وأُعيد تطبيق تغييرات FC-AUD-001 كاملة. المساحة المتاحة الآن كافية.
+- 2026-09-26: `docker builder prune` أوقف محرك Docker مؤقتا؛ عاد بعد إعادة تشغيل Docker Desktop،
+  ثم اعتُمدت AUD-001 و ITEM-001 و API-002 على حاويات حيّة.
+- 2026-09-26: `compose` كان يطلب `SYSTEM_RESET_TOKEN` بعد أن أُزيلrequirement في FC-SEC-003،
+  وأُضيف volume مُسمّى `item_uploads` كي لا تُفقد المرفقات عند إعادة البناء (FC-ITEM-001).
+- 2026-09-26: كشف اختبار E2E أن `ReportDto` كان بلا مزخرفات validation، فـ`GET /reports`
+  كان يرجع 400 لأي طلب مُرقّم أو مُفلتر. أُصلح وأُضيف له عقد اختبار.
+- 2026-09-26 (OPS-001): كان `backup.service` يطلب مسار ملف SQLite، وهو ما لا يتحقق أبداً على
+  PostgreSQL، فكان "full backup" لا ينسخ قاعدة البيانات إطلاقاً ويستقر تلقائياً على partial
+  snapshot بـ6 جداول من أصل 22. أُصلح بـ`pg_dump` حقيقي (`postgresql-client-16` من PGDG لأن
+  Debian الافتراضي v15 والخادم v16 و`pg_dump` يرفض الإصدار الأقدم)، مع manifest وchecksum لكل
+  قسم وبوابة اكتمال قبل أي استعادة مدمّرة. أُثبت round-trip حقيقي: seed ← dump ← delete ←
+  restore ← verify = 5/5.
+- 2026-09-26 (DATA-001): البطاقة كانت محرفة فقط: الكود القائم يمر بالفلوات (`Number(...)`، `reduce` جمع، `@Type(() => Number)` في DTO) ولم يُستخدم بالطبقة مطلًا، فصلّاناً انكشافً، ولا يُستخدم المحدّد (`DECIMAL_MAX` كان خياراً لا اختيارًاً، ولم يُستخدم السقف `£1000`، وأخطاء سبعة إعطاء مرتبطة من الأرقام، فصلّاً: الأسراع `0.100` وليس `0.09999999999999998`. أضفيت `backend/src/common/decimal.ts`، `decimal-validation.ts`، استخدامه في `transaction`/`item` (create + update + stocktaking + read). نتائج: unit 28/28، contract 10/10، E2E 5/5، audit 117/117، backend 94/94، frontend 46/46.
+- 2026-09-26 (QA-002): إثبات حية للتشغيل الحقيقي. HTTP 30/30 عبر حقيقيًاً (health/metrics مغلقًاً، login/cookie، حراتم، عناصر مرتبطة 11.250، idempotency replay+409، reports/audit، backup+restore حيً، logout يقطع الجلسة) + إثبات متطبع إصلاح مردود. ثلاثً حقيقيًن: (1) `BACKUP_RESTORE_PIN` كان غير مضبوط ولم يُمرّر للواءدة؛ أضيفته للمعمول وتمته بماءبة. (2) `assertManifestIsRestorable` كان يرفض كل عملية عندما يحتوي checksum — فكان طريق الاستعادة عبر HTTP معوقة محطوًا، ولم يلاحظها SPEC الذي استخدم `pg_restore` مباشرة. أصيحت لها أصلاحاً.
+- 2026-09-26 (QA-001): البوابة كانت متعددة أسبواعاً. كان `npm test` يشغّل frontend فقط، وثمة الوركفلوت انقاكعتًاً على Node 20 ولم تحتوي فيكل البكندج، ولم يُعمّد `prisma:validate`، ولم تشغّل E2E الجديدة التي اقتّبت بالبطاقة. أضفت `ci:verify` و`scripts/ci-runtime-gate.mjs` (10 بوابات، توقف عند أول إخفاق = 1)، وعقدة عقد `qa-001-contract` (8/8) ترفض تسرّب Node وتجاهل `continue-on-error`/`|| true` ونقص بوابة. إثبات حقيقية: 10/10.
+- 2026-09-26 (CERTIFY-001 attempt): all machine-verifiable gates pass, but the card is not complete because it requires an independent verifier.
+  Gates: CI 10/10 (exit 0), QA-002 HTTP 30/30, adversarial probes 24/25, full E2E green.
+  Hygiene: no tracked secrets, no active legacy code, one stock-write boundary, no raw SQL.
+  Findings closed during the attempt: the stock-adjustment and update paths still coerced quantity through Number() (CERT-F2, fixed, proven by a new E2E probe); the manifest restore gate refused every real backup (CERT-F3, fixed in QA-001); BACKUP_RESTORE_PIN was unconfigured (CERT-F4, fixed in QA-001); two E2E specs asserted Decimals as JS numbers (CERT-F5, fixed).
+  Open: CERT-F1 - stock can go negative through an over-issue (10 balance, issue 999 -> -989.000). This is a business-policy decision, not something to be fixed unilaterally.
+  Verdict: self-attack by the same agent that wrote the code does not satisfy the independent-verifier rule.
+  Evidence: .hermes/proof/CERTIFY-001/certification-report.json
+- 2026-09-26 (DEF-001): المخزون السالب منفي أداراً. الحل السابع أن الرديشة من المحروم تصبح سالباً (رصيد 10, إصدار 999 → -989). الحل المقترح: كل رصيد المخزون المثبت عجزًاً مُسجّلاً (لم يُفقطع رصيد الحركات) ولا يُخنى العجز. الثابت: currentStock = ledgerNet + openDeficit. هذه من التق%D0%8Aط المباشر: المجموع لميكن العجز، فكان الرصيد والدفتر يتمسادان ثمراً. الإضافات: المصدر (STRICT يرفض، CLAMP_AND_ALERT الافتراضي، ALLOW للهجوه) عبر STOCK_DEFICIT_POLICY، write-off يحتاج سبً وتطلب سبب الدفتر، queue endpoint محمى بجارحات ومخطط من فصل المراجعة. ثقاارات أثناء دفاء في هذه الجلسة: (1) المراجعة كانت تجاهل لعجز عند عقد العنصر ولم يرفهاً، (2) إغلاق جزئي أزااك التسوية مستحقلة بسبب أستدعاء الرصيد بسببه. الإثبات: unit 14/14 (property test بمتابعة حالة)، contract 11/11، E2E 5/5، هجوم ادبي 11/11، CI 10/10.
+- 2026-09-26 (independent review of DEF-001): self-attack under a stricter bar. Method: black-box property attacks on the
+  six declared behaviours, not a re-read of the code. Result: 5 findings, all fixed and each now guarded by a test -
+  REV-1 the deficit queue answered 200 to an anonymous caller (missing UseGuards); REV-2 a partial settlement rounded the
+  remaining debt to zero; REV-3 a concurrent write conflict escaped as a 500 because the driver adapter wraps P2034;
+  REV-4 a write-off left the ledger unreconciled; REV-5 per-item totals ignored the item filter.
+  Verdict: DEF-001 accepted on every machine-verifiable criterion. CERTIFY-001 stays self-reviewed and BLOCKED, because a
+  self-review cannot show that my reading of the warehouse domain matches the business rule I inferred. The residual risks
+  are enumerated in .hermes/proof/CERTIFY-001/def-001-and-review.json rather than glossed over.
+- 2026-09-26 (CERTIFY-001): ACCEPTED by the repository owner as a recorded risk acceptance, not as an independent
+  verification. Final state at acceptance: CI 10/10, E2E 43/43, audit contracts pass, both typechecks clean, prisma
+  validate ok, compose config ok, no tracked secrets, one stock-write boundary, 11/11 adversarial probes with no
+  findings. The self-review was run under a stricter method than the build (black-box property attacks, not a
+  re-read) and found five real defects the implementation and its tests had all missed.
+  Accepted residual risks: the same agent designed, tested and reviewed, so a shared blind spot would be invisible
+  in all three; whether an over-issue should clamp at all is a business rule inferred rather than stated; wider
+  contention and the offline-replay interaction were not probed.
+  Not fixed and still true: a genuine mid-request network interruption in the browser is unproven (the Service
+  Worker's own fetch cannot be cut from outside its process); `docker compose build` still fails in this environment
+  because the Puppeteer Chrome download is blocked; the API contract is breaking because `quantity` is now a
+  decimal string, which any consumer outside this repository must be checked against before rollout.
+  Decision record: .hermes/proof/CERTIFY-001/acceptance-decision.json
+- 2026-09-26: every P0/P1 card in the plan is now resolved. REF-001 (splitting the large services) is the only
+  remaining item and is optional P2; it is deliberately not started while 194 files of uncommitted work sit in the
+  tree, because a refactor now risks the contracts that were just proven.
