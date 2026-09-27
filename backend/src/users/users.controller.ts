@@ -72,6 +72,12 @@ export class UsersController {
     return this.usersService.updateRolePermissions(id, dto, this.resolveActor(req));
   }
 
+  @Permissions('users.update')
+  @Delete('roles/:id')
+  async deleteRole(@Param('id') id: string, @Req() req: any) {
+    return this.usersService.deleteRole(id, this.resolveActor(req));
+  }
+
   @Permissions('users.view')
   @Sse('stream')
   stream() {

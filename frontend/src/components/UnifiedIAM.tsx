@@ -33,6 +33,7 @@ import {
   bulkAssignRole,
   bulkDeleteUsers,
   updateRolePermissions,
+  deleteRole,
   fetchUserAudit,
   createCustomRole,
   inviteUser,
@@ -48,6 +49,7 @@ import {
   normalizeStatusFilter,
   findLeastPrivilegeRole,
   isFullAccessRoleName,
+  isBuiltInRoleName,
   roleNameOf,
   type CreateUserFormState,
 } from './unified-iam/shared';
@@ -196,6 +198,40 @@ const UnifiedIAM: React.FC = () => {
       void loadRoles();
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, 'فشل إنشاء الدور'));
+    }
+  };
+
+  /**
+   * FC-SEC-008 — roles could be created and edited but never removed, so a
+   * mistyped name stayed in the assignment dropdown for good. Built-in roles
+   * are refused by the API, and a role that still has users is refused with a
+   * message that says to move them first rather than cascading into users that
+   * cannot exist without a role.
+   */
+  const handleDeleteRole = async () => {
+    if (!selectedRoleId) return;
+    const role = roles.find((entry) => entry.id === selectedRoleId);
+    if (!role) return;
+
+    if (isBuiltInRoleName(role.name)) {
+      toast.error('لا يمكن حذف دور مدمج — يمكنك تعديل صلاحياته بدل ذلك');
+      return;
+    }
+    const confirmed = window.confirm(
+      `حذف الدور "${role.name}"؟\n\n`
+      + 'لن ينجح الحذف إن كان مرتبطاً بمستخدمين — انقلهم إلى دور آخر أولاً.',
+    );
+    if (!confirmed) return;
+
+    try {
+      await deleteRole(role.id);
+      toast.success(`تم حذف الدور ${role.name}`);
+      setSelectedRoleId('');
+      setMatrix([]);
+      void loadRoles();
+      void loadUsers(true);
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, 'فشل حذف الدور'));
     }
   };
 
@@ -865,14 +901,23 @@ const UnifiedIAM: React.FC = () => {
                   onChange={(e) => setSelectedRoleId(e.target.value)}
                   className="rounded-xl border border-slate-200 px-4 py-2"
                 >
-                  {roles.map((role) => (
-                    <option key={role.id} value={role.id}>
-                      {role.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  onClick={handleSaveMatrix}
+                    {roles.map((role) => (
+                      <option key={role.id} value={role.id}>
+                        {role.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleDeleteRole}
+                    title="حذف هذا الدور (يتعذّر إن كان مرتبطاً بمستخدمين)"
+                    className="rounded-xl border border-red-300 text-red-600 px-4 py-2 font-bold hover:bg-red-50 transition flex items-center gap-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    حذف الدور
+                  </button>
+                  <button
+                    onClick={handleSaveMatrix}
                   className="rounded-xl bg-emerald-600 text-white px-4 py-2 font-bold hover:bg-emerald-700 transition flex items-center gap-2"
                 >
                   <Save className="w-4 h-4" />

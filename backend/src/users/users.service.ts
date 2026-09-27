@@ -2,6 +2,7 @@
 // ENTERPRISE FIX: Phase 2 - Multi-User Sync - Final Completion Pass - 2026-03-02
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   MessageEvent,
@@ -16,6 +17,7 @@ import { Observable, Subject, map } from 'rxjs';
 import { PrismaService } from '../prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { resolvePermissionGrants } from '../auth/permission-catalog';
+import { DEFAULT_ROLES } from '../auth/role-templates';
 import { isPasswordPolicyCompliant, passwordPolicyMessage } from '../common/password-policy';
 import { AcceptInvitationDto } from './dto/accept-invitation.dto';
 import { BulkAssignRoleDto, BulkDeleteUsersDto } from './dto/bulk-actions.dto';
@@ -184,7 +186,20 @@ export class UsersService {
   // SECURITY FIX: 2026-03-28 - Added permission validation for role management
   async createRole(dto: { name: string; description?: string; color?: string; permissions?: string[] }, actor?: ActorContext) {
     this.assertSuperAdmin(actor);
-    const exists = await this.prisma.role.findUnique({ where: { name: dto.name } });
+
+    // FC-SEC-008 — the name was only checked for uniqueness, so a role could be
+    // created as "" or as an unreadable string and would then sit in the
+    // assignment dropdown forever. Built-in names are reserved so a custom role
+    // cannot shadow one and inherit the template repair.
+    const name = String(dto.name || '').trim();
+    if (name.length < 2 || name.length > 60) {
+      throw new BadRequestException('Role name must be between 2 and 60 characters');
+    }
+    if (DEFAULT_ROLES.some((template) => template.name.toLowerCase() === name.toLowerCase())) {
+      throw new BadRequestException(`"${name}" is a built-in role name and cannot be reused`);
+    }
+
+    const exists = await this.prisma.role.findUnique({ where: { name } });
     if (exists) {
       throw new BadRequestException('Role name already exists');
     }
@@ -199,14 +214,71 @@ export class UsersService {
     }
 
     const role = await this.prisma.role.create({
-      data: {
-        name: dto.name,
-        description: dto.description || '',
-        color: dto.color || '#64748b',
-        permissions: JSON.stringify(requestedPermissions),
-      },
+  data: {
+    name,
+    description: dto.description || '',
+    color: dto.color || '#64748b',
+    permissions: JSON.stringify(requestedPermissions),
+  },
+  });
+  return this.toRoleDto(role);
+}
+
+  /**
+   * FC-SEC-008 — remove a custom role.
+   *
+   * Roles could be created and their permissions edited, but never deleted, and
+   * nothing in the product could remove one. Anything created by mistake, or by
+   * a test run, stayed in the roles table forever and stayed in the role
+   * dropdown: 14 `Phase3RestrictedRole_*` rows had accumulated in the live
+   * database, all with zero users.
+   *
+   * Two guards, both deliberate:
+   * - a built-in role from DEFAULT_ROLES can never be removed, because the
+   *   template repairs it at every boot and a missing one would be silently
+   *   recreated with a different id than the one users reference
+   * - a role that still has users is refused with 409 rather than cascaded. A
+   *   cascade would leave those users with no role at all, and `User.roleId` is
+   *   required, so the account would become unloginable rather than merely
+   *   unassigned. The caller must move the users first.
+   */
+  async deleteRole(roleId: string, actor: ActorContext) {
+    this.assertSuperAdmin(actor);
+
+    const role = await this.prisma.role.findUnique({ where: { id: roleId } });
+    if (!role) {
+      throw new NotFoundException('Role not found');
+    }
+
+    if (DEFAULT_ROLES.some((template) => template.name === role.name)) {
+      throw new ForbiddenException(
+        `"${role.name}" is a built-in role and cannot be deleted. Its permissions can be edited instead.`,
+      );
+    }
+
+    const assigned = await this.prisma.user.count({ where: { roleId } });
+    if (assigned > 0) {
+      throw new ConflictException(
+        `"${role.name}" is still assigned to ${assigned} user(s). Move them to another role first — `
+        + 'a user cannot exist without a role.',
+      );
+    }
+
+    await this.prisma.role.delete({ where: { id: roleId } });
+
+    await this.auditService.log({
+      action: 'ROLE_DELETED',
+      actorId: actor.id,
+      actorUsername: actor.username,
+      actorRole: actor.role,
+      targetResource: `roles/${roleId}`,
+      status: 'success',
+      message: `Deleted custom role ${role.name}`,
+      metadata: { roleName: role.name, permissionCount: this.parsePermissions(role.permissions).length },
     });
-    return this.toRoleDto(role);
+    this.publish('role.deleted', undefined, actor.id);
+
+    return { deleted: true, id: roleId, name: role.name };
   }
 
   async createUser(dto: CreateUserDto, actor: ActorContext) {

@@ -11,6 +11,22 @@ import type { RoleDto, UsersStatusFilter } from '@services/usersService';
  */
 export const FALLBACK_ROLE_NAME = 'Viewer';
 
+/**
+ * FC-SEC-008 — the built-in role names, mirroring `role-templates.ts`. The
+ * backend refuses to delete or shadow these; the UI checks first so the button
+ * explains itself instead of returning a 403.
+ */
+export const BUILT_IN_ROLE_NAMES: readonly string[] = [
+  'SuperAdmin',
+  'Admin',
+  'Manager',
+  'Operator',
+  'Viewer',
+];
+
+export const isBuiltInRoleName = (name: string): boolean =>
+  BUILT_IN_ROLE_NAMES.some((entry) => entry.toLowerCase() === String(name || '').trim().toLowerCase());
+
 /** The role a fresh form should offer as a suggestion — never an auto-selection. */
 export const findLeastPrivilegeRole = (roles: readonly RoleDto[]): RoleDto | undefined => {
   if (!roles.length) return undefined;

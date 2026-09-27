@@ -28,15 +28,36 @@ const request = async (path: string, options: RequestInit = {}) => {
 
 const data = (body: any) => body?.data ?? body;
 
+/**
+ * The auth traffic class is limited to 20 requests per 15 minutes, and this
+ * spec logs in once per role plus once per assertion that needs a live session.
+ * Back off and retry rather than failing for a reason that has nothing to do
+ * with the assertion; this mirrors settings-regression.spec.ts.
+ */
+async function fetchWithRetry(input: string, init: RequestInit, retries = 10, delayMs = 2000): Promise<Response> {
+  let lastResponse: Response | null = null;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const response = await fetch(input, init);
+    lastResponse = response;
+    if (response.status !== 429) return response;
+    if (attempt < retries) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs * (attempt + 1)));
+    }
+  }
+  return lastResponse as Response;
+}
+
 const login = async (username: string, password: string) => {
-  const result = await request('/auth/login', {
+  const response = await fetchWithRetry(`${backendUrl}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password }),
   });
-  expect(result.response.status).toBe(201);
-  const cookie = String(result.response.headers.get('set-cookie') || '').split(';')[0];
+  const text = await response.text();
+  expect(response.status).toBe(201);
+  const cookie = String(response.headers.get('set-cookie') || '').split(';')[0];
   expect(cookie).toContain('feed_factory_jwt=');
+  void text;
   return cookie;
 };
 
@@ -204,5 +225,65 @@ describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
       body: JSON.stringify({ username: `matrix_weak_${suffix}`, password: '12345678', roleName: 'Viewer' }),
     });
     expect(result.response.status).toBe(400);
+  });
+
+  it('FC-SEC-008: a built-in role can never be deleted, and a role with users is refused', async () => {
+    const adminCookie = await login(adminUsername, adminPassword);
+    const roles = await request('/users/roles', { headers: { Cookie: adminCookie } });
+    const list = data(roles.body) as Array<{ id: string; name: string }>;
+
+    // 1) A built-in role is refused. The template repairs it at every boot, so
+    //    removing it would let a re-created role carry a different id than the
+    //    one existing users reference.
+    const viewer = list.find((entry) => entry.name === 'Viewer')!;
+    const builtIn = await request(`/users/roles/${viewer.id}`, {
+      method: 'DELETE',
+      headers: { Cookie: adminCookie },
+    });
+    expect(builtIn.response.status).toBe(403);
+    expect(builtIn.body?.message).toContain('built-in');
+
+    // 2) A custom role that still has users is refused rather than cascaded.
+    //    User.roleId is required, so cascading would leave accounts that cannot
+    //    log in at all.
+    const occupied = await createUserWithPermissions(adminCookie, 'occupied', ['items.view']);
+    const refused = await request(`/users/roles/${occupied.roleId}`, {
+      method: 'DELETE',
+      headers: { Cookie: adminCookie },
+    });
+    expect(refused.response.status).toBe(409);
+    expect(refused.body?.message).toContain('cannot exist without a role');
+
+    // 3) Once the user is moved away the role deletes cleanly.
+    const removedUser = await request(`/users/${occupied.userId}`, {
+      method: 'DELETE',
+      headers: { Cookie: adminCookie },
+    });
+    expect(removedUser.response.status).toBe(200);
+
+    const removed = await request(`/users/roles/${occupied.roleId}`, {
+      method: 'DELETE',
+      headers: { Cookie: adminCookie },
+    });
+    expect(removed.response.status).toBe(200);
+    expect(removed.body?.deleted).toBe(true);
+
+    // 4) And it is really gone from the role list.
+    const after = await request('/users/roles', { headers: { Cookie: adminCookie } });
+    const names = (data(after.body) as Array<{ id: string }>).map((entry) => entry.id);
+    expect(names).not.toContain(occupied.roleId);
+  });
+
+  it('FC-SEC-008: a built-in role name cannot be shadowed by a custom role', async () => {
+    const adminCookie = await login(adminUsername, adminPassword);
+    for (const name of ['Admin', 'admin', 'Viewer']) {
+      const result = await request('/users/roles', {
+        method: 'POST',
+        headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, permissions: ['items.view'] }),
+      });
+      expect(result.response.status).toBe(400);
+      expect(result.body?.message).toContain('built-in role name');
+    }
   });
 });

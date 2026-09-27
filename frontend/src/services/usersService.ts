@@ -231,6 +231,12 @@ export async function updateRolePermissions(
   return roleFromApi(response.data);
 }
 
+/** FC-SEC-008 — refused with 409 while the role still has users. */
+export async function deleteRole(roleId: string): Promise<{ deleted: boolean; id: string; name: string }> {
+  const response = await apiClient.delete(`/users/roles/${encodeURIComponent(roleId)}`);
+  return response.data;
+}
+
 export async function bulkAssignRole(payload: {
   userIds: string[];
   roleId: string;
