@@ -570,6 +570,43 @@ export class UsersService {
     };
   }
 
+  /**
+   * FC-SEC-009 — refuse an action that would leave the system with no usable
+   * SuperAdmin.
+   *
+   * `deleteUser` and `bulkDelete` had no self-protection and no last-admin
+   * guard. A SuperAdmin could delete their own account, and `bulkDelete` could
+   * include the caller's own id, so a single mis-click or a careless selection
+   * could remove every administrator. `ensureDefaultRoles` recreates the *role*
+   * at boot, never the *account*, so nothing brought the access back — and
+   * `POST /auth/setup` only self-disables while some user holds SuperAdmin or
+   * Admin, so a system with neither had no way back in at all.
+   */
+  private async assertNotLastSuperAdmin(userIds: string[], action: string): Promise<void> {
+    const targets = await this.prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, role: { select: { name: true } } },
+    });
+    const removingSuperAdmin = targets.filter(
+      (entry) => entry.role.name.toLowerCase() === 'superadmin',
+    );
+    if (!removingSuperAdmin.length) return;
+
+    const remaining = await this.prisma.user.count({
+      where: {
+        role: { name: { equals: 'SuperAdmin', mode: 'insensitive' } },
+        id: { notIn: removingSuperAdmin.map((entry) => entry.id) },
+        isActive: true,
+      },
+    });
+    if (remaining === 0) {
+      throw new ConflictException(
+        `This ${action} would remove the last active SuperAdmin. `
+        + 'Create or promote another SuperAdmin first — the system cannot be administered without one.',
+      );
+    }
+  }
+
   async updateUser(id: string, dto: UpdateUserDto, actor: ActorContext) {
     const existing = await this.prisma.user.findUnique({
       where: { id },
@@ -587,6 +624,15 @@ export class UsersService {
       this.assertRoleSelection(dto, actor);
       const role = await this.resolveRole(dto.roleId, dto.roleName);
       roleId = role.id;
+    }
+
+    // FC-SEC-009 — demoting or deactivating the last active SuperAdmin locks
+    // everyone out: the role is recreated at boot, not the account, and
+    // /auth/setup self-disables while any Admin or SuperAdmin exists.
+    const losesSuperAdmin = existing.role.name.toLowerCase() === 'superadmin'
+      && ((roleId && roleId !== existing.roleId) || dto.isActive === false);
+    if (losesSuperAdmin) {
+      await this.assertNotLastSuperAdmin([id], 'change');
     }
 
     if (dto.password) {
@@ -653,6 +699,16 @@ export class UsersService {
       throw new ForbiddenException('Only SuperAdmin can delete SuperAdmin account');
     }
 
+    // FC-SEC-009 — refuse to lock the actor out of their own account.
+    if (id === actor.id) {
+      throw new ConflictException(
+        'You cannot delete your own account. Ask another SuperAdmin to do it, '
+        + 'or deactivate it instead so the record and its audit trail survive.',
+      );
+    }
+
+    await this.assertNotLastSuperAdmin([id], 'deletion');
+
     await this.prisma.user.delete({ where: { id } });
 
     await this.writeAudit({
@@ -687,15 +743,22 @@ export class UsersService {
     const targetRole = existing.role.name.toLowerCase();
     const locked = dto.locked !== false;
 
-    if (!locked && actorRole !== 'superadmin') {
-      throw new ForbiddenException('Only SuperAdmin can unlock accounts');
-    }
+    // FC-SEC-009 — unlocking used to require SuperAdmin while locking only
+    // required `users.lock`, so an Admin could lock a colleague and then be
+    // unable to undo it. The two operations are the same authority: whoever may
+    // lock may unlock. Locking a SuperAdmin still requires SuperAdmin.
     if (targetRole === 'superadmin' && actorRole !== 'superadmin') {
-      throw new ForbiddenException('Only SuperAdmin can lock SuperAdmin');
+      throw new ForbiddenException('Only SuperAdmin can lock or unlock a SuperAdmin account');
     }
 
     const durationMinutes = Math.max(1, Number(dto.durationMinutes || 60 * 24));
     const lockoutUntil = locked ? new Date(Date.now() + durationMinutes * 60 * 1000) : null;
+
+    // FC-SEC-009 — locking sets isActive=false, so locking the last active
+    // SuperAdmin is a deactivation and needs the same guard as deleteUser.
+    if (locked) {
+      await this.assertNotLastSuperAdmin([id], 'lock');
+    }
 
     const updated = await this.prisma.user.update({
       where: { id },
@@ -878,6 +941,16 @@ export class UsersService {
     if (actorRole !== 'superadmin' && targetUsers.some((user) => user.role.name.toLowerCase() === 'superadmin')) {
       throw new ForbiddenException('Only SuperAdmin can bulk delete SuperAdmin accounts');
     }
+
+    // FC-SEC-009 — a bulk selection included the caller's own row, so one
+    // mis-click could remove every administrator at once.
+    if (targetUsers.some((user) => user.id === actor.id)) {
+      throw new ConflictException(
+        'The selection includes your own account. Remove it from the selection and try again.',
+      );
+    }
+
+    await this.assertNotLastSuperAdmin(targetUsers.map((user) => user.id), 'deletion');
 
     const result = await this.prisma.user.deleteMany({
       where: { id: { in: targetUsers.map((user) => user.id) } },

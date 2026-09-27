@@ -286,4 +286,81 @@ describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
       expect(result.body?.message).toContain('built-in role name');
     }
   });
+
+  it('FC-SEC-009: an admin may unlock what an admin may lock', async () => {
+    const adminCookie = await login(adminUsername, adminPassword);
+    const roles = data(await request('/users/roles', { headers: { Cookie: adminCookie } }).then((r) => r.body));
+    const adminRole = (roles as Array<{ id: string; name: string }>).find((r) => r.name === 'Admin')!;
+
+    const suffix = randomUUID().slice(0, 8);
+    const manager = await request('/users', {
+      method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: `matrix_lockmgr_${suffix}`, password: PASSWORD, roleId: adminRole.id }),
+    });
+    expect(manager.response.status).toBe(201);
+    const managerId = String(data(manager.body).id);
+    createdUserIds.push(managerId);
+
+    const victim = await request('/users', {
+      method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: `matrix_lockvic_${suffix}`, password: PASSWORD, roleName: 'Viewer' }),
+    });
+    expect(victim.response.status).toBe(201);
+    const victimId = String(data(victim.body).id);
+    createdUserIds.push(victimId);
+
+    const managerCookie = await login(`matrix_lockmgr_${suffix}`, PASSWORD);
+
+    // Locking needs only `users.lock`...
+    const locked = await request(`/users/${victimId}/lock`, {
+      method: 'POST',
+      headers: { Cookie: managerCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ locked: true, durationMinutes: 60 }),
+    });
+    expect(locked.response.status).toBe(201);
+
+    // ...so unlocking must not require strictly more. It used to require
+    // SuperAdmin, which left an Admin able to lock a colleague and unable to
+    // undo it.
+    const unlocked = await request(`/users/${victimId}/lock`, {
+      method: 'POST',
+      headers: { Cookie: managerCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ locked: false }),
+    });
+    expect(unlocked.response.status).toBe(201);
+    expect(data(unlocked.body).isActive).toBe(true);
+  });
+
+  it('FC-SEC-009: an admin may not delete their own account, by either route', async () => {
+    const adminCookie = await login(adminUsername, adminPassword);
+    const all = data(await request('/users?limit=200', { headers: { Cookie: adminCookie } }).then((r) => r.body));
+    const list = all as Array<{ id: string; username: string; role: { name: string } }>;
+    const me = list.find((entry) => entry.username === adminUsername);
+    expect(me, 'the e2e admin must be in the user list').toBeTruthy();
+
+    // Both routes mutate nothing, so they are safe to assert against a live
+    // database. The destructive "last SuperAdmin" path is covered by the
+    // contract test below instead: locking a real administrator to reach that
+    // state would take the system down mid-suite.
+    const single = await request(`/users/${me!.id}`, {
+      method: 'DELETE',
+      headers: { Cookie: adminCookie },
+    });
+    expect(single.response.status).toBe(409);
+    expect(single.body?.message).toContain('your own account');
+
+    const bulk = await request('/users/bulk/delete', {
+      method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userIds: [me!.id] }),
+    });
+    expect(bulk.response.status).toBe(409);
+    expect(bulk.body?.message).toContain('your own account');
+
+    // The account is still there and still usable.
+    const still = await request('/users/permissions/me', { headers: { Cookie: adminCookie } });
+    expect(still.response.status).toBe(200);
+  });
 });
