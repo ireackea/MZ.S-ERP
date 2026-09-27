@@ -42,6 +42,25 @@ export class AuditController {
   }
 
   @Permissions('users.audit')
+  /**
+   * Gate 3.2 - the filter options themselves.
+   *
+   * The audit screen built its action and entity dropdowns from the rows it
+   * happened to have in memory, so an action that exists in the database but not
+   * in the newest page could not be selected at all: the option was simply
+   * missing, and there was no way to search for it. That is the same failure as
+   * an incomplete filter, arrived at from the other direction.
+   *
+   * Distinct values rather than counts, and cheap: DISTINCT on indexed columns,
+   * capped so a table with thousands of entity ids cannot produce a dropdown
+   * nobody can use.
+   */
+  @Permissions('users.audit')
+  @Get('logs/facets')
+  async getFacets() {
+    return this.auditService.queryFacets();
+  }
+
   @Get('logs/export')
   @Header('Cache-Control', 'no-store')
   async exportLogs(

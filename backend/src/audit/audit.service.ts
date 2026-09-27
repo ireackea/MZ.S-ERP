@@ -320,6 +320,36 @@ export class AuditService {
    * FC-AUD-001 — paginated audit search. Returns rows plus a total so the UI can
    * page without re-querying, and clamps `limit` to keep the endpoint bounded.
    */
+  /**
+   * Gate 3.2 - the distinct actions and entity types that exist, so the audit
+   * screen can offer them as filters.
+   *
+   * Both columns are indexed. `entityId` is deliberately not offered: it is
+   * effectively unique per row, and a dropdown of forty thousand identifiers is
+   * not a filter, it is a wall.
+   */
+  async queryFacets(): Promise<{ actions: string[]; entityTypes: string[] }> {
+    const [actions, entityTypes] = await Promise.all([
+      this.prisma.auditLog.findMany({
+        distinct: ['action'],
+        select: { action: true },
+        orderBy: { action: 'asc' },
+        take: 200,
+      }),
+      this.prisma.auditLog.findMany({
+        distinct: ['entityType'],
+        select: { entityType: true },
+        orderBy: { entityType: 'asc' },
+        take: 200,
+      }),
+    ]);
+
+    return {
+      actions: actions.map((row) => row.action).filter(Boolean),
+      entityTypes: entityTypes.map((row) => row.entityType).filter(Boolean),
+    };
+  }
+
   async queryLogs(params?: AuditQuery): Promise<{ rows: AuditLogEntry[]; total: number; limit: number; offset: number }> {
     const prisma = this.getPrisma();
     const limit = Math.max(1, Math.min(1000, Number(params?.limit ?? 500)));

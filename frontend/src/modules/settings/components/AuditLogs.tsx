@@ -10,6 +10,20 @@ import apiClient from '@api/client';
 import { toast } from '@services/toastService';
 import { formatDateTime } from '@services/dateFormat';
 
+/**
+ * Gate 3.1 - this type did not describe the payload, and the component then
+ * rendered against fields the server never sends.
+ *
+ * The server returns `{ rows, total, limit, offset }`, and the fetch did
+ * `Array.isArray(response.data) ? response.data : []` — always false, so the table
+ * was permanently empty with no error. An auditor inspecting a security trail was
+ * shown a blank screen, indistinguishable from "nothing happened".
+ *
+ * `details` was the field the UI read and `message` is the field the server sends
+ * (the Prisma field `details` is mapped to the column `message`), so the details
+ * column was always '-'. `status` is lower-cased by the server, and the comparison
+ * was against 'SUCCESS', so every row was painted as a failure.
+ */
 interface AuditLogEntry {
   id: string;
   timestamp: string;
@@ -18,12 +32,54 @@ interface AuditLogEntry {
   entityId: string;
   actorUsername: string;
   actorRole: string;
-  status: string;
-  details?: string;
+  /** 'success' | 'failed' — lower case, as the server emits it. */
+  status: 'success' | 'failed';
+  targetUserId?: string | null;
+  targetResource?: string | null;
+  /** The human-readable line. The Prisma field is `details`; the column is `message`. */
+  message: string;
+  ipAddress?: string | null;
+  metadata?: unknown;
+}
+
+interface AuditLogsPage {
+  rows: AuditLogEntry[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 interface AuditLogsProps {
 }
+
+/**
+ * One definition of what an action badge looks like.
+ *
+ * The real ids are namespaced — ITEM_CREATE, REFERENCE_DATA_UPDATE,
+ * LOGIN_FAILED, UNLOADING_RULE_UPDATE, SYSTEM_RESET_SUCCESS. Equality against
+ * 'CREATE' matched none of them, so every badge fell through to neutral grey and a
+ * destructive action was indistinguishable from a read.
+ *
+ * Order matters: the failure verbs are tested before the write verbs, because
+ * LOGIN_FAILED also ends in 'FAILED' and SYSTEM_RESET_FAILURE in 'FAILURE' and
+ * both must not be mistaken for an ordinary update.
+ */
+const actionTone = (action: string): string => {
+  const id = String(action || '').toUpperCase();
+  if (id.includes('DELETE') || id.includes('RESET_FAILURE') || id.includes('DENIED') || id.includes('INVALID')) {
+    return 'bg-red-100 text-red-700';
+  }
+  if (id.includes('LOGIN_FAILED') || id.includes('LOCKED') || id.includes('REJECTED') || id.includes('EXPIRED')) {
+    return 'bg-amber-100 text-amber-700';
+  }
+  if (id.endsWith('CREATE') || id.includes('CREATE')) return 'bg-emerald-100 text-emerald-700';
+  if (id.includes('UPDATE') || id.includes('SET') || id.includes('CHANGE')) return 'bg-blue-100 text-blue-700';
+  if (id.includes('ARCHIVE') || id.includes('RESTORE')) return 'bg-amber-100 text-amber-700';
+  return 'bg-slate-100 text-slate-700';
+};
+
+/** The endpoint clamps to 1000; 50 keeps a page readable and the count cheap. */
+const PAGE_SIZE = 50;
 
 const AuditLogs: React.FC<AuditLogsProps> = ({ }) => {
   const { hasPermission } = usePermissions();
@@ -32,12 +88,21 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ }) => {
   const [error, setError] = useState<string | null>(null);
   const [filterAction, setFilterAction] = useState<string>('all');
   const [filterEntity, setFilterEntity] = useState<string>('all');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [facets, setFacets] = useState<{ actions: string[]; entityTypes: string[] }>({
+    actions: [],
+    entityTypes: [],
+  });
   const [dateRangeStart, setDateRangeStart] = useState<string>('');
   const [dateRangeEnd, setDateRangeEnd] = useState<string>('');
   const [isExporting, setIsExporting] = useState(false);
   const logsRef = useRef<AuditLogEntry[]>([]);
   const lastLoadedAtRef = useRef(0);
   const loadInFlightRef = useRef<Promise<void> | null>(null);
+  const facetsLoadedRef = useRef(false);
 
   const loadAuditLogs = useCallback(async (options?: { force?: boolean; background?: boolean }) => {
     const now = Date.now();
@@ -52,11 +117,55 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ }) => {
     loadInFlightRef.current = (async () => {
       try {
         if (!options?.background) setLoading(true);
+
+        // Gate 3.2 - the filters go to the server, not into a client-side
+        // `.filter` over whatever page happened to be in memory. The endpoint
+        // supports action, entityType, from, to, status, search, actorId,
+        // entityId and offset; none of them were sent, so an auditor filtering
+        // for last quarter's LOGIN_FAILED events was shown an incomplete answer
+        // and would have concluded there were none.
         const response = await apiClient.get('/audit/logs', {
-          params: { limit: 500 }
+          params: {
+            limit: PAGE_SIZE,
+            offset: (page - 1) * PAGE_SIZE,
+            ...(filterAction !== 'all' ? { action: filterAction } : {}),
+            ...(filterEntity !== 'all' ? { entityType: filterEntity } : {}),
+            ...(filterStatus !== 'all' ? { status: filterStatus } : {}),
+            ...(dateRangeStart ? { from: new Date(dateRangeStart).toISOString() } : {}),
+            ...(dateRangeEnd
+              ? { to: new Date(`${dateRangeEnd}T23:59:59.999`).toISOString() }
+              : {}),
+            ...(searchTerm.trim() ? { search: searchTerm.trim() } : {}),
+          },
         });
-        setLogs(Array.isArray(response.data) ? response.data : []);
+
+        const payload = (response.data ?? {}) as Partial<AuditLogsPage>;
+        const rows = Array.isArray(payload.rows) ? payload.rows : [];
+        setLogs(rows);
+        setTotal(Number(payload.total ?? rows.length));
         setError(null);
+
+        // The dropdown options come from the database, not from this page. Built
+        // from the page they could only ever offer actions that happen to appear
+        // in the newest 50 rows, so the most useful filter — the rare one — was
+        // the one you could not select.
+        if (!facetsLoadedRef.current) {
+          facetsLoadedRef.current = true;
+          void apiClient
+            .get('/audit/logs/facets')
+            .then((facetResponse) => {
+              setFacets({
+                actions: Array.isArray(facetResponse.data?.actions) ? facetResponse.data.actions : [],
+                entityTypes: Array.isArray(facetResponse.data?.entityTypes)
+                  ? facetResponse.data.entityTypes
+                  : [],
+              });
+            })
+            .catch(() => {
+              // A missing dropdown is a smaller problem than an empty table, and
+              // the page above still works.
+            });
+        }
         lastLoadedAtRef.current = Date.now();
       } catch (error: any) {
         console.error('Failed to load audit logs:', error);
@@ -73,6 +182,28 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ }) => {
   useEffect(() => {
     void loadAuditLogs({ force: true });
   }, [loadAuditLogs]);
+
+  // Every filter change is a new query. Without this the server-side filtering is
+  // applied to the first page only and the controls appear to do nothing until a
+  // manual refresh.
+  useEffect(() => {
+    void loadAuditLogs({ force: true });
+  }, [
+    page,
+    filterAction,
+    filterEntity,
+    filterStatus,
+    dateRangeStart,
+    dateRangeEnd,
+    searchTerm,
+  ]);
+
+  // Changing a filter while on page 4 would ask the server for the fourth page of a
+  // query that may have three, and show an empty table as the answer.
+  const applyFilter = (setter: (value: string) => void) => (value: string) => {
+    setPage(1);
+    setter(value);
+  };
 
   // Phase 6: Real-time Sync for Audit Logs
   useEffect(() => {
@@ -92,15 +223,20 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ }) => {
   const exportToCSV = async () => {
     try {
       setIsExporting(true);
-      const headers = ['التوقيت', 'المستخدم', 'الإجراء', 'الكيان', 'المعرف', 'الحالة', 'التفاصيل'];
+      const headers = ['التوقيت', 'المستخدم', 'الدور', 'الإجراء', 'الكيان', 'المعرف', 'الحالة', 'المستخدم المستهدف', 'التفاصيل'];
       const rows = filteredLogs.map(log => [
         formatDateTime(log.timestamp),
         log.actorUsername,
+        log.actorRole,
         log.action,
         log.entityType,
         log.entityId,
         log.status,
-        log.details ? JSON.parse(log.details).message || log.details : '-',
+        log.targetUserId || '-',
+        // `message` is already the human-readable line. It used to be
+        // `JSON.parse(log.details).message`, which throws during render for any
+        // non-JSON value, and the field was never present anyway.
+        log.message || '-',
       ]);
 
       const csvContent = [
@@ -131,27 +267,19 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ }) => {
     );
   }
 
-  const filteredLogs = logs.filter(log => {
-    if (filterAction !== 'all' && log.action !== filterAction) return false;
-    if (filterEntity !== 'all' && log.entityType !== filterEntity) return false;
-    
-    // Phase 6: Date Range Filter
-    if (dateRangeStart) {
-      const logDate = new Date(log.timestamp).getTime();
-      const startDate = new Date(dateRangeStart).getTime();
-      if (logDate < startDate) return false;
-    }
-    if (dateRangeEnd) {
-      const logDate = new Date(log.timestamp).getTime();
-      const endDate = new Date(dateRangeEnd).setHours(23, 59, 59, 999);
-      if (logDate > endDate) return false;
-    }
-    
-    return true;
-  });
+  // The rows are already what the query asked for. Filtering them again here was
+  // harmless before because nothing was sent; now it would be a second, subtly
+  // different definition of the same query, which is the arrangement that produced
+  // the wrong answers in the first place.
+  const filteredLogs = logs;
 
-  const uniqueActions = Array.from(new Set(logs.map(l => l.action)));
-  const uniqueEntities = Array.from(new Set(logs.map(l => l.entityType)));
+  // The filter options come from the server rather than from the rows on screen.
+  // Deriving them from the page meant an action that exists in the database but not
+  // in the newest 500 rows could not be selected at all — the option was simply
+  // missing, so there was no way to search for it.
+  const uniqueActions = facets.actions;
+  const uniqueEntities = facets.entityTypes;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -189,7 +317,7 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ }) => {
         </div>
         <select
           value={filterAction}
-          onChange={(e) => setFilterAction(e.target.value)}
+          onChange={(e) => applyFilter(setFilterAction)(e.target.value)}
           className="rounded-lg border border-slate-300 px-3 py-1 text-sm"
         >
           <option value="all">كل الإجراءات</option>
@@ -199,7 +327,7 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ }) => {
         </select>
         <select
           value={filterEntity}
-          onChange={(e) => setFilterEntity(e.target.value)}
+          onChange={(e) => applyFilter(setFilterEntity)(e.target.value)}
           className="rounded-lg border border-slate-300 px-3 py-1 text-sm"
         >
           <option value="all">كل الكيانات</option>
@@ -214,18 +342,42 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ }) => {
           <input
             type="date"
             value={dateRangeStart}
-            onChange={(e) => setDateRangeStart(e.target.value)}
+            onChange={(e) => applyFilter(setDateRangeStart)(e.target.value)}
             className="rounded-lg border border-slate-300 px-2 py-1 text-sm"
-            placeholder="من"
+            aria-label="من تاريخ"
           />
           <span className="text-slate-500">إلى</span>
           <input
             type="date"
             value={dateRangeEnd}
-            onChange={(e) => setDateRangeEnd(e.target.value)}
+            onChange={(e) => applyFilter(setDateRangeEnd)(e.target.value)}
             className="rounded-lg border border-slate-300 px-2 py-1 text-sm"
-            placeholder="إلى"
+            aria-label="إلى تاريخ"
           />
+          <label className="flex items-center gap-2 text-xs text-slate-600">
+            <span className="sr-only">بحث في السجل</span>
+            <input
+              type="search"
+              value={searchTerm}
+              onChange={(e) => { setPage(1); setSearchTerm(e.target.value); }}
+              placeholder="ابحث في السجل"
+              className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs"
+            />
+          </label>
+
+          <label className="flex items-center gap-2 text-xs text-slate-600">
+            <span>الحالة</span>
+            <select
+              value={filterStatus}
+              onChange={(e) => applyFilter(setFilterStatus)(e.target.value)}
+              className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
+            >
+              <option value="all">الكل</option>
+              <option value="success">ناجحة</option>
+              <option value="failed">فاشلة</option>
+            </select>
+          </label>
+
           {(dateRangeStart || dateRangeEnd) && (
             <button
               onClick={() => { setDateRangeStart(''); setDateRangeEnd(''); }}
@@ -237,9 +389,40 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ }) => {
         </div>
         
         <span className="ml-auto text-sm text-slate-600">
-          عرض {filteredLogs.length} من {logs.length} سجل
+          {/* The total is the server's, not the page length. It used to read
+              "X of 50", where 50 was the page size — so the number an auditor took
+              for the size of the trail was the size of the window they were
+              looking through. */}
+          عرض {filteredLogs.length} من {total} سجل
         </span>
       </div>
+
+      {/* Gate 3.2 - the trail used to be a fixed 500-row window with no way past
+          it, so anything older than the newest few hundred events was unreachable
+          through the screen at all. */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-4 py-3">
+          <button
+            type="button"
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
+            disabled={page <= 1 || loading}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-bold disabled:opacity-50"
+          >
+            السابق
+          </button>
+          <span className="text-xs text-slate-600">
+            صفحة {page} من {totalPages}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+            disabled={page >= totalPages || loading}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-bold disabled:opacity-50"
+          >
+            التالي
+          </button>
+        </div>
+      )}
 
       <div className="overflow-x-auto max-h-[600px] custom-scrollbar">
         <table className="w-full text-right text-xs">
@@ -280,22 +463,29 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ }) => {
                   </td>
                   <td className="p-4">
                     <span className={`inline-block px-2 py-1 rounded text-xs font-bold ${
-                      log.action === 'CREATE' ? 'bg-emerald-100 text-emerald-700' :
-                      log.action === 'UPDATE' ? 'bg-blue-100 text-blue-700' :
-                      log.action === 'DELETE' ? 'bg-red-100 text-red-700' :
-                      log.action === 'ARCHIVE' ? 'bg-amber-100 text-amber-700' :
-                      'bg-slate-100 text-slate-700'
+                      // The vocabulary is ITEM_CREATE, REFERENCE_DATA_UPDATE,
+                      // LOGIN_FAILED, UNLOADING_RULE_UPDATE… Comparing for equality
+                      // against 'CREATE' never matched, so every badge rendered grey
+                      // and a destructive action looked like a read. Matching the
+                      // suffix is what the ids actually look like — with the failure
+                      // actions checked first, since LOGIN_FAILED also ends in nothing
+                      // that reads as "create" but must not be painted as a write.
+                      actionTone(log.action)
                     }`}>
                       {log.action}
                     </span>
                   </td>
                   <td className="p-4 text-slate-600">{log.entityType}</td>
-                  <td className="p-4 text-slate-600 max-w-xs truncate" title={log.details}>
-                    {log.details ? JSON.parse(log.details).message || log.details : '-'}
+                  <td className="p-4 text-slate-600 max-w-xs truncate" title={log.message}>
+                    {log.message || '-'}
                   </td>
                   <td className="p-4 text-center">
+                    {/* The server lower-cases this. The comparison was against
+                        'SUCCESS', so every row was painted as a failure — which
+                        makes a successful action indistinguishable from a
+                        suspicious one, the one distinction this table exists for. */}
                     <span className={`inline-block px-2 py-1 rounded text-xs font-bold ${
-                      log.status === 'SUCCESS' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+                      log.status === 'success' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
                     }`}>
                       {log.status}
                     </span>
