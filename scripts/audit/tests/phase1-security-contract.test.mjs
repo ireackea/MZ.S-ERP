@@ -14,12 +14,30 @@ test('RBAC denies protected routes without authorization metadata', () => {
   assert.doesNotMatch(guard, /if \(!requiredPermissions\.length && !requiredRoles\.length\) return true/);
 });
 
-test('role management is SuperAdmin-only at the service boundary', () => {
+test('FC-SEC-013 — role definition is SuperAdmin-only, role assignment is permission-gated', () => {
   const service = read('backend/src/users/users.service.ts');
+
+  // Editing what a role can do is role management and stays SuperAdmin-only.
   assert.match(service, /private assertSuperAdmin/);
-  assert.match(service, /private assertRoleSelection/);
-  assert.match(service, /this\.assertSuperAdmin\(actor\)/);
-  assert.match(service, /this\.assertRoleSelection\(dto, actor\)/);
+  for (const method of ['async createRole', 'async updateRolePermissions', 'async deleteRole']) {
+    const start = service.indexOf(method);
+    assert.notEqual(start, -1, `${method} must exist`);
+    const body = service.slice(start, service.indexOf('\n  async ', start + 10) || undefined);
+    assert.match(body, /this\.assertSuperAdmin\(actor\)/, `${method} must stay SuperAdmin-only`);
+  }
+
+  // Assigning a role to a user is user management, gated by users.create /
+  // users.update, with the two rules that actually protect the system in place
+  // of the blanket SuperAdmin requirement that made an Admin's grant inert.
+  assert.match(service, /private async assertRoleSelection/);
+  assert.match(service, /You cannot change your own role\./);
+  assert.match(service, /Only SuperAdmin can grant the SuperAdmin role\./);
+  assert.match(service, /await this\.assertRoleSelection\(dto, actor, id\)/);
+  assert.doesNotMatch(
+    service,
+    /assertRoleSelection\([\s\S]{0,200}this\.assertSuperAdmin\(actor\)/,
+    'role selection must not fall back to the blanket SuperAdmin check',
+  );
 });
 
 test('transaction mutations require request idempotency', () => {

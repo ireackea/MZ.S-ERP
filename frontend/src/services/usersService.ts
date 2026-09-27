@@ -11,8 +11,13 @@ export interface RoleDto {
   name: string;
   description?: string | null;
   color: string;
-  permissions: string;
-  permissionsList: string[];
+  /**
+   * FC-SEC-014 — the role's grants, always an array. The API used to send the raw
+   * JSON column as `permissions` (a string) alongside `permissionsList`, so a
+   * consumer that picked the obvious field got text where the rest of the system
+   * speaks arrays. One field, one shape.
+   */
+  permissions: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -72,10 +77,13 @@ const roleFromApi = (row: any): RoleDto => ({
   name: String(row?.name || ''),
   description: row?.description ?? null,
   color: String(row?.color || '#6b7280'),
-  permissions: String(row?.permissions || '[]'),
-  permissionsList: Array.isArray(row?.permissionsList)
-    ? row.permissionsList.filter((entry: unknown): entry is string => typeof entry === 'string')
-    : [],
+  // Accept the retired name so an older backend does not silently yield an empty
+  // matrix, but never keep both fields in the type.
+  permissions: Array.isArray(row?.permissions)
+    ? row.permissions.filter((entry: unknown): entry is string => typeof entry === 'string')
+    : Array.isArray(row?.permissionsList)
+      ? row.permissionsList.filter((entry: unknown): entry is string => typeof entry === 'string')
+      : [],
   createdAt: String(row?.createdAt || ''),
   updatedAt: String(row?.updatedAt || ''),
 });

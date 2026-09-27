@@ -9,7 +9,11 @@ export type OrderType = 'purchase' | 'sale';
 export type OrderStatus = 'pending' | 'completed' | 'cancelled';
 
 export type UserRole = string;
-export type UserStatus = 'active' | 'suspended' | 'locked';
+// FC-SEC-012 — `suspended` was the fourth word this state collected. The server
+// distinguishes a security lock from a deactivation, so the client does too:
+// `locked` is a security state, `inactive` is a switched-off account.
+// `suspended` is kept so existing rows that carry it still parse.
+export type UserStatus = 'active' | 'inactive' | 'locked' | 'suspended';
 export type DataScope = 'all' | 'warehouse_a' | 'warehouse_b' | string;
 
 export type ItemSortMode =

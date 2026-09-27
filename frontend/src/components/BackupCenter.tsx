@@ -6,6 +6,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { formatDateTime } from '@services/dateFormat';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -52,18 +53,19 @@ const formatBytes = (bytes: number) => {
   return `${value.toFixed(value >= 100 ? 0 : value >= 10 ? 1 : 2)} ${units[index]}`;
 };
 
-const formatDateTime = (value?: string | null) => {
-  if (!value) return 'غير متوفر';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return 'غير متوفر';
-  return parsed.toLocaleString('ar-EG', {
+/**
+ * FC-SEC-014 — the narrow two-digit shape this screen wants, with the locale
+ * coming from the shared formatter instead of a literal in this file.
+ */
+const formatBackupDateTime = (value?: string | null) => (
+  value ? formatDateTime(value, {
     year: '2-digit',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-  });
-};
+  }) : 'غير متوفر'
+);
 
 const triggerLabel = (trigger: 'manual' | 'scheduled') => (trigger === 'scheduled' ? 'مجدول' : 'يدوي');
 
@@ -381,7 +383,7 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
 
           <div className="xl:col-span-2 space-y-2">
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm">
-              <div className="font-bold text-slate-800">آخر نسخة احتياطية: {formatDateTime(latestBackup?.createdAt || storage?.latestBackup?.createdAt || null)}</div>
+              <div className="font-bold text-slate-800">آخر نسخة احتياطية: {formatBackupDateTime(latestBackup?.createdAt || storage?.latestBackup?.createdAt || null)}</div>
               <div className="text-slate-600 mt-1">الحجم: {formatBytes(latestBackup?.sizeBytes || storage?.latestBackup?.sizeBytes || 0)}</div>
               <div className="mt-1 flex items-center gap-2">
                 {(latestBackup?.integrity || storage?.latestBackup?.integrity) === 'verified' ? (
@@ -394,7 +396,7 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
 
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm">
               <div className="font-bold text-slate-800 inline-flex items-center gap-1"><Clock3 size={14} />موعد التشغيل القادم</div>
-              <div className="text-slate-600 mt-1">{formatDateTime(storage?.schedule?.nextRunAt || null)}</div>
+              <div className="text-slate-600 mt-1">{formatBackupDateTime(storage?.schedule?.nextRunAt || null)}</div>
               <div className="text-slate-600 mt-1">استخدام المساحة الحالية: {Number(storage?.usagePercent || 0).toFixed(1)}%</div>
               <div className="text-slate-600 mt-1">التكرار الحالي: {frequencyLabel(scheduleFrequency)}</div>
             </div>
@@ -606,7 +608,7 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
               <tbody>
                 {filteredHistory.map((entry) => (
                   <tr key={entry.id} className="border-b border-slate-100">
-                    <td className="py-2">{formatDateTime(entry.createdAt)}</td>
+                    <td className="py-2">{formatBackupDateTime(entry.createdAt)}</td>
                     <td className="py-2 font-semibold text-slate-700">{typeLabel(entry.type)}</td>
                     <td className="py-2">{formatBytes(entry.sizeBytes)}</td>
                     <td className="py-2">
@@ -657,7 +659,7 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
 
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
               <p>النسخة المستهدفة: <strong>{typeLabel(restoreTarget.type)}</strong></p>
-              <p>تاريخ النسخة: <strong>{formatDateTime(restoreTarget.createdAt)}</strong></p>
+              <p>تاريخ النسخة: <strong>{formatBackupDateTime(restoreTarget.createdAt)}</strong></p>
               <p>لقطة الأمان المسبقة: <strong>{safetySnapshotId || 'لم يتم الإنشاء بعد'}</strong></p>
             </div>
 

@@ -23,6 +23,7 @@ import { differenceInHours } from 'date-fns';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useInventoryStore } from '../store/useInventoryStore';
 import { useInventoryCalculations } from '@hooks/useInventoryCalculations';
+import { formatDate } from '@services/dateFormat';
 
 interface StockBalancesProps {
   settings: SystemSettings;
@@ -456,7 +457,7 @@ const StockBalances: React.FC<StockBalancesProps> = ({ settings, transactions })
           </div>
           <div className="meta">
             <span>السنة المالية: {financialYear}</span>
-            <span>تاريخ الطباعة: {new Date().toLocaleDateString('ar-EG')}</span>
+            <span>تاريخ الطباعة: {formatDate(new Date())}</span>
           </div>
           {filteredCategories.map((category) => {
             const categoryItems = items.filter((item) => {

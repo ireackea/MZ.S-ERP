@@ -2,7 +2,7 @@
 // ENTERPRISE FIX: Phase 0.2 – Full Runtime Docker Proof - 2026-03-13
 // ENTERPRISE FIX: Phase 6.3 - Final Surgical Fix & Complete Compliance - 2026-03-13
 // Audit Logs moved to Prisma | JWT Cookie-only | Lazy Loading | No JSON fallback
-import { Body, Controller, Get, Post, Req, Res, UseGuards, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, Post, Req, Res, UseGuards, UsePipes, ValidationPipe } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Public } from './decorators/public.decorator';
 import { AuthService } from './auth.service';
@@ -83,16 +83,22 @@ export class AuthController {
     @Body() dto: ResetLoginAttemptsDto,
     @Req() req: Request & { user?: { username?: string; role?: string } },
   ) {
-    // Only admins can reset login attempts for other users
+    // FC-SEC-014 — the role comparison was case-sensitive while every other check
+    // in the codebase normalises with toLowerCase(), so a session carrying
+    // "superadmin" instead of "SuperAdmin" was denied its own admin powers here
+    // and only here.
     const requestingUser = req.user?.username;
+    const actorRole = String(req.user?.role || '').toLowerCase();
     const isSelf = requestingUser === dto.username;
-    const isAdmin = req.user?.role === 'SuperAdmin' || req.user?.role === 'Admin';
-    
+    const isAdmin = actorRole === 'superadmin' || actorRole === 'admin';
+
+    // FC-SEC-014 — this returned 200 with success:false, so a caller who was
+    // refused read the same status as one who succeeded and had to inspect the
+    // body to tell. A refusal is a 403.
     if (!isSelf && !isAdmin) {
-      return { 
-        success: false, 
-        message: 'You can only reset your own login attempts or must be an admin' 
-      };
+      throw new ForbiddenException(
+        'You can only reset your own login attempts, or be an Admin to reset someone else\'s',
+      );
     }
     
     const result = await this.authService.resetLoginAttempts(dto.username, {

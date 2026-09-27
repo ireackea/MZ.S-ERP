@@ -5,6 +5,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Shield, RefreshCw, Clock, Smartphone, Filter } from 'lucide-react';
 import apiClient from '@api/client';
+import { formatDateTime } from '@services/dateFormat';
 
 interface AuditLogViewerProps {
   fallbackLogs?: Array<{
@@ -151,7 +152,7 @@ const AuditLogViewer: React.FC<AuditLogViewerProps> = ({ fallbackLogs = [] }) =>
               ) : (
                 filteredLogs.map((entry) => (
                   <tr key={entry.id} className="border-t border-slate-100 hover:bg-slate-50">
-                    <td className="p-3 text-xs text-slate-500">{new Date(entry.timestamp).toLocaleString('ar-EG')}</td>
+                    <td className="p-3 text-xs text-slate-500">{formatDateTime(entry.timestamp)}</td>
                     <td className="p-3 text-slate-700">{entry.actorUsername}</td>
                     <td className="p-3"><span className="font-mono text-xs">{entry.action}</span></td>
                     <td className="p-3">
@@ -191,8 +192,8 @@ const AuditLogViewer: React.FC<AuditLogViewerProps> = ({ fallbackLogs = [] }) =>
                   <tr key={session.id} className="border-t border-slate-100 hover:bg-slate-50">
                     <td className="p-3 text-slate-700">{session.username}</td>
                     <td className="p-3 font-mono text-xs text-slate-600">{session.deviceFingerprint.slice(0, 14)}...</td>
-                    <td className="p-3 text-xs text-slate-500 flex items-center gap-1"><Clock size={12} />{new Date(session.lastActivityAt).toLocaleString('ar-EG')}</td>
-                    <td className="p-3 text-xs text-slate-500">{new Date(session.expiresAt).toLocaleString('ar-EG')}</td>
+                    <td className="p-3 text-xs text-slate-500 flex items-center gap-1"><Clock size={12} />{formatDateTime(session.lastActivityAt)}</td>
+                    <td className="p-3 text-xs text-slate-500">{formatDateTime(session.expiresAt)}</td>
                   </tr>
                 ))
               )}

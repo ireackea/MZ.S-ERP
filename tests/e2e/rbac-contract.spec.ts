@@ -87,7 +87,9 @@ describe('FC-SEC-002 single permission catalog and RBAC contract', () => {
       const roles = await request('/users/roles', { headers: { Cookie: adminCookie } });
       expect(roles.response.status).toBe(200);
       const stored = (data(roles.body) as any[]).find((role) => role.id === roleId);
-      expect([...stored.permissionsList].sort()).toEqual(['items.*', 'items.view', 'reports.view']);
+      // FC-SEC-014 — the role's grants are one array field now; `permissionsList`
+      // was the duplicate the API used to send alongside the raw JSON column.
+      expect([...stored.permissions].sort()).toEqual(['items.*', 'items.view', 'reports.view']);
     } finally {
       // There is no DELETE /users/roles/:id route, so drop the fixture directly.
       await cleanupRole(roleId);
@@ -113,7 +115,7 @@ describe('FC-SEC-002 single permission catalog and RBAC contract', () => {
 
       const roles = await request('/users/roles', { headers: { Cookie: adminCookie } });
       const stored = (data(roles.body) as any[]).find((role) => role.id === roleId);
-      expect([...stored.permissionsList].sort()).toEqual(['items.view', 'settings.view.general']);
+      expect([...stored.permissions].sort()).toEqual(['items.view', 'settings.view.general']);
 
       // A legacy id paired with a genuinely unknown id must still be rejected.
       const rejected = await request(`/users/roles/${roleId}/permissions`, {

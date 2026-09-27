@@ -121,7 +121,7 @@ describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
 
     for (const role of data(roles.body)) {
       if (role.name === 'SuperAdmin') continue;
-      expect(role.permissionsList).not.toContain('*');
+      expect(role.permissions).not.toContain('*');
     }
   });
 
@@ -586,15 +586,20 @@ describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
     const item = list[0];
     expect(item?.publicId, 'the suite needs at least one item').toBeTruthy();
     const suffix = randomUUID().slice(0, 8);
+    // A fresh year per run. setBalance deliberately does not overwrite createdBy on
+    // update, so a leftover row from an earlier run keeps its old author (or null,
+    // after that author was deleted) and this test would read a stale value rather
+    // than the one it just wrote.
+    const fiscalYear = 2100 + (Number.parseInt(suffix.slice(0, 4), 16) % 700);
 
     const set = await request('/opening-balances', {
       method: 'POST',
       headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ itemPublicId: item.publicId, financialYear: 2047, quantity: 4, unitCost: 1.25 }),
+      body: JSON.stringify({ itemPublicId: item.publicId, financialYear: fiscalYear, quantity: 4, unitCost: 1.25 }),
     });
     expect(set.response.status).toBe(200);
 
-    const year = await request('/opening-balances/2047', { headers: { Cookie: adminCookie } });
+    const year = await request('/opening-balances/' + fiscalYear, { headers: { Cookie: adminCookie } });
     expect(year.response.status).toBe(200);
     const rows = year.body as Array<{ itemPublicId: string; createdBy: { username: string } | null }>;
     expect(Array.isArray(rows)).toBe(true);
@@ -635,11 +640,11 @@ describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
     const byAuthor = await request('/opening-balances', {
       method: 'POST',
       headers: { Cookie: authorCookie, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ itemPublicId: secondItem.publicId, financialYear: 2048, quantity: 2, unitCost: 3 }),
+      body: JSON.stringify({ itemPublicId: secondItem.publicId, financialYear: fiscalYear + 1, quantity: 2, unitCost: 3 }),
     });
     expect(byAuthor.response.status).toBe(200);
 
-    const beforeDelete = await request('/opening-balances/2048', { headers: { Cookie: adminCookie } });
+    const beforeDelete = await request('/opening-balances/' + (fiscalYear + 1), { headers: { Cookie: adminCookie } });
     expect(beforeDelete.response.status).toBe(200);
     const authored = (beforeDelete.body as Array<{ itemPublicId: string; createdBy: { username: string } | null }>)
       .find((row) => row.itemPublicId === secondItem.publicId);
@@ -651,11 +656,72 @@ describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
     });
     expect(removed.response.status).toBe(200);
 
-    const after = await request('/opening-balances/2048', { headers: { Cookie: adminCookie } });
+    const after = await request('/opening-balances/' + (fiscalYear + 1), { headers: { Cookie: adminCookie } });
     expect(after.response.status).toBe(200);
     const survivor = (after.body as Array<{ itemPublicId: string; createdBy: unknown }>)
       .find((row) => row.itemPublicId === secondItem.publicId);
     expect(survivor, 'the balance must survive its author').toBeTruthy();
     expect(survivor!.createdBy).toBeNull();
+  }, 120000);
+
+  it('FC-SEC-013: holding users.* is enough to onboard someone, without being able to promote', async () => {
+    // An Admin holds `users.*` and the IAM matrix showed it granted, yet creating
+    // a user *with a role* returned 403 "Only SuperAdmin can manage roles and
+    // permissions" — and the form always sends a role, so an Admin could not
+    // onboard anyone. The grant was visible and inert.
+    const superadminCookie = await adminLogin();
+    const suffix = randomUUID().slice(0, 8);
+
+    const adminUser = await request('/users', {
+      method: 'POST',
+      headers: { Cookie: superadminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: `matrix_admin_${suffix}`, password: PASSWORD, roleName: 'Admin' }),
+    });
+    expect(adminUser.response.status).toBe(201);
+    const adminId = String(data(adminUser.body).id);
+    createdUserIds.push(adminId);
+
+    const adminCookie = await login(`matrix_admin_${suffix}`, PASSWORD);
+    const grants = data(await request('/users/permissions/me', { headers: { Cookie: adminCookie } }).then((r) => r.body));
+    expect(grants.permissions).toContain('users.*');
+
+    // Onboarding works for an Admin.
+    const created = await request('/users', {
+      method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: `matrix_hired_${suffix}`, password: PASSWORD, roleName: 'Operator' }),
+    });
+    expect(created.response.status, 'an Admin must be able to create a user with a role').toBe(201);
+    const hiredId = String(data(created.body).id);
+    createdUserIds.push(hiredId);
+    expect(data(created.body).role.name).toBe('Operator');
+
+    // ...but the two rules that actually protect the system replace the old
+    // blanket SuperAdmin requirement: no minting a SuperAdmin, and no
+    // self-promotion.
+    const mintSuper = await request('/users', {
+      method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: `matrix_peer_${suffix}`, password: PASSWORD, roleName: 'SuperAdmin' }),
+    });
+    expect(mintSuper.response.status).toBe(403);
+    expect(mintSuper.body?.message).toContain('Only SuperAdmin can grant the SuperAdmin role');
+
+    const selfPromote = await request(`/users/${adminId}`, {
+      method: 'PUT',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roleName: 'SuperAdmin' }),
+    });
+    expect(selfPromote.response.status).toBe(403);
+    expect(selfPromote.body?.message).toContain('your own role');
+
+    // Role *management* stays SuperAdmin-only, and that is role management
+    // rather than user management, so the permission key must not hand it out.
+    const createRole = await request('/users/roles', {
+      method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: `MatrixRoleAdmin_${suffix}`, permissions: ['items.view'] }),
+    });
+    expect(createRole.response.status).toBe(403);
   }, 120000);
 });

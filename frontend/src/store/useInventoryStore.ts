@@ -386,35 +386,30 @@ const mapUserDto = (row: UserDto): User => ({
   name: row.fullName || row.username,
   role: row.role?.name || 'User',
   roleId: row.roleId || row.role?.id,
-  permissions: row.role?.permissionsList || [],
+  permissions: row.role?.permissions || [],
   active: row.isActive,
   isActive: row.isActive,
-  status: row.isActive ? 'active' : 'suspended',
+  // FC-SEC-012 — this reported every inactive account as "suspended", a third
+  // word for the same state. The server now distinguishes a security lock from a
+  // deactivation, so the client does too.
+  status: row.isActive ? 'active' : row.isLocked ? 'locked' : 'inactive',
   scope: 'all',
   twoFactorEnabled: false,
   twoFaEnabled: false,
-  mustChangePassword: false,
+  // FC-SEC-010 — this was hardcoded false, so the forced-change flag the server
+  // had just started sending was discarded on the way into the store.
+  mustChangePassword: Boolean(row.mustChangePassword),
 });
 
-const mapRoleDto = (row: RoleDto): RoleDefinition => {
-  const permissions = row.permissionsList.length > 0
-    ? row.permissionsList
-    : (() => {
-        try {
-          const parsed = JSON.parse(row.permissions || '[]');
-          return Array.isArray(parsed) ? parsed.filter((entry): entry is string => typeof entry === 'string') : [];
-        } catch {
-          return [];
-        }
-      })();
-
-  return {
-    id: row.id,
-    name: row.name,
-    description: row.description ?? undefined,
-    permissionIds: permissions,
-  };
-};
+const mapRoleDto = (row: RoleDto): RoleDefinition => ({
+  id: row.id,
+  name: row.name,
+  description: row.description ?? undefined,
+  // FC-SEC-014 — the JSON.parse fallback existed only because `permissions` used
+  // to be the raw column. The field is an array now, so the parse is gone rather
+  // than kept as a second way to read the same value.
+  permissionIds: row.permissions || [],
+});
 
 const normalizeOpeningBalanceRows = (rows: Array<{ item_id?: string; itemId?: string; quantity?: number }>) =>
   rows.reduce<OpeningBalanceMap>((acc, row) => {

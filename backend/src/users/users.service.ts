@@ -97,12 +97,42 @@ export class UsersService {
     }
   }
 
-  private assertRoleSelection(dto: { roleId?: string; roleName?: string }, actor?: ActorContext): void {
+  /**
+   * FC-SEC-013 — role *selection* is user management, not role management.
+   *
+   * This used to require SuperAdmin, which meant an Admin who holds `users.*`
+   * could create a user but only with no role at all: the form always sends one,
+   * so onboarding anyone returned 403 "Only SuperAdmin can manage roles and
+   * permissions". The grant was visible in the IAM matrix and inert — the same
+   * silent override sec-013 removed at the route level, one layer down.
+   *
+   * Two rules replace it, and they are the ones that actually protect the
+   * system:
+   * - an actor may not change their own role, so nobody can promote themselves
+   * - an actor may not grant SuperAdmin, so an Admin cannot mint a peer
+   *
+   * Editing what a role *can do* stays SuperAdmin-only (createRole,
+   * updateRolePermissions, deleteRole): that is role management, and the
+   * permission key alone should not hand it out.
+   */
+  private async assertRoleSelection(
+    dto: { roleId?: string; roleName?: string },
+    actor?: ActorContext,
+    targetUserId?: string,
+  ): Promise<void> {
     if (dto.roleId && dto.roleName) {
       throw new BadRequestException('Provide roleId or roleName, not both');
     }
-    if (dto.roleId || dto.roleName) {
-      this.assertSuperAdmin(actor);
+    if (!dto.roleId && !dto.roleName) return;
+    if (!actor) return;
+
+    if (targetUserId && targetUserId === actor.id) {
+      throw new ForbiddenException('You cannot change your own role.');
+    }
+
+    const role = await this.resolveRole(dto.roleId, dto.roleName);
+    if (String(role.name).toLowerCase() === 'superadmin' && String(actor.role).toLowerCase() !== 'superadmin') {
+      throw new ForbiddenException('Only SuperAdmin can grant the SuperAdmin role.');
     }
   }
 
@@ -275,7 +305,7 @@ export class UsersService {
   }
 
   async createUser(dto: CreateUserDto, actor: ActorContext) {
-    this.assertRoleSelection(dto, actor);
+    await this.assertRoleSelection(dto, actor);
     const role = await this.resolveRole(dto.roleId, dto.roleName);
     const username = dto.username.trim();
 
@@ -329,7 +359,7 @@ export class UsersService {
   }
 
   async inviteUser(dto: InviteUserDto, actor: ActorContext) {
-    this.assertRoleSelection(dto, actor);
+    await this.assertRoleSelection(dto, actor);
     const role = await this.resolveRole(dto.roleId, dto.roleName);
     const email = String(dto.email || '').trim().toLowerCase();
     if (!email) {
@@ -432,11 +462,19 @@ export class UsersService {
       ? principal.permissions.filter((entry: unknown): entry is string => typeof entry === 'string')
       : [];
 
-    // ENTERPRISE FIX: 2026-04-29 — RBAC self-heal at the live permissions endpoint.
-    // If the JWT principal carries an empty permissions array (e.g. legacy token
-    // issued before the login self-heal was deployed), reload from DB and apply
-    // role-based defaults so the UI never sees "0 granted permissions" for a
-    // built-in role. This mirrors AuthService and AppBootstrapService behavior.
+    // FC-SEC-014 — the comment here used to describe a self-heal: "reload from
+    // DB and apply role-based defaults so the UI never sees 0 granted
+    // permissions", and it claimed to mirror AuthService and AppBootstrapService.
+    // None of that existed. AuthService.applyDefaultPermissionsFallback returned
+    // its input unchanged, AppBootstrapService had no self-heal at all, and
+    // ensureDefaultRoles skips any role that already exists — so three comments
+    // described a feature implemented nowhere.
+    //
+    // What is actually true is the opposite, and better: verifyToken re-reads the
+    // user row on every request, so this principal is never stale. A role whose
+    // permissions were emptied really does return nothing, because nothing
+    // guesses. The repair for that is the boot-time template reconciliation in
+    // AuthService.ensureDefaultRoles, not a guess at read time.
     return {
       role,
       permissions,
@@ -447,19 +485,6 @@ export class UsersService {
     };
   }
 
-  checkPermissions(grantedPermissions: string[], requiredPermissions: string[]) {
-    if (!requiredPermissions.length) return true;
-    if (grantedPermissions.includes('*')) return true;
-
-    return requiredPermissions.every((requiredPermission) => {
-      if (grantedPermissions.includes(requiredPermission)) return true;
-      return grantedPermissions.some((grantedPermission) => {
-        if (!grantedPermission.endsWith('.*')) return false;
-        const prefix = grantedPermission.slice(0, -2);
-        return requiredPermission === prefix || requiredPermission.startsWith(`${prefix}.`);
-      });
-    });
-  }
 
   async verifyInvitationToken(token: string) {
     const cleanToken = String(token || '').trim();
@@ -618,7 +643,7 @@ export class UsersService {
 
     let roleId: string | undefined;
     if (dto.roleId || dto.roleName) {
-      this.assertRoleSelection(dto, actor);
+      await this.assertRoleSelection(dto, actor, id);
       const role = await this.resolveRole(dto.roleId, dto.roleName);
       roleId = role.id;
     }
@@ -905,10 +930,21 @@ export class UsersService {
   }
 
   async bulkAssignRole(dto: BulkAssignRoleDto, actor: ActorContext) {
-    this.assertSuperAdmin(actor);
+    // FC-SEC-013 — assigning a role in bulk is user management, and the route is
+    // already guarded by `users.update`, which Admin holds. It used to require
+    // SuperAdmin, so the grant was visible and inert. The two rules that
+    // actually matter replace that: no self-escalation, and no minting a
+    // SuperAdmin without being one.
     const role = await this.resolveRole(dto.roleId, undefined);
+    if (String(role.name).toLowerCase() === 'superadmin' && String(actor.role).toLowerCase() !== 'superadmin') {
+      throw new ForbiddenException('Only SuperAdmin can grant the SuperAdmin role.');
+    }
     const userIds = [...new Set((dto.userIds || []).map((id) => String(id).trim()).filter(Boolean))];
     if (!userIds.length) throw new BadRequestException('userIds is required');
+    if (userIds.includes(actor.id)) {
+      throw new ConflictException('You cannot change your own role through a bulk assignment.');
+    }
+    await this.assertNotLastSuperAdmin(userIds, 'role reassignment');
 
     const result = await this.prisma.user.updateMany({
       where: { id: { in: userIds } },
@@ -1054,13 +1090,17 @@ export class UsersService {
   }
 
   private toRoleDto(role: RoleRecord) {
+    const permissions = this.parsePermissions(role.permissions);
     return {
       id: role.id,
       name: role.name,
       description: role.description,
       color: role.color,
-      permissions: role.permissions,
-      permissionsList: this.parsePermissions(role.permissions),
+      // FC-SEC-014 — this returned the raw JSON column *and* a parsed array for
+      // the same value, so a consumer could pick either and one of them would be
+      // wrong for what it expected: `permissions` was a string where every other
+      // permission list in the system is an array. The array is the contract.
+      permissions,
       createdAt: role.createdAt,
       updatedAt: role.updatedAt,
     };

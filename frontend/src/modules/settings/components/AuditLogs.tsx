@@ -8,6 +8,7 @@ import { Clock, Shield, ShieldAlert, User, Filter, RefreshCcw, Download, Calenda
 import { usePermissions } from '@hooks/usePermissions';
 import apiClient from '@api/client';
 import { toast } from '@services/toastService';
+import { formatDateTime } from '@services/dateFormat';
 
 interface AuditLogEntry {
   id: string;
@@ -93,7 +94,7 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ }) => {
       setIsExporting(true);
       const headers = ['التوقيت', 'المستخدم', 'الإجراء', 'الكيان', 'المعرف', 'الحالة', 'التفاصيل'];
       const rows = filteredLogs.map(log => [
-        new Date(log.timestamp).toLocaleString('ar-EG'),
+        formatDateTime(log.timestamp),
         log.actorUsername,
         log.action,
         log.entityType,
@@ -265,7 +266,7 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ }) => {
                   <td className="p-4 text-slate-600 dir-ltr">
                     <div className="flex items-center gap-2">
                       <Clock size={12} className="text-slate-400" />
-                      {new Date(log.timestamp).toLocaleString('ar-EG')}
+                      {formatDateTime(log.timestamp)}
                     </div>
                   </td>
                   <td className="p-4">

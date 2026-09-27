@@ -4,6 +4,7 @@
 //   2) executeReset(...)    -> backend validates env token + challenge + reason + scope
 import apiClient from '../api/client';
 import { assertStorageKeyAllowed } from './storageOwnership';
+import { formatDateTime } from './dateFormat';
 
 export type SystemResetScope = 'full' | 'data' | 'inventory' | 'audit';
 
@@ -46,7 +47,7 @@ const translateResetError = (code: string | null, message: string | null, retryA
   switch (normalizedCode) {
     case 'SYSTEM_RESET_COOLDOWN':
       return retryAt
-        ? `تم إيقاف محاولات إعادة الضبط مؤقتًا. حاول بعد ${new Date(retryAt).toLocaleString('ar-EG')}.`
+        ? `تم إيقاف محاولات إعادة الضبط مؤقتًا. حاول بعد ${formatDateTime(retryAt)}.`
         : 'تم إيقاف محاولات إعادة الضبط مؤقتًا. حاول لاحقًا.';
     case 'SYSTEM_RESET_INVALID_CODE':
       return 'كلمة المرور غير صحيحة. يرجى إعادة إدخال كلمة مرور حسابك.';

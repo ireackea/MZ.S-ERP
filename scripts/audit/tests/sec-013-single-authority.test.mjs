@@ -85,3 +85,59 @@ test('FC-SEC-013 the catalog no longer documents a gate that does not exist', ()
     'a catalog description still claims an Admin/SuperAdmin restriction that no longer exists',
   );
 });
+
+test('FC-SEC-014 dates are formatted in one place, not with a literal locale', () => {
+  // Ten call sites passed 'ar-EG' to toLocaleString, so the display locale was a
+  // literal in each file and a language setting in the app could not reach any of
+  // them. Formatting is now centralised in services/dateFormat.ts.
+  //
+  // The guard is deliberately scoped to the locale this codebase actually uses.
+  // Eleven other files pass a different literal, which is a real but separate
+  // piece of work; a guard that fails on work nobody has done is a broken guard.
+  const frontendSrc = join(repoRoot, 'frontend/src');
+  const walkFront = (dir) => {
+    const out = [];
+    for (const entry of readdirSync(dir)) {
+      const full = join(dir, entry);
+      if (statSync(full).isDirectory()) out.push(...walkFront(full));
+      else if (/\.(ts|tsx)$/.test(entry)) out.push(full);
+    }
+    return out;
+  };
+
+  const offenders = [];
+  for (const file of walkFront(frontendSrc)) {
+    const source = readFileSync(file, 'utf8');
+    if (/toLocale(?:String|DateString|TimeString)\(\s*['"]ar-EG['"]/.test(source)) {
+      offenders.push(relative(repoRoot, file));
+    }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    `these files hardcode the display locale; use services/dateFormat.ts:\n  ${offenders.join('\n  ')}`,
+  );
+
+  const helper = readFileSync(join(frontendSrc, 'services/dateFormat.ts'), 'utf8');
+  assert.match(helper, /export const formatDateTime/);
+  assert.match(helper, /export const formatDate\b/);
+});
+
+test('FC-SEC-014 a role carries one permission field, not two shapes', () => {
+  // toRoleDto returned the raw JSON column as `permissions` (a string) and the
+  // parsed array as `permissionsList`, so a consumer picking the obvious field
+  // got text where the rest of the system speaks arrays. useInventoryStore even
+  // carried a JSON.parse fallback for it.
+  const service = readFileSync(join(backendSrc, 'users/users.service.ts'), 'utf8');
+  const dto = service.slice(service.indexOf('private toRoleDto'));
+  assert.doesNotMatch(dto, /permissionsList/, 'the duplicate role permission field is back');
+  assert.match(dto, /permissions,/);
+
+  const store = readFileSync(join(repoRoot, 'frontend/src/store/useInventoryStore.ts'), 'utf8');
+  assert.doesNotMatch(store, /permissionsList/, 'the client still reads the retired field');
+  assert.doesNotMatch(
+    store,
+    /JSON\.parse\(row\.permissions/,
+    'the JSON.parse fallback for role permissions is back',
+  );
+});

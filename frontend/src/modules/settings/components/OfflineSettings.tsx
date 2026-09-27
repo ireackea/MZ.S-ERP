@@ -4,6 +4,7 @@ import { RefreshCw, ShieldAlert, Wifi, WifiOff } from 'lucide-react';
 import { usePermissions } from '@hooks/usePermissions';
 import { useOfflineSync } from '@hooks/useOfflineSync';
 import { useInventoryStore } from '../../../store/useInventoryStore';
+import { formatDateTime } from '@services/dateFormat';
 
 interface OfflineSettingsProps {
 }
@@ -33,7 +34,7 @@ const OfflineSettings: React.FC<OfflineSettingsProps> = ({ }) => {
       </div>
       <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="font-black text-slate-900">آخر تحميل من الخادم</div>
-        <div className="mt-4 text-lg font-semibold text-slate-800">{lastLoadedAt ? new Date(lastLoadedAt).toLocaleString('ar-EG') : 'لم يتم التحميل بعد'}</div>
+        <div className="mt-4 text-lg font-semibold text-slate-800">{lastLoadedAt ? formatDateTime(lastLoadedAt) : 'لم يتم التحميل بعد'}</div>
         <div className="mt-2 text-sm text-slate-500">حالة المزامنة الداخلية: {syncing ? 'نشطة' : 'متوقفة'}</div>
       </div>
       <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">

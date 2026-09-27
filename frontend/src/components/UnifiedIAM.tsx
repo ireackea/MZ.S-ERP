@@ -44,6 +44,7 @@ import {
 } from '@services/usersService';
 import UnifiedIamRoleModal from './unified-iam/RoleModal';
 import ChangeMyPassword from './unified-iam/ChangeMyPassword';
+import { formatDateTime } from '@services/dateFormat';
 import {
   INITIAL_CREATE_FORM,
   getErrorMessage,
@@ -176,7 +177,7 @@ const UnifiedIAM: React.FC = () => {
     const role = roles.find((entry) => entry.id === selectedRoleId) || roles[0];
     if (!role) return;
     setSelectedRoleId(role.id);
-    setMatrix(role.permissionsList || []);
+    setMatrix(role.permissions || []);
   }, [selectedRoleId, roles]);
 
   useEffect(() => {
@@ -639,7 +640,7 @@ const UnifiedIAM: React.FC = () => {
                     <p className="text-xs text-amber-800 mb-3">
                       لا يوجد خادم بريد في هذا التثبيت، لذلك لم يُرسل أي بريد. أرسل هذا الرابط
                       إلى المدعوّ بنفسك — صالح حتى{' '}
-                      {new Date(pendingInvitation.expiresAt).toLocaleString('ar-EG')}
+                      {formatDateTime(pendingInvitation.expiresAt)}
                     </p>
                     <input
                       readOnly
@@ -857,7 +858,7 @@ const UnifiedIAM: React.FC = () => {
                             })()}
                           </td>
                           <td className="p-3 text-xs text-slate-500">
-                            {new Date(user.updatedAt).toLocaleString('ar-EG')}
+                            {formatDateTime(user.updatedAt)}
                           </td>
                           <td className="p-3">
                             <div className="flex gap-1">
@@ -1144,7 +1145,7 @@ const UnifiedIAM: React.FC = () => {
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-slate-800">{entry.action}</span>
                       <span className="text-xs text-slate-500">
-                        {new Date(entry.timestamp).toLocaleString('ar-EG')}
+                          {formatDateTime(entry.timestamp)}
                       </span>
                     </div>
                     <div className="text-sm text-slate-600 mt-1">{entry.details}</div>
