@@ -1,7 +1,7 @@
 {
   "card": "FC-CERTIFY-001",
   "part": "adversarial probes: money, stock, time",
-  "generatedAt": "2026-09-26T23:30:50.545Z",
+  "generatedAt": "2026-09-27T00:08:01.879Z",
   "caveat": "Self-attack by the same agent that wrote the code. This is evidence of probing, NOT an independent verification. CERTIFY-001 requires a human verifier.",
   "totals": {
     "probes": 11,
@@ -61,7 +61,7 @@
     {
       "name": "timezone: a past-dated movement is accepted and reflected exactly once",
       "ok": true,
-      "detail": "date=2026-08-17 status=201 currentStock=1.000"
+      "detail": "date=2026-08-18 status=201 currentStock=1.000"
     }
   ],
   "findings": []

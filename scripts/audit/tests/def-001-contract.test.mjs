@@ -107,3 +107,31 @@ test('the behaviour is proven, including a randomised sequence', () => {
   assert.match(e2e, /currentStock = ledgerNet \+ openDeficit throughout/);
   assert.match(e2e, /a one-word reason is not an audit trail/);
 });
+
+test('a new deficit is announced, and only after the transaction commits', () => {
+  // The whole promise of a deficit is that somebody is told. Without this the
+  // row is written and nobody finds out until they run the reconciliation, which
+  // is the silent corruption the card was opened to prevent.
+  assert.match(service, /private announceDeficits\(/);
+  assert.match(service, /'stock\.deficit-recorded'/);
+  assert.match(service, /conflict: true/,
+    'a deficit is a conflict the operator has to resolve, not an informational sync');
+
+  // The announcement must be collected inside the transaction and emitted after,
+  // because emitting inside would tell every connected client about a shortfall
+  // that a rollback then erases.
+  assert.match(service, /const raisedForRealtime: Array<\{ itemId: number; quantity: Prisma\.Decimal \}> = \[\]/);
+  assert.match(service, /if \(!execution\.replayed\) this\.announceDeficits\(deficits, scope\);/);
+  assert.doesNotMatch(service, /applyStockDeltas\([^)]*\)[\s\S]{0,80}emitSync\(/,
+    'the announcement must not happen inside applyStockDeltas');
+
+  // Every path that can raise a deficit has to announce it.
+  // The helper plus every write path that can raise a deficit: createMany (and
+  // so createOne), the stocktaking variance, updateById, deleteMany and
+  // createStockAdjustment. updateById matters most here: correcting a covered
+  // movement into an over-issue raises a deficit with no other chance to tell
+  // anybody.
+  const announcing = (service.match(/announceDeficits\(/g) || []).length;
+  assert.equal(announcing, 6,
+    `expected the helper plus five write paths, found ${announcing}`);
+});

@@ -454,6 +454,32 @@ export class TransactionService {
   }
 
   /**
+   * DEF-001 — announce deficits after the transaction has committed.
+   *
+   * Emitting from inside the transaction would tell every connected client
+   * about a shortfall that a rollback then erases, so the announcement is
+   * deliberately deferred to the caller.
+   */
+  private announceDeficits(
+    deficits: Array<{ itemId: number; quantity: Prisma.Decimal }>,
+    scope: string,
+  ): void {
+    if (!deficits.length) return;
+    this.realtimeService.emitSync(
+      ['items', 'transactions', 'operations', 'dashboard', 'stocktaking'],
+      'stock.deficit-recorded',
+      {
+        meta: {
+          count: deficits.length,
+          items: deficits.map((d) => ({ itemId: d.itemId, quantity: serializeDecimal(d.quantity) })),
+        },
+        scope,
+        conflict: true,
+      },
+    );
+  }
+
+  /**
    * FC-INV-001 / DEF-001 — the single place `Item.currentStock` is written.
    *
    * Every movement goes through `planMovement`, which clamps the balance at zero
@@ -473,7 +499,10 @@ export class TransactionService {
       actorId?: string;
       sourceTransactionId?: string;
     } = {},
-  ): Promise<void> {
+  ): Promise<Array<{ itemId: number; quantity: Prisma.Decimal }>> {
+    // DEF-001 — the deficits raised by this call, so the caller can announce
+    // them after the transaction commits rather than from inside it.
+    const created: Array<{ itemId: number; quantity: Prisma.Decimal }> = [];
     for (const [itemId, delta] of stockDeltaByItemId.entries()) {
       const decimal = delta instanceof Prisma.Decimal
         ? delta
@@ -596,8 +625,14 @@ export class TransactionService {
         this.logger.warn(
           `DEF-001 stock deficit of ${plan.newDeficit.toFixed(DECIMAL_SCALE)} recorded for item ${itemId}`,
         );
+        // The alert is reported back so the caller can raise it once the
+        // transaction commits. Emitting from here would announce a deficit that a
+        // rollback then erases.
+        created.push({ itemId, quantity: plan.newDeficit });
       }
     }
+
+    return created;
   }
 
   async applyStocktakingVariance(
@@ -636,11 +671,12 @@ export class TransactionService {
         createdByUserId: input.actorId,
       },
     });
-    await this.applyStockDeltas(client, new Map([[input.itemId, delta]]), {
+    const raised = await this.applyStockDeltas(client, new Map([[input.itemId, delta]]), {
       warehouseId: 'default',
       actorId: input.actorId,
       sourceTransactionId: created.publicId,
     });
+    this.announceDeficits(raised, 'default');
     return created.publicId;
   }
 
@@ -866,6 +902,8 @@ export class TransactionService {
     const scopedPayload = scope === 'all' ? payload : payload.map((dto) => ({ ...dto, warehouseId: scope }));
     const itemIdMap = await this.resolveItemIdMap(scopedPayload.map((dto) => dto.itemId));
     const unloadingRuleIdMap = await this.resolveUnloadingRuleIdMap(scopedPayload.map((dto) => dto.unloadingRuleId));
+    // DEF-001 — collected inside the transaction, announced only after it commits.
+    const deficits: Array<{ itemId: number; quantity: Prisma.Decimal }> = [];
     const execution = await this.executeIdempotently(
       actorId,
       'transactions.create-many',
@@ -903,10 +941,11 @@ export class TransactionService {
           createdRows.push(created as TxWithItem);
         }
 
-        await this.applyStockDeltas(tx, stockDeltaByItemId, {
+        const raised = await this.applyStockDeltas(tx, stockDeltaByItemId, {
           warehouseId: scope,
           actorId,
         });
+        deficits.push(...raised);
         return createdRows;
       },
       // FC-AUD-001 — committed in the same transaction as the stock movement.
@@ -943,6 +982,10 @@ export class TransactionService {
         { meta: { count: response.total }, scope },
       );
     }
+    // DEF-001 — announced here, after the commit. Emitting from inside the
+    // transaction would tell every connected client about a deficit that a
+    // rollback then erases.
+    if (!execution.replayed) this.announceDeficits(deficits, scope);
     return response;
   }
 
@@ -1047,6 +1090,9 @@ export class TransactionService {
 
   // actorId/actorUsername: تُمرّران من الـ controller لتسجيل منفّذ التحديث في سجل التدقيق
   async updateById(id: string, dto: UpdateTransactionDto, actorId = 'system', actorUsername = 'system', idempotencyKey?: string, scope = 'default') {
+    // DEF-001 — deficits raised by this call, announced once the transaction commits.
+    const raisedForRealtime: Array<{ itemId: number; quantity: Prisma.Decimal }> = [];
+
     const identifier = String(id || '').trim();
     if (!identifier) throw new BadRequestException('Transaction id is required');
 
@@ -1108,10 +1154,11 @@ export class TransactionService {
         stockDeltaByItemId.set(existing.itemId, oldDelta.negated());
         stockDeltaByItemId.set(nextItemId, newDelta);
       }
-      await this.applyStockDeltas(tx, stockDeltaByItemId, {
+      const raised = await this.applyStockDeltas(tx, stockDeltaByItemId, {
         warehouseId: scope,
         actorId,
       });
+      raisedForRealtime.push(...raised);
 
       const row = await tx.transaction.update({
         where: { id: existing.id },
@@ -1190,6 +1237,9 @@ export class TransactionService {
         'transactions.updated',
         { meta: { id: response.id }, scope },
       );
+      // DEF-001 — a correction that turns a covered movement into an over-issue
+      // must raise the alert, otherwise the shortfall is created silently.
+      this.announceDeficits(raisedForRealtime, scope);
     }
     return response;
   }
@@ -1201,6 +1251,9 @@ export class TransactionService {
 
   // actorId/actorUsername: مُمرّران من الـ controller لتسجيل منفّذ الحذف
   async deleteMany(dto: DeleteTransactionsDto, actorId = 'system', actorUsername = 'system', idempotencyKey?: string, scope = 'default') {
+    // DEF-001 — deficits raised by this call, announced once the transaction commits.
+    const raisedForRealtime: Array<{ itemId: number; quantity: Prisma.Decimal }> = [];
+
     const ids = Array.from(new Set((dto.ids || []).map((id) => String(id || '').trim()).filter(Boolean)));
     if (!ids.length) return { deleted: 0 };
 
@@ -1234,10 +1287,11 @@ export class TransactionService {
           (stockDeltaByItemId.get(row.itemId) || 0) - delta,
         );
       }
-      await this.applyStockDeltas(tx, stockDeltaByItemId, {
+      const raised = await this.applyStockDeltas(tx, stockDeltaByItemId, {
         warehouseId: scope,
         actorId,
       });
+      raisedForRealtime.push(...raised);
 
       const deleted = await tx.transaction.deleteMany({
         where: {
@@ -1277,6 +1331,7 @@ export class TransactionService {
         'transactions.deleted',
         { meta: { count: result }, scope },
       );
+      this.announceDeficits(raisedForRealtime, scope);
     }
     return { deleted: result };
   }
@@ -1288,6 +1343,8 @@ export class TransactionService {
     idempotencyKey?: string,
     scope = 'default',
   ) {
+    // DEF-001 — deficits raised by this call, announced once the transaction commits.
+    const raisedForRealtime: Array<{ itemId: number; quantity: Prisma.Decimal }> = [];
     this.assertStockAdjustmentFields({
       adjustmentDirection: dto.adjustmentDirection,
       adjustmentReason: dto.reason,
@@ -1326,11 +1383,11 @@ export class TransactionService {
         const delta = magnitude.mul(
           String(dto.adjustmentDirection || '').trim().toUpperCase() === 'DECREASE' ? -1 : 1,
         );
-        await this.applyStockDeltas(tx, new Map([[itemId, delta]]), {
+        raisedForRealtime.push(...await this.applyStockDeltas(tx, new Map([[itemId, delta]]), {
           warehouseId: scope === 'all' ? 'default' : scope,
           actorId,
           sourceTransactionId: created.publicId,
-        });
+        }));
         return this.mapToFrontend(created as TxWithItem);
       },
       // FC-AUD-001 — a stock correction without its audit row is unacceptable,
@@ -1362,6 +1419,7 @@ export class TransactionService {
         'transactions.stock-adjusted',
         { meta: { id: execution.value.id, itemId: execution.value.itemId }, scope },
       );
+      this.announceDeficits(raisedForRealtime, scope);
     }
 
     return execution.value;

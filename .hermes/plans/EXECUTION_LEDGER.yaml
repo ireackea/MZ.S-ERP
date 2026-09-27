@@ -95,3 +95,15 @@ status_board:
 - 2026-09-26: every P0/P1 card in the plan is now resolved. REF-001 (splitting the large services) is the only
   remaining item and is optional P2; it is deliberately not started while 194 files of uncommitted work sit in the
   tree, because a refactor now risks the contracts that were just proven.
+- 2026-09-26 (DEF-001 follow-up): a final pass over the deficit work found that a recorded deficit was not actually
+  announced to anyone. applyStockDeltas only wrote a log line, so the operator found out by running the
+  reconciliation, which is the silent failure the card exists to prevent. applyStockDeltas now returns the deficits it
+  raised, the caller collects them, and announceDeficits emits `stock.deficit-recorded` with conflict: true after the
+  transaction commits - never from inside it, because a rollback would then announce a shortfall that does not exist.
+  All five write paths announce: createMany (and so createOne), the stocktaking variance, updateById, deleteMany and
+  createStockAdjustment. updateById is the one that matters most, because correcting a covered movement into an
+  over-issue raises a deficit with no other opportunity to tell anybody. Guarded by a contract assertion that counts
+  the announcement sites and rejects an emit from inside applyStockDeltas.
+  Note: there is still no UI for the deficit queue. The API and the realtime alert exist; the screen to work the queue
+  does not. That is the remaining gap and it is listed as such rather than described as complete.
+  Verification: contract 12/12, E2E 6/6, regression 43/43, adversarial 11/11, CI 10/10.
