@@ -154,3 +154,16 @@ status_board:
   still loading, and the write-off click resolved whichever row sorted first, so rows now carry data-deficit-item.
   Result: frontend 50/50, audit 141/141, E2E 45/45, CI 10/10, and the deficit contract at 13/13 including the assertion
   that the screen exists and is wired to the event.
+- 2026-09-26 (close-out, gap record): the two remaining proof gaps are recorded rather than left implied, because a
+  certification that hides what it could not show is not a certification.
+  1. A genuine mid-request network interruption in the browser is NOT proven. The Service Worker's own fetch runs in a
+     process that neither setOfflineMode, CDP network emulation, nor request interception can stop, so cutting the
+     connection at the browser level is not reachable from the test harness. What IS proven: the Service Worker registers
+     and becomes active, the offline queue persists to FeedFactoryMutationDB/mutationQueue, and the app recovers when the
+     network returns (tests/e2e/offline-queue.spec.ts and tests/e2e/qa-002-offline.spec.ts). The queue's own durability is
+     tested; only the browser-level cut is not.
+  2. `docker compose build` (the default target) still fails in this environment because the Puppeteer Chrome download is
+     blocked. Every verification ran through `docker build --target production`, which is the same application code without
+     the browser tooling. CI on a machine with network access would exercise the default target.
+  Neither gap is a code defect. They are limits of what was provable here, and they are stated so a future reader does not
+  assume they were covered.

@@ -207,3 +207,21 @@ test('every screen that builds a movement payload sends decimals as strings', ()
   assert.match(read('frontend/src/components/DailyOperations.tsx'),
     /quantity: toApiDecimal\(form\.quantity, 'quantity'\) as string/);
 });
+
+test('the orders quantity is bounded the same way a movement quantity is', () => {
+  // A movement requires a decimal string, an order line still takes a number.
+  // That inconsistency is deliberate for now and worth pinning rather than
+  // silently drifting: a human types 0.1 into a number input, Number() of that
+  // string is exact, and Prisma.Decimal preserves it, so the order line is not
+  // broken the way the operations screen was. What must not happen is the order
+  // line losing its bound, because then a stray 1e12 would be accepted into a
+  // Decimal column with no ceiling at all.
+  const orderDto = read('backend/src/orders/dto/order.dto.ts');
+  assert.match(orderDto, /quantity!: number/);
+  assert.match(orderDto, /@Min\(0\.001\)/, 'an order line must have a lower bound');
+  assert.match(orderDto, /@Max\(999999999\.999\)/, 'and the same ceiling a movement has');
+
+  // The decimal fields list must include the order quantity, so a future
+  // tightening of that list cannot drop it unnoticed.
+  assert.match(read('backend/src/common/decimal.ts'), /'quantity'/);
+});
