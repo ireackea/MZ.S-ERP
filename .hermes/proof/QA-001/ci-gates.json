@@ -1,12 +1,12 @@
 {
   "card": "FC-QA-001",
-  "generatedAt": "2026-09-27T01:54:01.593Z",
+  "generatedAt": "2026-09-27T02:25:37.258Z",
   "results": [
     {
       "name": "encoding",
       "passed": true,
       "exitCode": 0,
-      "seconds": "5.5",
+      "seconds": "5.1",
       "why": "source files must be valid UTF-8",
       "tail": "npm notice run feedfactory-pro@0.0.0 check:encoding\nnpm notice run node scripts/check-text-encoding.mjs\nText encoding check passed.\n"
     },
@@ -16,13 +16,13 @@
       "exitCode": 0,
       "seconds": "3.1",
       "why": "the client must match the schema",
-      "tail": "npm notice run feedfactory-pro@0.0.0 prisma:generate\nnpm notice run npm run prisma:generate --workspace=backend\nnpm notice run @feedfactory/backend@0.0.0 prisma:generate\nnpm notice run prisma generate --config prisma.config.ts\nLoaded Prisma config from prisma.config.ts.\n\nPrisma schema loaded from prisma\\schema.prisma.\n\n✔ Generated Prisma Client (v7.8.0) to .\\..\\node_modules\\@prisma\\client in 359ms\n\nStart by importing your Prisma Client (See: https://pris.ly/d/importing-client)\n\n\n"
+      "tail": "npm notice run feedfactory-pro@0.0.0 prisma:generate\nnpm notice run npm run prisma:generate --workspace=backend\nnpm notice run @feedfactory/backend@0.0.0 prisma:generate\nnpm notice run prisma generate --config prisma.config.ts\nLoaded Prisma config from prisma.config.ts.\n\nPrisma schema loaded from prisma\\schema.prisma.\n\n✔ Generated Prisma Client (v7.8.0) to .\\..\\node_modules\\@prisma\\client in 355ms\n\nStart by importing your Prisma Client (See: https://pris.ly/d/importing-client)\n\n\n"
     },
     {
       "name": "prisma-validate",
       "passed": true,
       "exitCode": 0,
-      "seconds": "2.5",
+      "seconds": "3.0",
       "why": "the schema must be loadable",
       "tail": "npm notice run feedfactory-pro@0.0.0 prisma:validate\nnpm notice run npm run prisma:validate --workspace=backend\nnpm notice run @feedfactory/backend@0.0.0 prisma:validate\nnpm notice run prisma validate\nLoaded Prisma config from prisma.config.ts.\n\nPrisma schema loaded from prisma\\schema.prisma.\nThe schema at prisma\\schema.prisma is valid 🚀\n"
     },
@@ -30,7 +30,7 @@
       "name": "typecheck-backend",
       "passed": true,
       "exitCode": 0,
-      "seconds": "10.5",
+      "seconds": "10.2",
       "why": "backend types must compile",
       "tail": "npm notice run feedfactory-pro@0.0.0 npx\nnpm notice run tsc --noEmit -p backend/tsconfig.json\n"
     },
@@ -38,7 +38,7 @@
       "name": "typecheck-frontend",
       "passed": true,
       "exitCode": 0,
-      "seconds": "12.5",
+      "seconds": "13.4",
       "why": "frontend types must compile",
       "tail": "npm notice run feedfactory-pro@0.0.0 npx\nnpm notice run tsc --noEmit -p frontend/tsconfig.json\n"
     },
@@ -48,37 +48,37 @@
       "exitCode": 0,
       "seconds": "3.6",
       "why": "the audit suite guards every accepted card",
-      "tail": "ustment contract persists reason, source, and direction (19.2726ms)\n✔ stock adjustment command and reconciliation are permissioned and idempotent (10.1639ms)\n✔ inventory reports include stock adjustment movements (4.6344ms)\n✔ ordinary item sync cannot write currentStock (3.7567ms)\n✔ bulk item import cannot write currentStock as ordinary metadata (4.6506ms)\n✔ item service has no direct currentStock write in sync or import paths (2.259ms)\n✔ item form no longer submits unsupported product fields as if they were persisted (1.1268ms)\n✔ transaction service centralizes currentStock writes in the stock delta helper (2.1406ms)\n✔ the API contract test documents the current stock write boundary (2.2662ms)\n✔ storage inventory classifies business, queue, legacy, secret, and presentation state (2.7623ms)\n✔ unregistered browser storage keys fail closed (2.4452ms)\n✔ storage ADR makes server ownership and secret prohibition explicit (4.3666ms)\n✔ canonical time service owns Cairo business boundaries (5.2022ms)\n✔ business calculations use TimeService instead of local calendar construction (7.3141ms)\nℹ tests 141\nℹ suites 0\nℹ pass 141\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 2941.3553\n"
+      "tail": "justment contract persists reason, source, and direction (27.1135ms)\n✔ stock adjustment command and reconciliation are permissioned and idempotent (9.1844ms)\n✔ inventory reports include stock adjustment movements (4.7956ms)\n✔ ordinary item sync cannot write currentStock (4.0937ms)\n✔ bulk item import cannot write currentStock as ordinary metadata (4.3456ms)\n✔ item service has no direct currentStock write in sync or import paths (5.7985ms)\n✔ item form no longer submits unsupported product fields as if they were persisted (1.6247ms)\n✔ transaction service centralizes currentStock writes in the stock delta helper (2.2703ms)\n✔ the API contract test documents the current stock write boundary (2.9914ms)\n✔ storage inventory classifies business, queue, legacy, secret, and presentation state (2.2364ms)\n✔ unregistered browser storage keys fail closed (2.392ms)\n✔ storage ADR makes server ownership and secret prohibition explicit (3.9806ms)\n✔ canonical time service owns Cairo business boundaries (6.9223ms)\n✔ business calculations use TimeService instead of local calendar construction (7.8433ms)\nℹ tests 142\nℹ suites 0\nℹ pass 142\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 2929.2507\n"
     },
     {
       "name": "unit-backend",
       "passed": true,
       "exitCode": 0,
-      "seconds": "4.0",
+      "seconds": "4.3",
       "why": "backend unit tests are mandatory, not optional",
-      "tail": "t-redaction.test.ts \u001b[2m(\u001b[22m\u001b[2m6 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 19\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m✓\u001b[39m src/auth/permission-catalog.test.ts \u001b[2m(\u001b[22m\u001b[2m9 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 233\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m✓\u001b[39m src/common/operation-type.test.ts \u001b[2m(\u001b[22m\u001b[2m20 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[33m 413\u001b[2mms\u001b[22m\u001b[39m\n       \u001b[33m\u001b[2m✓\u001b[22m\u001b[39m keeps totals exact across many rows \u001b[33m 377\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m✓\u001b[39m src/common/scope.test.ts \u001b[2m(\u001b[22m\u001b[2m2 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 11\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m✓\u001b[39m src/common/decimal.test.ts \u001b[2m(\u001b[22m\u001b[2m28 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 96\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m✓\u001b[39m src/common/time/time.service.test.ts \u001b[2m(\u001b[22m\u001b[2m4 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 12\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m✓\u001b[39m src/common/stock-deficit.test.ts \u001b[2m(\u001b[22m\u001b[2m14 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[33m 728\u001b[2mms\u001b[22m\u001b[39m\n       \u001b[33m\u001b[2m✓\u001b[22m\u001b[39m holds for a deterministic pseudo-random movement sequence \u001b[33m 706\u001b[2mms\u001b[22m\u001b[39m\n\n\u001b[2m Test Files \u001b[22m \u001b[1m\u001b[32m9 passed\u001b[39m\u001b[22m\u001b[90m (9)\u001b[39m\n\u001b[2m      Tests \u001b[22m \u001b[1m\u001b[32m108 passed\u001b[39m\u001b[22m\u001b[90m (108)\u001b[39m\n\u001b[2m   Start at \u001b[22m 03:53:07\n\u001b[2m   Duration \u001b[22m 2.29s\u001b[2m (transform 1.40s, setup 0ms, import 3.76s, tests 1.56s, environment 3ms)\u001b[22m\n\n"
+      "tail": "alog.test.ts \u001b[2m(\u001b[22m\u001b[2m9 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 223\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m✓\u001b[39m src/common/operation-type.test.ts \u001b[2m(\u001b[22m\u001b[2m20 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[33m 390\u001b[2mms\u001b[22m\u001b[39m\n       \u001b[33m\u001b[2m✓\u001b[22m\u001b[39m keeps totals exact across many rows \u001b[33m 346\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m✓\u001b[39m src/common/decimal.test.ts \u001b[2m(\u001b[22m\u001b[2m28 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 119\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m✓\u001b[39m src/common/scope.test.ts \u001b[2m(\u001b[22m\u001b[2m2 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 11\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m✓\u001b[39m src/common/time/time.service.test.ts \u001b[2m(\u001b[22m\u001b[2m4 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 19\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m✓\u001b[39m src/common/stock-deficit-policy.test.ts \u001b[2m(\u001b[22m\u001b[2m5 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 14\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m✓\u001b[39m src/common/stock-deficit.test.ts \u001b[2m(\u001b[22m\u001b[2m14 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[33m 984\u001b[2mms\u001b[22m\u001b[39m\n       \u001b[33m\u001b[2m✓\u001b[22m\u001b[39m holds for a deterministic pseudo-random movement sequence \u001b[33m 966\u001b[2mms\u001b[22m\u001b[39m\n\n\u001b[2m Test Files \u001b[22m \u001b[1m\u001b[32m10 passed\u001b[39m\u001b[22m\u001b[90m (10)\u001b[39m\n\u001b[2m      Tests \u001b[22m \u001b[1m\u001b[32m113 passed\u001b[39m\u001b[22m\u001b[90m (113)\u001b[39m\n\u001b[2m   Start at \u001b[22m 04:24:41\n\u001b[2m   Duration \u001b[22m 2.52s\u001b[2m (transform 1.32s, setup 0ms, import 4.22s, tests 1.82s, environment 3ms)\u001b[22m\n\n"
     },
     {
       "name": "unit-frontend",
       "passed": true,
       "exitCode": 0,
-      "seconds": "16.3",
+      "seconds": "16.0",
       "why": "frontend unit tests are mandatory",
-      "tail": " not provided.\n(Use `node --trace-warnings ...` to show where the warning was created)\n \u001b[2m\u001b[90m↓\u001b[39m\u001b[22m src/utils/__tests__/wordSelectionTranslate.test.ts \u001b[2m(\u001b[22m\u001b[2m1 test\u001b[22m\u001b[2m | \u001b[22m\u001b[33m1 skipped\u001b[39m\u001b[2m)\u001b[22m\n(node:18388) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.\n(Use `node --trace-warnings ...` to show where the warning was created)\n \u001b[32m✓\u001b[39m src/services/mutationQueueService.test.ts \u001b[2m(\u001b[22m\u001b[2m2 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 6\u001b[2mms\u001b[22m\u001b[39m\n(node:18728) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.\n(Use `node --trace-warnings ...` to show where the warning was created)\n \u001b[2m\u001b[90m↓\u001b[39m\u001b[22m src/modules/settings/pages/__tests__/ThemeSettings.test.tsx \u001b[2m(\u001b[22m\u001b[2m1 test\u001b[22m\u001b[2m | \u001b[22m\u001b[33m1 skipped\u001b[39m\u001b[2m)\u001b[22m\n\n\u001b[2m Test Files \u001b[22m \u001b[1m\u001b[32m15 passed\u001b[39m\u001b[22m\u001b[2m | \u001b[22m\u001b[33m3 skipped\u001b[39m\u001b[90m (18)\u001b[39m\n\u001b[2m      Tests \u001b[22m \u001b[1m\u001b[32m50 passed\u001b[39m\u001b[22m\u001b[2m | \u001b[22m\u001b[33m3 skipped\u001b[39m\u001b[90m (53)\u001b[39m\n\u001b[2m   Start at \u001b[22m 03:53:11\n\u001b[2m   Duration \u001b[22m 14.95s\u001b[2m (transform 3.24s, setup 13.50s, import 6.91s, tests 10.04s, environment 53.49s)\u001b[22m\n\n"
+      "tail": "ionTranslate.test.ts \u001b[2m(\u001b[22m\u001b[2m1 test\u001b[22m\u001b[2m | \u001b[22m\u001b[33m1 skipped\u001b[39m\u001b[2m)\u001b[22m\n \u001b[32m✓\u001b[39m src/services/mutationQueueService.test.ts \u001b[2m(\u001b[22m\u001b[2m2 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 8\u001b[2mms\u001b[22m\u001b[39m\n(node:9248) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.\n(Use `node --trace-warnings ...` to show where the warning was created)\n \u001b[2m\u001b[90m↓\u001b[39m\u001b[22m src/shared/context/__tests__/ThemeContext.test.tsx \u001b[2m(\u001b[22m\u001b[2m1 test\u001b[22m\u001b[2m | \u001b[22m\u001b[33m1 skipped\u001b[39m\u001b[2m)\u001b[22m\n(node:20716) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.\n(Use `node --trace-warnings ...` to show where the warning was created)\n \u001b[2m\u001b[90m↓\u001b[39m\u001b[22m src/modules/settings/pages/__tests__/ThemeSettings.test.tsx \u001b[2m(\u001b[22m\u001b[2m1 test\u001b[22m\u001b[2m | \u001b[22m\u001b[33m1 skipped\u001b[39m\u001b[2m)\u001b[22m\n\n\u001b[2m Test Files \u001b[22m \u001b[1m\u001b[32m15 passed\u001b[39m\u001b[22m\u001b[2m | \u001b[22m\u001b[33m3 skipped\u001b[39m\u001b[90m (18)\u001b[39m\n\u001b[2m      Tests \u001b[22m \u001b[1m\u001b[32m50 passed\u001b[39m\u001b[22m\u001b[2m | \u001b[22m\u001b[33m3 skipped\u001b[39m\u001b[90m (53)\u001b[39m\n\u001b[2m   Start at \u001b[22m 04:24:45\n\u001b[2m   Duration \u001b[22m 14.62s\u001b[2m (transform 2.88s, setup 12.61s, import 6.39s, tests 10.12s, environment 53.81s)\u001b[22m\n\n"
     },
     {
       "name": "build-full",
       "passed": true,
       "exitCode": 0,
-      "seconds": "34.9",
+      "seconds": "36.7",
       "why": "both workspaces must build",
-      "tail": "                   36.98 kB\ndist/assets/client-D0b-UVFC.js                         37.99 kB\ndist/assets/chunk-OE4NN4TA-BOV8hdgW.js                 46.87 kB\ndist/assets/i18n-C5JFEwKA.js                           50.42 kB\ndist/assets/useOfflineSync-CWV88eZb.js                 54.43 kB\ndist/assets/Statement-B70rM1ZO.js                      56.32 kB\ndist/assets/Stocktaking-QxIauUBv.js                    58.68 kB\ndist/assets/useInventoryStore-Cj5-vas1.js              66.47 kB\ndist/assets/Items-DPIbS-_y.js                          74.59 kB\ndist/assets/proxy-31qRDBtb.js                         123.78 kB\ndist/assets/Operations-Dl9Qvwgx.js                    135.84 kB\ndist/assets/index.es-CcmfL4ld.js                      153.17 kB\ndist/assets/html2canvas-iC33Ouah.js                   201.05 kB\ndist/assets/index-C0_okrNb.js                         228.58 kB\ndist/assets/jspdf.es.min-BFOrgdmR.js                  412.48 kB\ndist/assets/exceljs.min-AVZbcHwY.js                   945.21 kB\n\n\u001b[32m✓ built in 3.38s\u001b[39m\nnpm notice run feedfactory-pro@0.0.0 backend:build\nnpm notice run npm run build --workspace=backend\nnpm notice run @feedfactory/backend@0.0.0 build\nnpm notice run tsc -p tsconfig.json\n"
+      "tail": " kB\ndist/assets/Statement-B70rM1ZO.js                      56.32 kB\ndist/assets/Stocktaking-B0Ch16UH.js                    58.71 kB\ndist/assets/useInventoryStore-Cj5-vas1.js              66.47 kB\ndist/assets/Items-DPIbS-_y.js                          74.59 kB\ndist/assets/proxy-31qRDBtb.js                         123.78 kB\ndist/assets/Operations-Dl9Qvwgx.js                    135.84 kB\ndist/assets/index.es-CcmfL4ld.js                      153.17 kB\ndist/assets/html2canvas-iC33Ouah.js                   201.05 kB\ndist/assets/index-K6vPJkf-.js                         228.58 kB\ndist/assets/jspdf.es.min-BFOrgdmR.js                  412.48 kB\ndist/assets/exceljs.min-AVZbcHwY.js                   945.21 kB\n\n\u001b[33m\u001b[33m[PLUGIN_TIMINGS] Warning:\u001b[0m Your build spent significant time in plugins. Here is a breakdown:\n  - vite:esbuild-transpile (48%)\n  - vite:css (25%)\n  - vite:css-post (10%)\n  - vite:asset (5%)\nSee https://rolldown.rs/options/checks#plugintimings for more details.\n\u001b[39m\n\u001b[32m✓ built in 3.78s\u001b[39m\nnpm notice run feedfactory-pro@0.0.0 backend:build\nnpm notice run npm run build --workspace=backend\nnpm notice run @feedfactory/backend@0.0.0 build\nnpm notice run tsc -p tsconfig.json\n"
     },
     {
       "name": "compose-config",
       "passed": true,
       "exitCode": 0,
-      "seconds": "0.3",
+      "seconds": "0.2",
       "why": "the deployment path must be valid",
       "tail": ""
     }
