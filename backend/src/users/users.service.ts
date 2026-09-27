@@ -517,6 +517,104 @@ export class UsersService {
   }
 
 
+  /**
+   * ا-٦ — the invitation flow could send, verify and accept, but an
+   * administrator had no way to see any of it. "Who did I invite, did they take
+   * it up, and is it still alive" had no answer, so an invitation that died
+   * silently was indistinguishable from one waiting on a colleague.
+   *
+   * The status is derived, not read. `verifyInvitationToken` and
+   * `acceptInvitation` both reject an invitation whose `expiresAt` has passed,
+   * and nothing ever moves the stored `status`, so an expired invitation is
+   * still recorded as "pending" forever. Returning that column verbatim would
+   * present a dead invitation as a live one — the same kind of confident
+   * falsehood this file has been removing elsewhere. `storedStatus` is returned
+   * alongside so the divergence is visible rather than hidden.
+   *
+   * The token never leaves. It is a bearer secret that mints an account, so
+   * handing it to any `users.view` holder would be a privilege escalation; it
+   * is used for sending and nowhere else.
+   */
+  async listInvitations(status?: string) {
+    const now = Date.now();
+    const where: Prisma.InvitationWhereInput = {};
+
+    const wanted = String(status || '').trim().toLowerCase();
+    if (wanted === 'accepted' || wanted === 'revoked') {
+      where.status = wanted;
+    } else if (wanted === 'expired') {
+      // Expired is not a stored value, so it cannot be filtered in the query.
+      where.status = { not: 'accepted' };
+      where.acceptedAt = null;
+    } else if (wanted === 'pending') {
+      where.status = { not: 'accepted' };
+      where.acceptedAt = null;
+    }
+
+    const rows = await this.prisma.invitation.findMany({
+      where,
+      include: {
+        role: { select: { id: true, name: true } },
+        invitedBy: { select: { id: true, username: true, firstName: true, lastName: true } },
+      },
+      orderBy: [{ createdAt: 'desc' }],
+      take: 200,
+    });
+
+    const invitations = rows.map((row) => {
+      const isAccepted = row.status === 'accepted' || Boolean(row.acceptedAt);
+      const isRevoked = row.status === 'revoked';
+      const isExpired = !isAccepted && !isRevoked && row.expiresAt.getTime() < now;
+
+      return {
+        id: row.id,
+        email: row.email,
+        status: isAccepted ? 'accepted' : isRevoked ? 'revoked' : isExpired ? 'expired' : 'pending',
+        // Shown so a stored status that disagrees with reality is auditable
+        // rather than silently overridden.
+        storedStatus: row.status,
+        role: { id: row.role.id, name: row.role.name },
+        invitedBy: row.invitedBy
+          ? {
+              id: row.invitedBy.id,
+              username: row.invitedBy.username,
+              fullName:
+                `${row.invitedBy.firstName || ''} ${row.invitedBy.lastName || ''}`.trim() ||
+                row.invitedBy.username,
+            }
+          : null,
+        createdAt: row.createdAt,
+        expiresAt: row.expiresAt,
+        acceptedAt: row.acceptedAt,
+        recipientUserId: row.recipientUserId,
+      };
+    });
+
+    // Expired is not a stored value, so no `where` clause can express it. The
+    // filter therefore runs here, on the derived status, which is also what makes
+    // `pending` and `expired` disjoint: the query narrows both to non-accepted
+    // rows, and only the derived status separates them.
+    //
+    // Filtering `pending` by the stored column alone was the bug this shape
+    // exists to prevent — an invitation past its expiry is still recorded as
+    // "pending", so a queue that trusted the column showed dead invitations as
+    // live ones while looking like an answer.
+    const filtered = wanted
+      ? invitations.filter((entry) => entry.status === wanted)
+      : invitations;
+
+    return {
+      data: filtered,
+      total: filtered.length,
+      summary: {
+        pending: invitations.filter((entry) => entry.status === 'pending').length,
+        expired: invitations.filter((entry) => entry.status === 'expired').length,
+        accepted: invitations.filter((entry) => entry.status === 'accepted').length,
+        revoked: invitations.filter((entry) => entry.status === 'revoked').length,
+      },
+    };
+  }
+
   async verifyInvitationToken(token: string) {
     const cleanToken = String(token || '').trim();
     if (!cleanToken) throw new BadRequestException('token is required');

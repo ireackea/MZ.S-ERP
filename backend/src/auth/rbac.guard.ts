@@ -92,8 +92,23 @@ export class RbacGuard implements CanActivate {
     const backupActor = request?.backupActor;
     if (backupActor) {
       const role = String(backupActor.role || 'system');
-      // Legacy backup tokens can only operate backup endpoints.
-      const permissions = ['backup.*'];
+
+      // Only a shared-secret service token may act on the backup surface without
+      // holding a backup.* grant, and only because it proved knowledge of
+      // BACKUP_API_TOKEN / ADMIN_TOKEN. `type` is the discriminator that was
+      // missing: the cookie path also lands here, and treating a session cookie
+      // as a service token is what handed every signed-in user the whole backup
+      // surface.
+      if (String(backupActor.type || '') === 'system') {
+        return { role, permissions: ['backup.*'] };
+      }
+
+      // Everyone else is authorized by what their role actually grants. An empty
+      // list denies, which is the correct answer for an actor whose permissions
+      // could not be established.
+      const permissions = Array.isArray(backupActor.permissions)
+        ? backupActor.permissions.filter((entry: unknown): entry is string => typeof entry === 'string')
+        : [];
       return { role, permissions };
     }
 

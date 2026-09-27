@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { backendUrl, e2ePassword as adminPassword, e2eUsername as adminUsername } from './support/runtimeConfig';
-import { cleanupRole, cleanupUser } from './support/dbCleanup';
+import { backdateInvitation, cleanupFixtures, readInvitationRow } from './support/dbCleanup';
 
 /**
  * FC-SEC-005 — the role matrix, driven as a real non-wildcard session.
@@ -108,9 +108,12 @@ const createUserWithPermissions = async (
   return { username, userId, roleId };
 };
 
+// One round trip, not one per fixture. The per-id helpers each shell out to
+// `docker compose exec psql`, and with twenty fixtures the teardown alone
+// exceeded vitest's 10s afterAll timeout — which surfaced as a single failing
+// test in an otherwise green run.
 afterAll(() => {
-  for (const id of createdUserIds) cleanupUser(id);
-  for (const id of createdRoleIds) cleanupRole(id);
+  cleanupFixtures(createdUserIds, createdRoleIds);
 });
 
 describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
@@ -798,5 +801,147 @@ describe('F-48 last login is reported from the session table, not invented', () 
 
     // And the email the table now renders has to survive the mapper too.
     expect(neverRow.email).toBe(`f48never_${suffix}@example.test`);
+  }, 120000);
+});
+
+/**
+ * ا-٦ - the invitation flow could send, verify and accept, and none of it was
+ * visible.
+ *
+ * An administrator who invited someone had no way to ask whether the invitation
+ * was taken up. Worse, the stored `status` never changes on expiry, and both
+ * verify and accept reject a past `expiresAt` — so an invitation that died
+ * months ago is still recorded as "pending". A queue that returned that column
+ * verbatim would present the dead ones as live, which is worse than having no
+ * queue at all: it looks like an answer.
+ *
+ * So the derived status is held to three things at once: the stored row must
+ * still say pending, the response must say expired, and the token must be
+ * absent from the payload.
+ */
+describe('ا-٦ pending invitations can be seen, and an expired one is not called pending', () => {
+  it('lists an outstanding invitation without exposing its token', async () => {
+    const suffix = randomUUID().slice(0, 8);
+    const email = `f48invite_${suffix}@example.test`;
+    const adminCookie = await adminLogin();
+
+    const roles = await request('/users/roles', { headers: { Cookie: adminCookie } });
+    const viewerRole = data(roles.body).find((r: any) => r.name === 'Viewer');
+
+    const sent = await request('/users/invite', {
+      method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, roleId: viewerRole.id }),
+    });
+    expect(sent.response.status).toBe(201);
+    const invitation = data(sent.body);
+
+    // Asserting on the shape, not just truthiness. `String(undefined)` is the
+    // string "undefined", which is truthy, so a missing field sails through a
+    // `toBeTruthy()` and every later statement silently queries for nothing.
+    const invitationId = String(invitation.invitationId ?? '');
+    expect(invitationId, 'the invite must return the id it created').toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    );
+
+    // The real token, so "the token is not leaked" is a fact about a known
+    // secret rather than a check for a key that happens to be missing.
+    const link = String(invitation.invitationLink ?? '');
+    const token = link.split('token=')[1] ?? '';
+    expect(token.length, 'the invite must carry a token to test against').toBeGreaterThan(16);
+
+    const list = await request('/users/invitations?status=pending', { headers: { Cookie: adminCookie } });
+    expect(list.response.status).toBe(200);
+
+    const rows = data(list.body) as any[];
+    const found = rows.find((r) => r.email === email);
+    expect(found, 'a freshly sent invitation must appear in the queue').toBeTruthy();
+    expect(found.id).toBe(invitationId);
+    expect(found.status).toBe('pending');
+
+    // The token mints an account. Any holder of users.view could otherwise
+    // create one, which is the opposite of what the list is for.
+    const serialised = JSON.stringify(list.body);
+    expect(serialised, 'the queue must never carry a bearer token').not.toContain(token);
+    expect(serialised).not.toMatch(/"token"/);
+    expect(found).not.toHaveProperty('token');
+
+    // And the fields the UI needs are present, not just the absence of the
+    // dangerous one.
+    expect(found.role?.name).toBe('Viewer');
+    expect(found.expiresAt).toBeTruthy();
+    expect(found.createdAt).toBeTruthy();
+
+    // Now the honesty case.
+    const longAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    expect(backdateInvitation(invitationId, longAgo), 'the fixture must be backdatable').toBe(true);
+
+    const stored = readInvitationRow(invitationId);
+    expect(stored, 'the stored row must be readable').toBeTruthy();
+    expect(
+      stored!.status,
+      'nothing in the app moves the stored status, which is the whole point',
+    ).toBe('pending');
+
+    const afterExpiry = await request('/users/invitations?status=expired', { headers: { Cookie: adminCookie } });
+    expect(afterExpiry.response.status).toBe(200);
+    const expiredRows = data(afterExpiry.body) as any[];
+    const expired = expiredRows.find((r) => r.email === email);
+    expect(expired, 'an invitation past its expiry must be listed as expired').toBeTruthy();
+    expect(expired.status).toBe('expired');
+    expect(
+      expired.storedStatus,
+      'the divergence must be visible, not hidden behind the derived value',
+    ).toBe('pending');
+
+    // And it must be gone from the pending queue, or the two lists disagree.
+    const stillPending = await request('/users/invitations?status=pending', { headers: { Cookie: adminCookie } });
+    const pendingRows = data(stillPending.body) as any[];
+    expect(
+      pendingRows.find((r) => r.email === email),
+      'an expired invitation must not remain in the pending queue',
+    ).toBeFalsy();
+  }, 120000);
+
+  it('refuses the queue to a role that was not granted users.view', async () => {
+    const adminCookie = await adminLogin();
+    const suffix = randomUUID().slice(0, 8);
+
+    // A custom role, not a trimmed built-in one. Trimming Viewer mutates a row
+    // every other test in this file depends on, and the built-in role
+    // definitions are reconciled at bootstrap, so the test would be racing that
+    // repair: it passed or failed depending on who logged in next.
+    const role = await request('/users/roles', {
+      method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: `MatrixQueueGuard_${suffix}`,
+        permissions: ['dashboard.view'],
+      }),
+    });
+    expect(role.response.status).toBe(201);
+    const roleId = String(data(role.body).id);
+    createdRoleIds.push(roleId);
+
+    const created = await request('/users', {
+      method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: `matrix_noview_${suffix}`,
+        password: PASSWORD,
+        roleId,
+        firstName: 'No',
+        lastName: 'View',
+      }),
+    });
+    expect(created.response.status).toBe(201);
+    createdUserIds.push(String(data(created.body).id));
+
+    const cookie = await login(`matrix_noview_${suffix}`, PASSWORD);
+    const me = await request('/users/permissions/me', { headers: { Cookie: cookie } });
+    expect(data(me.body).permissions).not.toContain('users.view');
+
+    const queue = await request('/users/invitations', { headers: { Cookie: cookie } });
+    expect(queue.response.status).toBe(403);
   }, 120000);
 });
