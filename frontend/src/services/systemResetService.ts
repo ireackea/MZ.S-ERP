@@ -15,12 +15,23 @@ export interface ResetChallengeResponse {
   ttlSeconds: number;
 }
 
+export interface ResetTableReport {
+  table: string;
+  rowsDeleted: number;
+}
+
 export interface SystemResetResponse {
   success: boolean;
   scope: SystemResetScope;
   message: string;
   timestamp: string;
-  tablesAffected?: string[];
+  /** Rows, not names. The endpoint used to return a list of table names, which
+   *  included models that no longer exist and were never touched. */
+  tablesAffected?: ResetTableReport[];
+  /** Models the reset looked for and the schema no longer has. */
+  absentModels?: string[];
+  /** Which account survived a `full` reset. The first thing an operator asks. */
+  keptSuperAdminId?: string | null;
   backupId?: string | null;
 }
 
@@ -122,7 +133,16 @@ export const systemResetService = {
         scope: (data?.scope as SystemResetScope) || params.scope,
         message: data?.message || 'تمت إعادة ضبط النظام بنجاح.',
         timestamp: data?.timestamp || new Date().toISOString(),
-        tablesAffected: Array.isArray(data?.tablesAffected) ? data.tablesAffected : undefined,
+        tablesAffected: Array.isArray(data?.tablesAffected)
+          ? data.tablesAffected.map((entry: any) => ({
+              table: String(entry?.table ?? ''),
+              rowsDeleted: Number(entry?.rowsDeleted ?? 0),
+            }))
+          : undefined,
+        absentModels: Array.isArray(data?.absentModels)
+          ? data.absentModels.map((entry: any) => String(entry))
+          : [],
+        keptSuperAdminId: data?.keptSuperAdminId ?? null,
         backupId: data?.backupId ?? null,
       };
     } catch (error: any) {
