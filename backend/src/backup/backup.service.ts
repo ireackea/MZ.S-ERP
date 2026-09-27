@@ -4,6 +4,7 @@
 // ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -77,7 +78,7 @@ type BackupManifestEntry = {
   createdAt: string;
   sizeBytes: number;
   checksumSha256: string;
-  integrity: 'verified' | 'failed';
+  integrity: BackupIntegrity;
   passwordProtected: boolean;
   actor: BackupActor;
   metadata: BackupMetaCounts;
@@ -86,12 +87,51 @@ type BackupManifestEntry = {
   /** FC-OPS-001 — whether this backup is complete enough to be a full restore. */
   complete?: boolean;
   missingModels?: string[];
+  /**
+   * Non-null when the archive covers only these tables.
+   *
+   * This is the field the restore path and the UI both read to decide whether a
+   * restore replaces the database or the stock ledger. Without it an inventory
+   * archive is indistinguishable from a full one, which is how restoring "stock"
+   * replaced users and roles.
+   */
+  partialTables?: readonly string[] | null;
   safetySnapshotForId?: string | null;
 };
 
+/**
+ * `incomplete` exists because "verified" was previously a constant and therefore
+ * carried no information. An archive that was written but does not contain what
+ * its type promises is neither good nor corrupt: it is incomplete, and conflating
+ * that with success is how a database-free archive ended up wearing a green
+ * badge.
+ */
+export type BackupIntegrity = 'verified' | 'incomplete' | 'failed';
+
+/**
+ * The tables an `inventory` backup covers.
+ *
+ * Everything the stock ledger is made of, and nothing that identifies a person.
+ * The list is the contract: it is what `pg_dump --table` selects, what
+ * `pg_restore --table` replays, and what the manifest and the UI report. Adding a
+ * table here is a decision to include it in stock restores.
+ */
+export const INVENTORY_TABLES = [
+  'Item',
+  'Transaction',
+  'OpeningBalance',
+  'StockDeficit',
+  'formulations',
+  'formulation_items',
+  'unloading_rules',
+  'stocktaking_sessions',
+  'stocktaking_entries',
+  'stocktaking_counts',
+] as const;
+
 type BackupListItem = BackupManifestEntry & {
   integrityVerified: boolean;
-  integrityLabel: 'verified' | 'failed';
+  integrityLabel: BackupIntegrity;
 };
 
 type ConfigSnapshot = {
@@ -148,6 +188,12 @@ type BackupPayload = {
   createdAt: string;
   sourceBackupId?: string;
   dbBase64?: string;
+  /**
+   * Set when the dump covers only these tables. Its presence is what makes the
+   * archive partial, and its absence is what tells the restore path that
+   * `pg_restore --clean` is correct.
+   */
+  partialTables?: readonly string[] | null;
   dataSnapshot?: PrismaDataSnapshot;
   configFiles: ConfigSnapshot[];
   schedule?: BackupScheduleState;
@@ -361,20 +407,72 @@ export class BackupService implements OnModuleDestroy {
     }
   }
 
+  /**
+   * Serialises every read-modify-write of the manifest.
+   *
+   * Two of those overlapped before. `GET /backup/list` read the manifest, spent
+   * seconds checksumming every archive, then wrote back its own stale copy — so a
+   * backup created in between was erased from the index while its `.ffbkp` file
+   * survived as an orphan: invisible, uncounted in the reported total, never
+   * pruned by retention (which walks manifest entries) and unaddressable by id.
+   * The archive existed and the system said it did not.
+   */
+  private manifestChain: Promise<unknown> = Promise.resolve();
+
+  private withManifestLock<T>(fn: () => Promise<{ manifest: BackupManifestEntry[]; result: T }>): Promise<T> {
+    const run = this.manifestChain.then(() => fn()).then((value) => value.result);
+    // Keep the chain alive regardless of outcome; a rejected link would wedge
+    // every later caller.
+    this.manifestChain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
   private async readManifest(): Promise<BackupManifestEntry[]> {
     await this.ensureWorkspace();
-    const raw = await fsPromises.readFile(this.manifestFile, 'utf8').catch(() => '[]');
+    let raw: string;
+    try {
+      raw = await fsPromises.readFile(this.manifestFile, 'utf8');
+    } catch {
+      // Absent is a legitimate first-run state; unreadable is not.
+      return [];
+    }
     try {
       const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? (parsed as BackupManifestEntry[]) : [];
-    } catch {
-      return [];
+      if (Array.isArray(parsed)) return parsed as BackupManifestEntry[];
+      throw new Error('manifest is not an array');
+    } catch (error: any) {
+      // Gate 1.4 — a corrupt index used to return `[]`, so every backup vanished
+      // from the UI with no error anywhere. It now refuses, and keeps the damaged
+      // file for inspection instead of overwriting it on the next write.
+      const quarantine = `${this.manifestFile}.corrupt-${Date.now()}`;
+      await fsPromises.rename(this.manifestFile, quarantine).catch(() => undefined);
+      throw new Error(
+        `Backup manifest is unreadable (${error?.message ?? 'parse error'}). `
+        + `The damaged file was kept at ${path.basename(quarantine)}; it has not been overwritten.`,
+      );
     }
   }
 
+  /**
+   * Gate 1.4 — written through a temporary file and renamed.
+   *
+   * A crash or a full disk mid-`writeFile` truncated the index, and the next
+   * read returned `[]` for every backup. `rename` within a directory is atomic,
+   * so a reader sees either the old index or the new one.
+   */
   private async writeManifest(entries: BackupManifestEntry[]) {
-    await this.ensureWorkspace();
-    await fsPromises.writeFile(this.manifestFile, JSON.stringify(entries, null, 2), 'utf8');
+    const temp = `${this.manifestFile}.tmp-${process.pid}-${Date.now()}`;
+    const body = JSON.stringify(entries, null, 2);
+    await fsPromises.writeFile(temp, body, 'utf8');
+    try {
+      await fsPromises.rename(temp, this.manifestFile);
+    } catch (error) {
+      await fsPromises.unlink(temp).catch(() => undefined);
+      throw error;
+    }
   }
 
   private async readSchedule(): Promise<BackupScheduleState> {
@@ -502,8 +600,17 @@ export class BackupService implements OnModuleDestroy {
       // silently degraded to a partial JSON snapshot and no database was copied.
       const databaseUrl = String(process.env.DATABASE_URL || '').trim();
       if (isPostgresUrl(databaseUrl)) {
-        const dump = await dumpPostgres(databaseUrl, { format: 'custom' });
+        // Gate 1.3 - an inventory archive is now genuinely an inventory archive.
+        //
+        // It used to take the identical pg_dump branch as `full`, so the file was
+        // byte-for-byte a whole-database dump. Restoring it ran `pg_restore
+        // --clean --if-exists`, which drops and recreates the schema - replacing
+        // users and roles while the UI reported a stock backup, and the manifest
+        // claimed completeness.
+        const tables = type === 'inventory' ? [...INVENTORY_TABLES] : undefined;
+        const dump = await dumpPostgres(databaseUrl, { format: 'custom', tables });
         payload.dbBase64 = dump.base64;
+        payload.partialTables = tables ?? null;
       } else {
         // A non-PostgreSQL deployment (e.g. a disposable SQLite test rig) still
         // gets the structured snapshot rather than an empty backup.
@@ -876,6 +983,16 @@ export class BackupService implements OnModuleDestroy {
     const stat = await fsPromises.stat(filePath);
     const checksumSha256 = await this.computeFileChecksum(filePath);
 
+    // What this archive is supposed to contain, versus what it actually does.
+    const wantsDatabase =
+      params.type === 'full' || params.type === 'inventory' || params.type === 'safety_snapshot';
+    const hasDatabase = typeof payload.dbBase64 === 'string' && payload.dbBase64.length > 0;
+    const hasConfig = (payload.configFiles?.length ?? 0) > 0;
+    const hasSnapshot = Boolean(payload.dataSnapshot);
+
+    const satisfied = wantsDatabase ? hasDatabase || hasSnapshot : params.type === 'config' ? hasConfig : true;
+    const integrity: BackupIntegrity = satisfied ? 'verified' : 'incomplete';
+
     const entry: BackupManifestEntry = {
       id: envelope.id,
       fileName,
@@ -884,7 +1001,16 @@ export class BackupService implements OnModuleDestroy {
       createdAt: envelope.createdAt,
       sizeBytes: stat.size,
       checksumSha256,
-      integrity: 'verified',
+      // Gate 1.2 - measured, not asserted.
+      //
+      // This was the literal 'verified' on every archive, including the ones with
+      // no database in them: POST /backup/config produces no dbBase64, so
+      // buildManifest records every model as missing and `complete` comes out
+      // false - and the frontend type had no field for either, so the table
+      // painted a green badge over an archive that cannot restore a database. The
+      // one field that would have said otherwise was dropped on the way to the
+      // screen.
+      integrity,
       passwordProtected: envelope.passwordProtected,
       actor,
       metadata: envelope.metadata,
@@ -894,27 +1020,43 @@ export class BackupService implements OnModuleDestroy {
       databaseBytes: payload.manifest?.databaseDump.byteLength,
       complete: (payload.manifest?.missingModels?.length ?? 1) === 0,
       missingModels: payload.manifest?.missingModels ?? ['manifest-missing'],
+      partialTables: payload.partialTables ?? null,
       safetySnapshotForId: params.sourceBackupId || null,
     };
 
-    const manifest = await this.readManifest();
-    manifest.unshift(entry);
-    const retained = await this.applyRetention(manifest, schedule.retentionDays || 30);
-    await this.writeManifest(retained);
+    await this.withManifestLock(async () => {
+      const manifest = await this.readManifest();
+      manifest.unshift(entry);
+      const retained = await this.applyRetention(manifest, schedule.retentionDays || 30);
+      await this.writeManifest(retained);
+      return { manifest: retained, result: undefined };
+    });
 
     return {
       ...entry,
-      integrityVerified: true,
-      integrityLabel: 'verified',
+      integrityVerified: integrity === 'verified',
+      integrityLabel: integrity,
     };
   }
 
-  private toListItem(entry: BackupManifestEntry, valid: boolean): BackupListItem {
+  /**
+   * A matching checksum proves the file was not corrupted in transit. It does not
+   * prove the archive contains what its type promises — `toListItem` used to
+   * relabel any intact file as `verified`, which is how a config archive with no
+   * database in it kept a green badge. Incompleteness is preserved here and
+   * recorded when the backup was written.
+   */
+  private toListItem(entry: BackupManifestEntry, checksumValid: boolean): BackupListItem {
+    const integrity: BackupIntegrity = !checksumValid
+      ? 'failed'
+      : entry.integrity === 'incomplete' || entry.complete === false
+        ? 'incomplete'
+        : 'verified';
     return {
       ...entry,
-      integrity: valid ? 'verified' : 'failed',
-      integrityVerified: valid,
-      integrityLabel: valid ? 'verified' : 'failed',
+      integrity,
+      integrityVerified: integrity === 'verified',
+      integrityLabel: integrity,
     };
   }
 
@@ -949,8 +1091,19 @@ export class BackupService implements OnModuleDestroy {
       list.push(this.toListItem(entry, valid));
     }
 
+    // The write-back reuses the manifest this call read, so it must not race a
+    // concurrent create. Taking the lock here too is what stops a listing from
+    // erasing a backup it never saw.
     if (changed) {
-      await this.writeManifest(manifest);
+      await this.withManifestLock(async () => {
+        const current = await this.readManifest();
+        for (const entry of sorted) {
+          const still = current.find((candidate) => candidate.id === entry.id);
+          if (still) still.integrity = entry.integrity;
+        }
+        await this.writeManifest(current);
+        return { manifest: current, result: undefined };
+      });
     }
 
     return list;
@@ -1041,11 +1194,28 @@ export class BackupService implements OnModuleDestroy {
    *
    * The caller must already have taken a safety snapshot: this is destructive.
    */
-  private async restoreDatabaseFromBase64(dbBase64: string) {
+  /**
+   * Gate 1.5 - a restore holds an exclusive claim.
+   *
+   * Two concurrent restores both called `prisma.$disconnect()`, both spawned
+   * `pg_restore --clean`, and whichever finished first reconnected the pool while
+   * the other was still dropping and recreating objects. Every other request in
+   * the process failed against a disconnected client for the whole window, and
+   * the second dump was replayed onto a half-rebuilt schema. The scheduler beside
+   * this method already carried a running flag; the destructive path did not.
+   */
+  private restoreInFlight = false;
+
+  private async restoreDatabaseFromBase64(dbBase64: string, tables?: readonly string[] | null) {
     const databaseUrl = String(process.env.DATABASE_URL || '').trim();
     if (!isPostgresUrl(databaseUrl)) {
       throw new BadRequestException('Database restore is only supported for PostgreSQL deployments');
     }
+
+    if (this.restoreInFlight) {
+      throw new ConflictException('Another restore is already running. Wait for it to finish.');
+    }
+    this.restoreInFlight = true;
 
     // Release the pool so the restore is not fighting live connections.
     await this.prisma.$disconnect();
@@ -1054,8 +1224,12 @@ export class BackupService implements OnModuleDestroy {
         clean: true,
         exitOnError: true,
         singleTransaction: true,
+        // A partial archive must not be replayed with --clean: that drops and
+        // recreates the schema rather than restoring the tables it names.
+        tables: tables ? [...tables] : undefined,
       });
     } finally {
+      this.restoreInFlight = false;
       await this.prisma.$connect();
     }
   }
@@ -1212,25 +1386,62 @@ export class BackupService implements OnModuleDestroy {
       throw new BadRequestException('Backup integrity verification failed; restore is blocked');
     }
 
-    const safetySnapshot = await this.createBackupInternal({
-      type: 'safety_snapshot',
-      trigger: 'manual',
-      actor: { ...params.actor, mode: 'manual' },
-      encryptionPassword: params.decryptionPassword,
-      sourceBackupId: params.backupId,
-    });
-
+    // Gate 1.6 - opening the confirm dialog no longer dumps the database.
+    //
+    // The preview called createBackupInternal with type safety_snapshot, which
+    // runs `pg_dump --serializable-deferrable`. That takes a table-level lock
+    // conflicting with every write in the application, and there is no
+    // lock_timeout, so one click on "restore" froze the write path process-wide
+    // for the length of the dump. It also wrote ~1.37x the database per click,
+    // with retention keyed on age alone and no cap, so fifty previews on a 2GB
+    // database left roughly 137GB of archives retention never considered.
+    //
+    // What a preview needs is a record that this is the moment the operator
+    // confirmed - not a fourth copy of the database. The confirmation is taken by
+    // applyRestore itself, under the exclusive claim it now holds, and the blast
+    // radius is stated rather than implied.
     const token = this.createRestoreToken({
       backupId: params.backupId,
       actorKey: this.actorKey(params.actor),
-      safetySnapshotId: safetySnapshot.id,
+      safetySnapshotId: null,
     });
 
     return {
       requiresConfirmation: true,
       restoreToken: token.token,
-      safetySnapshotId: safetySnapshot.id,
+      safetySnapshotId: null,
       target: this.toListItem(target, true),
+      blastRadius: this.describeRestoreBlastRadius(target),
+    };
+  }
+
+  /**
+   * Gate 1.6 - an inventory archive replaces stock, not the system.
+   *
+   * Derived from the archive rather than from which button the operator pressed.
+   * A full dump replaces every table including users and roles, and the previous
+   * preview mentioned that only in passing, as "system data".
+   */
+  private describeRestoreBlastRadius(entry: BackupManifestEntry): {
+    replacesDatabase: boolean;
+    replacesIdentity: boolean;
+    tables: readonly string[] | null;
+    note: string;
+  } {
+    const tables = entry.partialTables ?? null;
+    if (tables?.length) {
+      return {
+        replacesDatabase: false,
+        replacesIdentity: false,
+        tables,
+        note: 'ستُستبدل بيانات المخزون فقط. لن تتأثر المستخدمون والأدوار.',
+      };
+    }
+    return {
+      replacesDatabase: true,
+      replacesIdentity: true,
+      tables: null,
+      note: 'ستُستبدل قاعدة البيانات بالكامل، بما فيها المستخدمون والأدوار.',
     };
   }
 
@@ -1268,7 +1479,7 @@ export class BackupService implements OnModuleDestroy {
     let restoredConfigFiles = 0;
     if (payload.type !== 'config') {
       if (payload.dbBase64) {
-        await this.restoreDatabaseFromBase64(payload.dbBase64);
+        await this.restoreDatabaseFromBase64(payload.dbBase64, payload.partialTables);
       } else if (payload.dataSnapshot) {
         await this.restorePrismaSnapshot(payload.dataSnapshot, payload.type);
       } else {

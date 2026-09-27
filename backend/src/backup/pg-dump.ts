@@ -121,7 +121,7 @@ const runTool = async (tool: string, args: string[], parsed: ParsedDatabaseUrl, 
  */
 export const dumpPostgres = async (
   rawUrl: string,
-  options: { format?: PgDumpFormat } = {},
+  options: { format?: PgDumpFormat; tables?: string[] } = {},
 ): Promise<PgDumpResult> => {
   const parsed = parsePostgresUrl(rawUrl);
   const format = options.format ?? 'custom';
@@ -134,6 +134,14 @@ export const dumpPostgres = async (
     '--serializable-deferrable',
     `--format=${format}`,
   ];
+  // A partial dump. This is what makes an "inventory" backup an inventory
+  // backup: the previous buildPayload took the same pg_dump branch for full,
+  // inventory and safety_snapshot, so an inventory archive was byte-for-byte a
+  // whole-database dump, and restoring it with --clean replaced users and roles
+  // while the UI called it a stock backup.
+  if (options.tables?.length) {
+    for (const table of options.tables) args.push(`--table=${table}`);
+  }
   if (format === 'plain') {
     // Keep the dump reloadable by a plain `psql` too.
     args.push('--inserts', '--clean');
@@ -162,6 +170,16 @@ export type RestoreOptions = {
   exitOnError?: boolean;
   /** Single transaction: a failure leaves the database untouched. */
   singleTransaction?: boolean;
+  /**
+   * Restores only these tables, and without --clean.
+   *
+   * The pairing matters: a partial dump restored with `clean` drops and
+   * recreates the objects it names, which for a table list is a different
+   * operation from restoring a database. `clean` is only correct for a full
+   * dump, and applying it to a subset is how a stock restore can take identity
+   * tables with it.
+   */
+  tables?: string[];
 };
 
 export const restorePostgres = async (
@@ -182,9 +200,13 @@ export const restorePostgres = async (
   // A custom-format archive is replayed by pg_restore, which reads stdin.
   if (isValidCustomDump(dumpBase64)) {
     const args: string[] = ['--no-password', '--no-owner', '--no-privileges'];
-    if (options.clean !== false) args.push('--clean', '--if-exists');
+    // `clean` drops and recreates the objects it names. Correct for a full dump,
+    // wrong for a subset: it is the difference between "restore these tables" and
+    // "replace the schema". A partial restore therefore never passes it.
+    if (options.clean !== false && !options.tables?.length) args.push('--clean', '--if-exists');
     if (options.exitOnError !== false) args.push('--exit-on-error');
     if (options.singleTransaction) args.push('--single-transaction');
+    for (const table of options.tables ?? []) args.push(`--table=${table}`);
     args.push('--dbname', parsed.database);
 
     try {
