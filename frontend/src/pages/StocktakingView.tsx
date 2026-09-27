@@ -22,6 +22,7 @@ import { toast } from '@services/toastService';
 import { useInventoryStore } from '../store/useInventoryStore';
 import { exportRowsToExcel, readFirstWorksheetRows } from '../utils/excelWorkbook';
 import StocktakingAuditPane from './stocktaking/StocktakingAuditPane';
+import StockDeficitQueue from './stocktaking/StockDeficitQueue';
 import { getOpeningBalances } from '../services/openingBalanceService';
 import { formatNumber, getAuditEntryStatus } from './stocktaking/shared';
 
@@ -33,7 +34,7 @@ interface StocktakingProps {
   companyLogoUrl?: string;
 }
 
-type WorkPane = 'operations' | 'audit';
+type WorkPane = 'operations' | 'audit' | 'deficits';
 type QuickFilter = 'all' | 'conflicts';
 
 const getCurrentMonthKey = () => {
@@ -302,6 +303,14 @@ const Stocktaking: React.FC<StocktakingProps> = ({
           <button className={`px-3 py-2 rounded-lg border font-bold ${pane === 'audit' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-300'}`} onClick={() => setPane('audit')}>
             المراجعة / الطباعة
           </button>
+          <button
+            type="button"
+            data-testid="deficits-tab"
+            className={`px-3 py-2 rounded-lg border font-bold ${pane === 'deficits' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-300'}`}
+            onClick={() => setPane('deficits')}
+          >
+            عجز المخزون
+          </button>
         </div>
       </div>
 
@@ -419,6 +428,10 @@ const Stocktaking: React.FC<StocktakingProps> = ({
             </table>
           </div>
         </div>
+      )}
+
+      {pane === 'deficits' && (
+        <StockDeficitQueue />
       )}
 
       {pane === 'audit' && (

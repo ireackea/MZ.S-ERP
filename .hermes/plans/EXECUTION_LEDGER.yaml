@@ -137,3 +137,20 @@ status_board:
   Verified on the running stack: the same request that returned 400 before now returns 201 with quantity 10.500, and the
   balance reads 10.600 after a second 0.1 movement.
   Result: frontend 50/50 (was 46), data-001 contract 12/12, E2E 44/44, CI 10/10, adversarial 11/11.
+- 2026-09-26 (DEF-001 UI): finished the feature that was accepted half-built. The backend was complete and proven while
+  nothing in the UI could open the queue and the realtime alert had no subscriber, so an operator who hit an over-issue
+  learned about it from the reconciliation weeks later.
+  The queue is a pane in the stocktaking screen rather than a new route: same permission, and a stock count is exactly when
+  unbacked demand should be looked at. Viewing needs inventory.view.stocktaking, resolving needs the separate
+  inventory.adjust.stock, so closing an alert is never a side effect of being allowed to look at it.
+  A write-off is the only way to close a debt without a movement, so it requires a reason of at least ten characters and
+  carries an Idempotency-Key. Reopening applies only to a written-off row. The dialog states that a write-off leaves the
+  balance at zero, because no goods arrived.
+  The screen subscribes to the stocktaking scope counter, so the announcement has somewhere to land, and raises a toast for
+  stock.deficit-recorded. Without a subscriber the event went to a socket nobody was listening on.
+  The E2E drives the browser: create an over-issue, open /stocktaking, click the tab, assert the item is named, try a
+  three-character reason and be refused, then supply a real one and confirm the server recorded the decision. Two defects in
+  the test itself were fixed rather than worked around: the first assertion passed against the container while the table was
+  still loading, and the write-off click resolved whichever row sorted first, so rows now carry data-deficit-item.
+  Result: frontend 50/50, audit 141/141, E2E 45/45, CI 10/10, and the deficit contract at 13/13 including the assertion
+  that the screen exists and is wired to the event.

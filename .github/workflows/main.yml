@@ -185,6 +185,9 @@ jobs:
       - name: Stock deficit ledger E2E
         run: npm run test:e2e:deficit
 
+      - name: Stock deficit queue UI E2E
+        run: npm run test:e2e:deficit-ui
+
       - name: Runtime proof (HTTP sequence, browser, offline)
         run: npm run test:qa:runtime
 

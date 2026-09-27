@@ -135,3 +135,42 @@ test('a new deficit is announced, and only after the transaction commits', () =>
   assert.equal(announcing, 6,
     `expected the helper plus five write paths, found ${announcing}`);
 });
+
+test('the queue is reachable, and the alert has a listener', () => {
+  // DEF-001 was accepted with no screen and no subscriber. The backend half was
+  // complete and the feature was unusable: an operator could not open the queue
+  // and the realtime event went to a socket nobody was listening on. A contract
+  // cannot prove a screen works, but it can prove the screen still exists and is
+  // wired to the event, which is exactly what was missing.
+  const client = read('frontend/src/services/stockDeficitApi.ts');
+  assert.match(client, /export const stockDeficitApi/);
+  assert.match(client, /writeOff/);
+  assert.match(client, /Idempotency-Key/,
+    'resolving an alert is a state change and must be idempotent');
+
+  const queue = read('frontend/src/pages/stocktaking/StockDeficitQueue.tsx');
+  assert.match(queue, /data-testid="stock-deficit-queue"/);
+  assert.match(queue, /useRealtimeSyncStore/,
+    'the queue must subscribe, or the alert is emitted into a void');
+  assert.match(queue, /stock\.deficit-recorded/);
+  assert.match(queue, /toast\.warning/,
+    'a new shortfall must be announced, not only stored');
+  // Writing off a debt is the one action that closes it without a movement, so
+  // it must be behind its own permission and demand a reason.
+  assert.match(queue, /can\.resolveStockDeficits/);
+  assert.match(queue, /reason\.length < 10/);
+
+  // It has to be mounted in a route an operator can actually reach.
+  const page = read('frontend/src/pages/StocktakingView.tsx');
+  assert.match(page, /import StockDeficitQueue/);
+  assert.match(page, /deficits-tab/);
+  assert.match(page, /<StockDeficitQueue \/>/);
+
+  // The permission must be in the frontend catalog, or the button never renders.
+  assert.match(read('frontend/src/hooks/usePermissions.ts'), /viewStockDeficits/);
+  assert.match(read('frontend/src/hooks/usePermissions.ts'), /resolveStockDeficits/);
+
+  // And there has to be a test that drives the screen, because an API-only test
+  // is what let the missing screen through in the first place.
+  assert.match(read('tests/e2e/def-001-deficit-ui.spec.ts'), /deficits-tab/);
+});

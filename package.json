@@ -78,7 +78,8 @@
     "test:qa:browser": "npm exec vitest -- --run tests/e2e/phase3-visual-proof.spec.ts",
     "test:qa:offline": "npm exec vitest -- --run tests/e2e/qa-002-offline.spec.ts tests/e2e/offline-queue.spec.ts",
     "test:qa:runtime": "npm run test:qa:http && npm run test:qa:browser && npm run test:qa:offline",
-    "test:e2e:deficit": "npm exec vitest -- --run tests/e2e/def-001-stock-deficit.spec.ts"
+    "test:e2e:deficit": "npm exec vitest -- --run tests/e2e/def-001-stock-deficit.spec.ts",
+    "test:e2e:deficit-ui": "npm exec vitest -- --run tests/e2e/def-001-deficit-ui.spec.ts"
   },
   "dependencies": {
     "class-transformer": "^0.5.1",

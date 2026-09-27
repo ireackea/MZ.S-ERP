@@ -79,6 +79,12 @@ export const usePermissions = () => {
 
       viewTheme: hasAny(['theme.view', 'theme.*']),
       updateTheme: hasAny(['theme.update', 'theme.*']),
+
+      // FC-DEF-001 — reading the deficit queue needs the same permission as
+      // viewing inventory; resolving one is separate so that closing an alert is
+      // never a side effect of being able to look at the page.
+      viewStockDeficits: hasAny(['inventory.view.stocktaking', 'inventory.*']),
+      resolveStockDeficits: hasAny(['inventory.adjust.stock', 'inventory.*']),
     }),
     [hasAny],
   );
