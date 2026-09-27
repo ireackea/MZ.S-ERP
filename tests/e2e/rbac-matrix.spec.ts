@@ -455,13 +455,62 @@ describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
     expect(reset.response.status).toBe(201);
     expect(data(reset.body).mustChangePassword).toBe(true);
 
-    // The account is flagged, and the flag is read fresh on every request
-    // because verifyToken re-reads the user row.
+    // The flag is carried by the principal, which verifyToken rebuilds from the
+    // database on every request, so it takes effect without a re-login.
     const session = await login(username, 'Temporary99!');
     const me = await request('/users/permissions/me', { headers: { Cookie: session } });
     expect(me.response.status).toBe(200);
     // /users/permissions/me returns the principal directly, not a `data`
     // envelope, so data() would unwrap to undefined here.
     expect(me.body?.mustChangePassword).toBe(true);
+  }, 90000);
+
+  it('FC-AUD-001: the user audit trail records the subject, not the actor', async () => {
+    // `log()` used to hardcode entityType and entityId to the actor and never
+    // write targetUserId at all, so the column was permanently NULL and this
+    // endpoint returned an empty list for every user. The filter must also be a
+    // server-side query: it used to fetch limit*3 rows globally, filter in
+    // memory, and silently drop any history older than that window.
+    const adminCookie = await adminLogin();
+    const suffix = randomUUID().slice(0, 8);
+    const username = `matrix_aud_${suffix}`;
+
+    const created = await request('/users', {
+      method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password: PASSWORD, roleName: 'Viewer' }),
+    });
+    expect(created.response.status).toBe(201);
+    const userId = String(data(created.body).id);
+    createdUserIds.push(userId);
+
+    // Unrelated activity, so a global-window implementation would be wrong.
+    for (let i = 0; i < 12; i += 1) {
+      await request('/partners', {
+        method: 'POST',
+        headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: `zz-noise-${suffix}-${i}`, type: 'customer', phone: '0100000000' }),
+      });
+    }
+
+    await request(`/users/${userId}/lock`, {
+      method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ locked: true, durationMinutes: 5 }),
+    });
+
+    const audit = await request(`/users/${userId}/audit`, { headers: { Cookie: adminCookie } });
+    expect(audit.response.status).toBe(200);
+    const rows = audit.body as Array<{ action: string; details: string }>;
+
+    // The creation and the lock are both about this account.
+    const actions = rows.map((row) => row.action);
+    expect(actions).toContain('create');
+    expect(actions).toContain('lock');
+
+    // ...and nothing that was merely performed by the admin.
+    expect(rows.every((row) => row.details.includes(username)
+      || row.details.includes('Locked account')
+      || row.details.includes('Updated user'))).toBe(true);
   }, 90000);
 });

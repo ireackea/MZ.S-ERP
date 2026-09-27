@@ -801,15 +801,25 @@ export class UsersService {
     return this.toUserDto(updated);
   }
 
+  /**
+   * FC-AUD-001 — a user's own history, filtered in the query.
+   *
+   * This used to fetch the newest `limit * 3` audit rows *globally*, filter
+   * them to one user in memory, and slice. Any history older than that global
+   * window vanished from the user's own audit trail without a trace, and the
+   * `* 3` fudge made the cutoff depend on how busy the system was. Filtering
+   * server-side is both correct and cheaper.
+   */
   async getAuditLog(userId: string, limit = 200) {
     const take = Math.max(1, Math.min(1000, Number(limit || 200)));
-    const entries = await this.auditService.listLogs({ limit: take * 3 });
+    const { rows } = await this.auditService.queryLogs({
+      targetUserId: userId,
+      limit: take,
+    });
 
-    return entries
-      .filter((entry) => entry.targetUserId === userId)
+    return rows
       .map((entry) => this.toUserAuditLog(entry, userId))
-      .filter((entry): entry is UserAuditLog => Boolean(entry))
-      .slice(0, take);
+      .filter((entry): entry is UserAuditLog => Boolean(entry));
   }
 
   async updateRolePermissions(roleId: string, dto: UpdateRolePermissionsDto, actor: ActorContext) {

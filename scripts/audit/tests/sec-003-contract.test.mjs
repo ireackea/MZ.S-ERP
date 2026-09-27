@@ -3,7 +3,7 @@
 // client-side impersonation primitive reappears in the frontend.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 const repoRoot = process.cwd();
@@ -155,7 +155,13 @@ test('no authorization payload is logged in production paths', () => {
   assert.deepEqual(offenders, [], `Auth/permission data still logged: ${offenders.join(', ')}`);
 });
 
-test('the role permission display fallback has a single definition', () => {
+test('FC-SEC-005 — no role→permission display fallback survives', () => {
+  // The shared table this test used to police existed to make three components
+  // agree on what a role could see. It was fail-open: when the server sent an
+  // empty permission list, it substituted a hand-written SuperAdmin/Admin grant
+  // list, so a session with zero permissions rendered admin tabs the API would
+  // then refuse. The server is the only authority, so the table is gone and its
+  // absence is now the contract rather than a shared constant.
   const declarations = sources.filter(
     (entry) => /ROLE_BASED_FALLBACK_PERMISSIONS\s*:\s*Record/.test(entry.text),
   );
@@ -164,8 +170,16 @@ test('the role permission display fallback has a single definition', () => {
     [],
     'A component redefined the role→permission fallback table instead of importing the shared one',
   );
-  const shared = read(join(frontendSrc, 'services/rolePermissionFallbacks.ts'));
-  assert.match(shared, /ROLE_PERMISSION_FALLBACKS/);
+
+  const shared = join(frontendSrc, 'services/rolePermissionFallbacks.ts');
+  assert.equal(existsSync(shared), false, 'the fail-open role permission fallback is back');
+
+  const consumers = sources.filter((entry) => /resolveRoleFallbackPermissions|ROLE_PERMISSION_FALLBACKS/.test(entry.text));
+  assert.deepEqual(
+    consumers.map((entry) => entry.rel),
+    [],
+    'a component consults a local role permission guess instead of the server-issued list',
+  );
 });
 
 test('frontend transport still relies on the HttpOnly cookie', () => {

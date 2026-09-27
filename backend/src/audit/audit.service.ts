@@ -70,6 +70,8 @@ export type AuditAction =
   | 'BULK_DELETE_USERS'
   | 'ROLE_TEMPLATE_REPAIRED'
   | 'ROLE_DELETED'
+  | 'OPENING_BALANCE_SET'
+  | 'OPENING_BALANCE_BULK_SET'
   | 'PASSWORD_POLICY_VIOLATION'
   | 'PASSWORD_CHANGED'
   | 'PASSWORD_CHANGE_REJECTED'
@@ -107,6 +109,13 @@ export type AuditQuery = {
   search?: string;
   entityType?: string;
   entityId?: string;
+  /**
+   * FC-AUD-001 — the subject of the entry, as distinct from `actorId`. The
+   * user-management audit tab asks "what happened to this account", which is
+   * the target, not the person who pressed the button. `entityId` holds the
+   * actor for legacy `log()` calls, so it cannot answer that question.
+   */
+  targetUserId?: string;
   from?: string;
   to?: string;
 };
@@ -279,8 +288,16 @@ export class AuditService {
           id: nextEntry.id,
           timestamp: new Date(nextEntry.timestamp),
           action: nextEntry.action,
-          entityType: 'User', // Default for legacy log calls
-          entityId: nextEntry.actorId || 'system',
+          // FC-AUD-001 — these were hardcoded, which broke the trail in two ways
+          // at once: `targetUserId` was never written, so the whole column was
+          // permanently NULL and `GET /users/:id/audit` always returned nothing;
+          // and `entityType` was 'User' for every row regardless of what the
+          // entry was about. Both are now taken from the caller, falling back to
+          // the previous values so no existing caller changes behaviour.
+          entityType: nextEntry.entityType || 'User',
+          entityId: nextEntry.entityId || nextEntry.actorId || 'system',
+          targetUserId: nextEntry.targetUserId ?? null,
+          targetResource: nextEntry.targetResource ?? null,
           details: nextEntry.message,
           ipAddress: this.extractIpAddress(nextEntry.metadata),
           metadata: this.toMetadataJson(nextEntry),
@@ -318,6 +335,7 @@ export class AuditService {
       ...(params?.action ? { action: params.action } : {}),
       ...(params?.entityType ? { entityType: params.entityType } : {}),
       ...(params?.entityId ? { entityId: params.entityId } : {}),
+      ...(params?.targetUserId ? { targetUserId: params.targetUserId } : {}),
       ...(params?.from || params?.to
         ? {
             timestamp: {

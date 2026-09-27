@@ -75,8 +75,13 @@ describe('OperationsPage', () => {
       },
     };
 
+    // FC-SEC-005 — the page asks for catalog ids. It used to ask for
+    // `inventory.create.inbound` and `inventory.export.stock`, which are not in
+    // the backend catalog and could never be granted; they only resolved
+    // through the legacy alias shim, so this spec was asserting the old
+    // vocabulary rather than the real contract.
     mocks.hasPermission.mockImplementation(
-      (permission: string) => permission === 'inventory.create.inbound' || permission === 'inventory.export.stock',
+      (permission: string) => permission === 'transactions.create' || permission === 'reports.generate',
     );
 
     mocks.storeState = {

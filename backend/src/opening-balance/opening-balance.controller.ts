@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { OpeningBalanceService } from './opening-balance.service';
 import { CreateOpeningBalanceDto } from './dto/create-opening-balance.dto';
 import { BulkUpdateBalanceDto } from './dto/bulk-update-balance.dto';
@@ -16,8 +16,9 @@ export class OpeningBalanceController {
   @Post()
   @HttpCode(HttpStatus.OK)
   @Roles('Admin', 'SuperAdmin')
-  create(@Body() dto: CreateOpeningBalanceDto) {
-    return this.service.setBalance(dto);
+  create(@Body() dto: CreateOpeningBalanceDto, @Req() req: any) {
+    // FC-SEC-011 — the author of a fiscal-year starting position is recorded.
+    return this.service.setBalance(dto, this.actor(req));
   }
 
   @Permissions('opening-balances.view')
@@ -29,7 +30,15 @@ export class OpeningBalanceController {
   @Permissions('opening-balances.bulk')
   @Roles('Admin', 'SuperAdmin')
   @Post('bulk')
-  async bulk(@Body() dto: BulkUpdateBalanceDto) {
-    return this.service.bulkUpsert(dto);
+  async bulk(@Body() dto: BulkUpdateBalanceDto, @Req() req: any) {
+    return this.service.bulkUpsert(dto, this.actor(req));
+  }
+
+  private actor(req: any) {
+    return {
+      id: String(req?.user?.id || 'system'),
+      username: String(req?.user?.username || 'system'),
+      role: String(req?.user?.role || 'system'),
+    };
   }
 }

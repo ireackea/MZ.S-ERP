@@ -350,7 +350,13 @@ model OpeningBalance {
   createdBy     String?
 
   item    Item  @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  creator User? @relation("BalanceCreator", fields: [createdBy], references: [id])
+  // FC-SEC-011 — this was the one relation in the schema with no onDelete, so
+  // it defaulted to Restrict. It never fired only because `createdBy` was never
+  // written. The moment the author of an opening balance is recorded — a
+  // mandatory fact for a fiscal-year starting position — deleting that user
+  // would have started returning a 500 from DELETE /users/:id. SetNull matches
+  // every other creator relation in the schema.
+  creator User? @relation("BalanceCreator", fields: [createdBy], references: [id], onDelete: SetNull)
 
   @@unique([itemId, financialYear])
   @@index([financialYear])
