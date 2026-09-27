@@ -23,8 +23,6 @@ model Role {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   users       User[]
-  roleUsers   UserRole[]
-  rolePerms   RolePermission[]
   invitations Invitation[]
 
   @@map("roles")
@@ -52,7 +50,6 @@ model User {
   inviteToken            String?          @unique
   inviteExpires          DateTime?
   isEmailConfirmed       Boolean          @default(false)
-  userRoles              UserRole[]
   sentInvitations        Invitation[]     @relation("InvitationSender")
   acceptedInvitation     Invitation?      @relation("InvitationRecipient")
   auditLogs              AuditLog[]       @relation("AuditActor")
@@ -127,46 +124,6 @@ model IdempotencyRecord {
   @@unique([actorId, operation, key])
   @@index([createdAt])
   @@map("idempotency_records")
-}
-
-model Permission {
-  id          String           @id @default(uuid())
-  key         String           @unique
-  description String?
-  module      String?
-  action      String?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  rolePerms   RolePermission[]
-
-  @@map("permissions")
-}
-
-model UserRole {
-  id           String   @id @default(uuid())
-  userId       String
-  roleId       String
-  assignedById String?
-  assignedAt   DateTime @default(now())
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role         Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, roleId])
-  @@index([roleId])
-  @@map("user_roles")
-}
-
-model RolePermission {
-  id           String     @id @default(uuid())
-  roleId       String
-  permissionId String
-  createdAt    DateTime   @default(now())
-  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
-
-  @@unique([roleId, permissionId])
-  @@index([permissionId])
-  @@map("role_permissions")
 }
 
 model Invitation {

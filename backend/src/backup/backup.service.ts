@@ -104,24 +104,11 @@ type RoleSnapshot = Omit<Prisma.RoleCreateManyInput, 'createdAt' | 'updatedAt'> 
   updatedAt: string;
 };
 
-type PermissionSnapshot = Omit<Prisma.PermissionCreateManyInput, 'createdAt' | 'updatedAt'> & {
-  createdAt: string;
-  updatedAt: string;
-};
-
-type RolePermissionSnapshot = Omit<Prisma.RolePermissionCreateManyInput, 'createdAt'> & {
-  createdAt: string;
-};
-
 type UserSnapshot = Omit<Prisma.UserCreateManyInput, 'lockoutUntil' | 'inviteExpires' | 'createdAt' | 'updatedAt'> & {
   lockoutUntil?: string | null;
   inviteExpires?: string | null;
   createdAt: string;
   updatedAt: string;
-};
-
-type UserRoleSnapshot = Omit<Prisma.UserRoleCreateManyInput, 'assignedAt'> & {
-  assignedAt: string;
 };
 
 type OpeningBalanceSnapshot = Omit<Prisma.OpeningBalanceCreateManyInput, 'createdAt' | 'updatedAt'> & {
@@ -145,10 +132,11 @@ type StatFsResult = {
 type PrismaDataSnapshot = {
   engine: 'prisma';
   roles?: RoleSnapshot[];
-  permissions?: PermissionSnapshot[];
-  rolePermissions?: RolePermissionSnapshot[];
+  // FC-SEC-007 — permissions / rolePermissions / userRoles are intentionally
+  // absent. Those tables are no longer part of the schema; the fields stay
+  // readable in this type so an older backup file that still carries them is
+  // restored without error rather than rejected outright.
   users?: UserSnapshot[];
-  userRoles?: UserRoleSnapshot[];
   items?: Prisma.ItemCreateManyInput[];
   openingBalances?: OpeningBalanceSnapshot[];
   transactions?: TransactionSnapshot[];
@@ -649,12 +637,15 @@ export class BackupService implements OnModuleDestroy {
     const snapshot: PrismaDataSnapshot = { engine: 'prisma' };
 
     if (type === 'full' || type === 'safety_snapshot') {
-      const [roles, permissions, rolePermissions, users, userRoles] = await Promise.all([
+      // FC-SEC-007 — `permission`, `role_permission` and `user_role` were
+      // snapshotted here but nothing in the application ever read or wrote
+      // them: authorization runs entirely off `User.roleId` and the
+      // `Role.permissions` JSON. All three tables held zero rows on every
+      // install, so this was a full-table read per backup of data that could
+      // not exist. Role permissions travel in the `roles` row below.
+      const [roles, users] = await Promise.all([
         this.prisma.role.findMany({ orderBy: { createdAt: 'asc' } }),
-        this.prisma.permission.findMany({ orderBy: { createdAt: 'asc' } }),
-        this.prisma.rolePermission.findMany({ orderBy: { createdAt: 'asc' } }),
         this.prisma.user.findMany({ orderBy: { createdAt: 'asc' } }),
-        this.prisma.userRole.findMany({ orderBy: { assignedAt: 'asc' } }),
       ]);
 
       snapshot.roles = roles.map((entry) => ({
@@ -662,25 +653,12 @@ export class BackupService implements OnModuleDestroy {
         createdAt: entry.createdAt.toISOString(),
         updatedAt: entry.updatedAt.toISOString(),
       }));
-      snapshot.permissions = permissions.map((entry) => ({
-        ...entry,
-        createdAt: entry.createdAt.toISOString(),
-        updatedAt: entry.updatedAt.toISOString(),
-      }));
-      snapshot.rolePermissions = rolePermissions.map((entry) => ({
-        ...entry,
-        createdAt: entry.createdAt.toISOString(),
-      }));
       snapshot.users = users.map((entry) => ({
         ...entry,
         lockoutUntil: entry.lockoutUntil ? entry.lockoutUntil.toISOString() : null,
         inviteExpires: entry.inviteExpires ? entry.inviteExpires.toISOString() : null,
         createdAt: entry.createdAt.toISOString(),
         updatedAt: entry.updatedAt.toISOString(),
-      }));
-      snapshot.userRoles = userRoles.map((entry) => ({
-        ...entry,
-        assignedAt: entry.assignedAt.toISOString(),
       }));
     }
 
@@ -1153,25 +1131,12 @@ export class BackupService implements OnModuleDestroy {
         await tx.transaction.deleteMany();
         await tx.openingBalance.deleteMany();
         await tx.item.deleteMany();
-        await tx.userRole.deleteMany();
-        await tx.rolePermission.deleteMany();
         await tx.user.deleteMany();
-        await tx.permission.deleteMany();
         await tx.role.deleteMany();
 
         if (snapshot.roles?.length) {
           await tx.role.createMany({
             data: snapshot.roles.map((entry) => ({
-              ...entry,
-              createdAt: new Date(entry.createdAt),
-              updatedAt: new Date(entry.updatedAt),
-            })),
-          });
-        }
-
-        if (snapshot.permissions?.length) {
-          await tx.permission.createMany({
-            data: snapshot.permissions.map((entry) => ({
               ...entry,
               createdAt: new Date(entry.createdAt),
               updatedAt: new Date(entry.updatedAt),
@@ -1187,24 +1152,6 @@ export class BackupService implements OnModuleDestroy {
               inviteExpires: entry.inviteExpires ? new Date(entry.inviteExpires) : null,
               createdAt: new Date(entry.createdAt),
               updatedAt: new Date(entry.updatedAt),
-            })),
-          });
-        }
-
-        if (snapshot.rolePermissions?.length) {
-          await tx.rolePermission.createMany({
-            data: snapshot.rolePermissions.map((entry) => ({
-              ...entry,
-              createdAt: new Date(entry.createdAt),
-            })),
-          });
-        }
-
-        if (snapshot.userRoles?.length) {
-          await tx.userRole.createMany({
-            data: snapshot.userRoles.map((entry) => ({
-              ...entry,
-              assignedAt: new Date(entry.assignedAt),
             })),
           });
         }

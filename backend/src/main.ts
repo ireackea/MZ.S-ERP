@@ -5,6 +5,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
+import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
 import * as path from 'path';
 import * as fs from 'fs';
 import { json, urlencoded } from 'express';
@@ -287,6 +288,10 @@ async function bootstrap() {
       transform: true,
     }),
   );
+  // FC-SEC-007 — sits beside the global ValidationPipe for the same reason:
+  // a unique- or foreign-key violation is a data-layer fact, not a
+  // business rule, so it has no natural home in any single module.
+  app.useGlobalFilters(new PrismaExceptionFilter());
   await app.listen(process.env.PORT || 3001);
   if (envPath) {
     console.log('Loaded env from', envPath);
