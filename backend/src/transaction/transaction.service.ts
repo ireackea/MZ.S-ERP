@@ -80,6 +80,9 @@ export class TransactionService {
   // Logger مُخصص للفئة بدلاً من console.error العام، يتيح تتبع الأخطاء بدقة
   private readonly logger = new Logger(TransactionService.name);
 
+  /** FC-DEF-001 — one warning for ALLOW, not one per movement. */
+  private warnedAboutAllowPolicy = false;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtimeService: RealtimeService,
@@ -274,6 +277,14 @@ export class TransactionService {
   private get deficitPolicy(): DeficitPolicy {
     const configured = String(process.env.STOCK_DEFICIT_POLICY || '').trim().toUpperCase();
     if (DEFICIT_POLICIES.includes(configured as DeficitPolicy)) {
+      if (configured === 'ALLOW' && !this.warnedAboutAllowPolicy) {
+        this.warnedAboutAllowPolicy = true;
+        this.logger.warn(
+          'DEF-001 STOCK_DEFICIT_POLICY=ALLOW is active. Negative balances will be written as-is, '
+          + 'no deficit is recorded, and the stock reconciliation will report every shortfall as a '
+          + 'permanent mismatch. This is a migration setting, not a normal one.',
+        );
+      }
       return configured as DeficitPolicy;
     }
     if (configured) {
@@ -1487,11 +1498,23 @@ export class TransactionService {
       }];
     });
 
+    const policy = this.deficitPolicy;
     return {
       financialYear: computed.financialYear,
       total: computed.total,
       consistent: mismatches.length === 0,
       mismatches,
+      // FC-DEF-001 — under ALLOW a negative balance is written as-is and no debt
+      // is recorded. The arithmetic still reconciles, because the negative value
+      // is in the column, so this is not a data-corruption signal: it means the
+      // balance is unbacked demand nobody is tracking. Saying so turns a
+      // confusing negative stock into an explained one, instead of leaving an
+      // operator hunting for a bug that does not exist.
+      deficitPolicy: policy,
+      tracksUnbackedDemand: policy !== 'ALLOW',
+      note: policy === 'ALLOW'
+        ? 'STOCK_DEFICIT_POLICY=ALLOW is active: a negative balance is written as-is and no deficit is recorded, so any item below zero is untracked unbacked demand. This is a migration setting, not a normal one.'
+        : undefined,
     };
   }
 

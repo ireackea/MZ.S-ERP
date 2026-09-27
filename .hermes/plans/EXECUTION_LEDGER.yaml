@@ -167,3 +167,13 @@ status_board:
      the browser tooling. CI on a machine with network access would exercise the default target.
   Neither gap is a code defect. They are limits of what was provable here, and they are stated so a future reader does not
   assume they were covered.
+- 2026-09-26 (DEF-001, ALLOW made visible): STOCK_DEFICIT_POLICY=ALLOW is gated only by an environment variable, which
+  is how a migration setting outlives its migration. It now logs once at startup naming what it does, and the stock
+  reconciliation reports the active policy, whether unbacked demand is tracked, and why.
+  Writing the test corrected an assumption of mine worth recording: I expected ALLOW to break the invariant
+  currentStock === ledgerNet + openDeficit, and asserted that it did. It does not. Writing the negative value into the
+  column keeps the arithmetic exact. What ALLOW loses is the guarantee that a balance is spendable and the record that
+  the shortfall occurred - an untrackable negative, not a broken sum. The reconciliation note now says that instead of
+  implying corruption, and the test pins the distinction.
+  Owner decisions: the empty SYSTEM_RUN_REPORT_2026-03-28.md was deleted after inspection (0 bytes, no content, so
+  nothing was lost). REF-001 is deferred by the owner's decision while the contracts that were just proven stay intact.
