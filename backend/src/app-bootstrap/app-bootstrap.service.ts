@@ -101,7 +101,11 @@ export class AppBootstrapService {
         permissions: resolvedPermissions,
         isActive: user.isActive,
         active: user.isActive,
-        status: user.isActive ? 'active' : 'locked',
+        // FC-SEC-012 — this reported every inactive account as "locked". A
+        // deactivated user and a security lock are different states, and the
+        // client used this to decide what to show.
+        isLocked: user.isLocked,
+        status: user.isActive ? 'active' : user.isLocked ? 'locked' : 'inactive',
         scope: 'all',
       },
       resolvedPermissions: resolvedPermissions,

@@ -36,6 +36,14 @@ model User {
   firstName              String?
   lastName               String?
   isActive               Boolean          @default(true)
+  // FC-SEC-012 — `isActive` used to carry two meanings at once. Locking an
+  // account set isActive=false, and so did deactivating one, so a deliberate
+  // deactivation was indistinguishable from a security lock: the user list
+  // labelled every one of them "locked", and a deactivated account matched
+  // neither the `active` nor the `locked` filter, which meant it could not be
+  // found at all. `isLocked` is the security state; `isActive` is the employment
+  // state; `lockoutUntil` remains the timed-failure lock.
+  isLocked               Boolean          @default(false)
   failedAttempts         Int              @default(0)
   lockoutUntil           DateTime?
   // FC-SEC-010 — the superadmin password used to be re-written from

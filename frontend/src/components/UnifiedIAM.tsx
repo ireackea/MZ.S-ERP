@@ -705,6 +705,9 @@ const UnifiedIAM: React.FC = () => {
                 >
                   <option value="">كل الحالات</option>
                   <option value="active">نشط</option>
+                  {/* FC-SEC-012 — a deactivated account used to match no filter
+                      at all, so it could only be found by typing its name. */}
+                  <option value="inactive">معطَّل</option>
                   <option value="locked">مقفل</option>
                 </select>
                 <select
@@ -813,15 +816,45 @@ const UnifiedIAM: React.FC = () => {
                             </select>
                           </td>
                           <td className="p-3">
-                            <span
-                              className={`rounded-full px-3 py-1 text-xs font-bold ${
-                                user.isActive
-                                  ? 'bg-emerald-50 text-emerald-700'
-                                  : 'bg-red-50 text-red-700'
-                              }`}
-                            >
-                              {user.isActive ? 'نشط' : 'مقفل'}
-                            </span>
+                            {(() => {
+                              // FC-SEC-012 — three states, not two. Showing
+                              // "locked" for every inactive account made a
+                              // deliberate deactivation look like a security
+                              // event, and an admin could not tell a locked
+                              // account from one they had switched off.
+                              if (user.isLocked) {
+                                return (
+                                  <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700">
+                                    مقفل
+                                  </span>
+                                );
+                              }
+                              if (!user.isActive) {
+                                return (
+                                  <span
+                                    title="معطَّل — الحساب غير مستخدم، وليس قفلاً أمنياً"
+                                    className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600"
+                                  >
+                                    معطَّل
+                                  </span>
+                                );
+                              }
+                              if (user.isEmailConfirmed === false) {
+                                return (
+                                  <span
+                                    title="أُنشئت بالدعوة ولم تُقبل بعد"
+                                    className="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700"
+                                  >
+                                    بانتظار القبول
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
+                                  نشط
+                                </span>
+                              );
+                            })()}
                           </td>
                           <td className="p-3 text-xs text-slate-500">
                             {new Date(user.updatedAt).toLocaleString('ar-EG')}

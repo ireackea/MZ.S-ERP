@@ -23,8 +23,11 @@ export class ListUsersDto {
   @IsString()
   role?: string;
 
+  // FC-SEC-012 — `inactive` was handled in the service but rejected here, so the
+  // branch was unreachable dead code and a deactivated account could not be
+  // filtered for at all.
   @IsOptional()
-  @IsIn(['active', 'locked'])
-  status?: 'active' | 'locked';
+  @IsIn(['active', 'locked', 'inactive'])
+  status?: 'active' | 'locked' | 'inactive';
 }
 

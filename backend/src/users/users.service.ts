@@ -131,25 +131,17 @@ export class UsersService {
       where.role = { name: query.role };
     }
 
+    // FC-SEC-012 — the three states are now genuinely distinct and each one is
+    // reachable. Before, `active` also excluded locked accounts, `locked` looked
+    // only at a timestamp that a plain deactivation never set, and `inactive` was
+    // rejected by the DTO, so a deactivated account matched nothing and could
+    // not be found by any filter.
     if (query.status === 'active') {
       where.isActive = true;
-      // active = isActive AND not currently locked
-      where.AND = [
-        ...((where.AND as Prisma.UserWhereInput[]) ?? []),
-        {
-          OR: [
-            { lockoutUntil: null },
-            { lockoutUntil: { lte: new Date() } },
-          ],
-        },
-      ];
+      where.isLocked = false;
     }
-    // FIX 2026-04-29 — "locked" must reference active lockoutUntil, not isActive.
     if (query.status === 'locked') {
-      where.AND = [
-        ...((where.AND as Prisma.UserWhereInput[]) ?? []),
-        { lockoutUntil: { gt: new Date() } },
-      ];
+      where.isLocked = true;
     }
     if ((query.status as string) === 'inactive') {
       where.isActive = false;
@@ -759,8 +751,10 @@ export class UsersService {
     const durationMinutes = Math.max(1, Number(dto.durationMinutes || 60 * 24));
     const lockoutUntil = locked ? new Date(Date.now() + durationMinutes * 60 * 1000) : null;
 
-    // FC-SEC-009 — locking sets isActive=false, so locking the last active
-    // SuperAdmin is a deactivation and needs the same guard as deleteUser.
+    // FC-SEC-012 — a lock no longer reuses isActive. Locking and deactivating
+    // are different decisions with different reasons and different reversals,
+    // and conflating them meant a locked account and a deactivated one could not
+    // be told apart in the list, in the filters, or in a support conversation.
     if (locked) {
       await this.assertNotLastSuperAdmin([id], 'lock');
     }
@@ -768,7 +762,8 @@ export class UsersService {
     const updated = await this.prisma.user.update({
       where: { id },
       data: {
-        isActive: !locked,
+        isLocked: locked,
+        isActive: locked ? false : true,
         lockoutUntil,
         failedAttempts: locked ? existing.failedAttempts : 0,
       },
@@ -1081,6 +1076,9 @@ export class UsersService {
       lastName: user.lastName,
       fullName: fullName || user.username,
       isActive: user.isActive,
+      // FC-SEC-012 — the UI used to render `isActive ? 'active' : 'locked'`, so
+      // a deliberately deactivated account was shown as a security lock.
+      isLocked: user.isLocked,
       failedAttempts: user.failedAttempts,
       lockoutUntil: user.lockoutUntil,
       // FC-SEC-010 — the user list could not distinguish an invited account from

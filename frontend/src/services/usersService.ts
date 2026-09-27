@@ -2,7 +2,9 @@
 // ENTERPRISE FIX: Exact Legacy UI Restoration - 2026-02-27
 import apiClient from '@api/client';
 
-export type UsersStatusFilter = 'active' | 'locked';
+// FC-SEC-012 — `inactive` (a deactivated account) was missing here, and the
+// backend rejected it too, so the two states could not be told apart or found.
+export type UsersStatusFilter = 'active' | 'locked' | 'inactive';
 
 export interface RoleDto {
   id: string;
@@ -23,6 +25,8 @@ export interface UserDto {
   lastName?: string | null;
   fullName: string;
   isActive: boolean;
+  /** FC-SEC-012 — a security lock, distinct from `isActive` deactivation. */
+  isLocked?: boolean;
   failedAttempts: number;
   lockoutUntil?: string | null;
   /** FC-SEC-010 — the user list previously could not tell an invited account
@@ -84,6 +88,7 @@ const userFromApi = (row: any): UserDto => ({
   lastName: row?.lastName ?? null,
   fullName: String(row?.fullName || row?.username || ''),
   isActive: Boolean(row?.isActive),
+  isLocked: Boolean(row?.isLocked),
   failedAttempts: Number(row?.failedAttempts || 0),
   lockoutUntil: row?.lockoutUntil ?? null,
   isEmailConfirmed: Boolean(row?.isEmailConfirmed),

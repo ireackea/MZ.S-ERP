@@ -513,4 +513,65 @@ describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
       || row.details.includes('Locked account')
       || row.details.includes('Updated user'))).toBe(true);
   }, 90000);
+
+  it('FC-SEC-012: a deactivated account and a locked account are different states', async () => {
+    // `isActive` used to carry both meanings. Locking set isActive=false and so
+    // did deactivation, so a deliberately switched-off account was rendered as a
+    // security lock, and it matched neither the `active` nor the `locked` filter
+    // — a deactivated account could not be found by any status filter at all.
+    const adminCookie = await adminLogin();
+    const suffix = randomUUID().slice(0, 8);
+    const mk = async (label: string) => {
+      const created = await request('/users', {
+        method: 'POST',
+        headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: `matrix_state_${label}_${suffix}`, password: PASSWORD, roleName: 'Viewer' }),
+      });
+      expect(created.response.status).toBe(201);
+      const id = String(data(created.body).id);
+      createdUserIds.push(id);
+      return id;
+    };
+    const read = async (id: string) => {
+      const one = await request(`/users?limit=200`, { headers: { Cookie: adminCookie } });
+      const list = data(one.body) as Array<{ id: string; isActive: boolean; isLocked: boolean }>;
+      return list.find((entry) => entry.id === id)!;
+    };
+
+    const fresh = await mk('fresh');
+    const deactivated = await mk('deactivated');
+    const locked = await mk('locked');
+
+    expect((await read(fresh)).isLocked).toBe(false);
+
+    await request(`/users/${deactivated}`, {
+      method: 'PUT',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isActive: false }),
+    });
+    const afterDeactivate = await read(deactivated);
+    expect(afterDeactivate.isActive).toBe(false);
+    expect(afterDeactivate.isLocked).toBe(false);
+
+    await request(`/users/${locked}/lock`, {
+      method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ locked: true, durationMinutes: 30 }),
+    });
+    const afterLock = await read(locked);
+    expect(afterLock.isLocked).toBe(true);
+
+    // Each state is reachable through its own filter.
+    const idsFor = async (status: string) => {
+      const filtered = await request(`/users?status=${status}&limit=200`, { headers: { Cookie: adminCookie } });
+      expect(filtered.response.status, `status=${status} must be accepted`).toBe(200);
+      // data() already unwraps the { data: [...] } envelope, so do not unwrap twice.
+      return (data(filtered.body) as Array<{ id: string }>).map((entry) => entry.id);
+    };
+
+    expect(await idsFor('active')).toContain(fresh);
+    expect(await idsFor('active')).not.toContain(deactivated);
+    expect(await idsFor('inactive')).toContain(deactivated);
+    expect(await idsFor('locked')).toContain(locked);
+  }, 90000);
 });

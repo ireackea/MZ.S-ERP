@@ -73,5 +73,5 @@ export const getErrorMessage = (error: unknown, fallback: string): string => {
 };
 
 export const normalizeStatusFilter = (value: string): UsersStatusFilter | '' => (
-  value === 'active' || value === 'locked' ? value : ''
+  value === 'active' || value === 'locked' || value === 'inactive' ? value : ''
 );
