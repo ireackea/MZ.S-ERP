@@ -21,6 +21,10 @@ import { PrismaService } from '../prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { DEFAULT_ROLES } from './role-templates';
 import { migratePermissionGrants } from './permission-catalog';
+import {
+  isPasswordPolicyCompliant,
+  isWeakLegacyPassword,
+} from '../common/password-policy';
 
 type JwtUser = {
   id: string;
@@ -30,8 +34,6 @@ type JwtUser = {
   name?: string | null;
   sessionId?: string;
 };
-
-const LEGACY_WEAK_ADMIN_PASSWORDS = new Set(['admin123', 'admin123!', 'admin', 'password', '12345678', 'admin@123']);
 
 @Injectable()
 export class AuthService {
@@ -58,7 +60,7 @@ export class AuthService {
       throw new Error('ADMIN_PASSWORD is required for superadmin bootstrap');
     }
 
-    if (LEGACY_WEAK_ADMIN_PASSWORDS.has(rawPassword.toLowerCase()) || !this.validatePasswordPolicy(rawPassword)) {
+    if (isWeakLegacyPassword(rawPassword) || !this.validatePasswordPolicy(rawPassword)) {
       throw new Error('ADMIN_PASSWORD does not meet the enterprise password policy');
     }
 
@@ -81,14 +83,7 @@ export class AuthService {
   }
 
   private validatePasswordPolicy(password: string) {
-    const candidate = String(password || '');
-    const hasMinLength = candidate.length >= 8;
-    const hasUpper = /[A-Z]/.test(candidate);
-    const hasLower = /[a-z]/.test(candidate);
-    const hasDigit = /\d/.test(candidate);
-    const hasSpecial = /[^A-Za-z0-9]/.test(candidate);
-
-    return hasMinLength && hasUpper && hasLower && hasDigit && hasSpecial;
+    return isPasswordPolicyCompliant(password);
   }
 
   private resolveClientIp(clientMeta?: { ipAddress?: string }) {

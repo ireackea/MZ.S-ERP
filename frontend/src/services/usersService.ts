@@ -122,7 +122,7 @@ export async function createCustomRole(payload: { name: string; description?: st
 
 export async function inviteUser(payload: {
   email: string;
-  roleId?: string;
+  roleId: string;
   roleName?: string;
   expiresInMinutes?: number;
 }): Promise<{ sent: boolean; email: string; expiresAt: string; invitationLink: string; invitationId: string }> {

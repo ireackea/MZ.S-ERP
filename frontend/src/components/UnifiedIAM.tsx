@@ -46,6 +46,9 @@ import {
   INITIAL_CREATE_FORM,
   getErrorMessage,
   normalizeStatusFilter,
+  findLeastPrivilegeRole,
+  isFullAccessRoleName,
+  roleNameOf,
   type CreateUserFormState,
 } from './unified-iam/shared';
 import {
@@ -89,6 +92,27 @@ const UnifiedIAM: React.FC = () => {
 
   const [createForm, setCreateForm] = useState<CreateUserFormState>(INITIAL_CREATE_FORM);
 
+  // FC-SEC-006 — the invitation link is a deliverable, not a side effect. It is
+  // held so the admin can copy it, because this deployment has no mail
+  // transport and the backend only persists the invitation.
+  const [pendingInvitation, setPendingInvitation] = useState<{
+    email: string;
+    link: string;
+    expiresAt: string;
+  } | null>(null);
+
+  const copyInvitationLink = async () => {
+    if (!pendingInvitation) return;
+    try {
+      await navigator.clipboard.writeText(pendingInvitation.link);
+      toast.success('تم نسخ الرابط');
+    } catch {
+      // Clipboard is unavailable over plain http on some browsers; the link is
+      // on screen and selectable, so tell the user rather than failing silently.
+      toast.error('تعذّر النسخ التلقائي — انسخ الرابط يدوياً من الحقل أدناه');
+    }
+  };
+
   const selectedIds = useMemo(() => Object.keys(selected).filter((id) => selected[id]), [selected]);
   const pageCount = Math.max(1, Math.ceil(total / limit));
 
@@ -96,9 +120,12 @@ const UnifiedIAM: React.FC = () => {
     try {
       const data = await fetchRoles();
       setRoles(data);
-      if (!bulkRoleId && data[0]) setBulkRoleId(data[0].id);
-      if (!selectedRoleId && data[0]) setSelectedRoleId(data[0].id);
-      if (!createForm.roleId && data[0]) setCreateForm((prev) => ({ ...prev, roleId: data[0].id }));
+      // FC-SEC-005 — nothing is auto-selected. The create form, the bulk
+      // assign and the matrix all open on a placeholder so a role is always a
+      // deliberate choice; previously all three silently took roles[0], which
+      // is SuperAdmin because the roles endpoint sorts by createdAt asc.
+      if (!bulkRoleId && data[0]) setBulkRoleId('');
+      if (!selectedRoleId && data[0]) setSelectedRoleId('');
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, 'فشل تحميل الأدوار'));
     }
@@ -178,6 +205,21 @@ const UnifiedIAM: React.FC = () => {
       toast.error('يرجى إدخال اسم المستخدم وكلمة المرور على الأقل');
       return;
     }
+    // FC-SEC-005 — a role must be chosen on purpose. The form used to arrive
+    // with SuperAdmin already selected, so filling only name+password minted an
+    // administrator by accident.
+    if (!createForm.roleId) {
+      toast.error('اختر الدور صراحةً قبل الحفظ');
+      return;
+    }
+    const chosenRole = roleNameOf(createForm.roleId, roles);
+    if (isFullAccessRoleName(chosenRole)) {
+      const confirmed = window.confirm(
+        `أنت على وشك إنشاء مستخدم بدور ${chosenRole}، وهو دور يملك كل صلاحيات النظام.\n`
+        + 'هل أنت متأكد؟ يُفضّل استخدام أقل دور يكفي لاحتياج المستخدم.',
+      );
+      if (!confirmed) return;
+    }
     try {
       await createUser({
         username: createForm.username,
@@ -185,10 +227,10 @@ const UnifiedIAM: React.FC = () => {
         password: createForm.password,
         firstName: createForm.firstName || undefined,
         lastName: createForm.lastName || undefined,
-        roleId: createForm.roleId || undefined,
+        roleId: createForm.roleId,
       });
       toast.success('تم إنشاء المستخدم بنجاح');
-      setCreateForm({ ...INITIAL_CREATE_FORM, roleId: roles[0]?.id || '' });
+      setCreateForm({ ...INITIAL_CREATE_FORM });
       void loadUsers(true);
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, 'فشل إنشاء المستخدم'));
@@ -203,6 +245,26 @@ const UnifiedIAM: React.FC = () => {
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, 'فشل تحديث المستخدم'));
     }
+  };
+
+  /**
+   * FC-SEC-005 — the per-row role dropdown wrote on every change event, with no
+   * confirmation and no save step, so brushing the dropdown escalated the user
+   * instantly. The dropdown is now controlled and only commits on an explicit
+   * confirm that names the role being granted.
+   */
+  const handleRowRoleChange = async (user: UserDto, nextRoleId: string) => {
+    if (!nextRoleId || nextRoleId === user.roleId) return;
+    const from = roleNameOf(user.roleId, roles);
+    const to = roleNameOf(nextRoleId, roles);
+    const warning = isFullAccessRoleName(to)
+      ? `\n⚠ ${to} يملك كل صلاحيات النظام.`
+      : '';
+    const confirmed = window.confirm(
+      `تغيير دور "${user.fullName}"؟\n\nمن: ${from}\nإلى: ${to}${warning}\n\nسيُطبَّق التغيير فوراً على جلسات المستخدم.`,
+    );
+    if (!confirmed) return;
+    await handleUpdateUser(user.id, { roleId: nextRoleId });
   };
 
   const handleDeleteUser = async (id: string) => {
@@ -228,6 +290,20 @@ const UnifiedIAM: React.FC = () => {
 
   const handleBulkAssignRole = async () => {
     if (!selectedIds.length) return;
+    // FC-SEC-005 — this is the widest privilege move in the section and it used
+    // to be the one action with no confirmation, while the far less dangerous
+    // bulk delete below did confirm.
+    if (!bulkRoleId) {
+      toast.error('اختر الدور صراحةً قبل التعيين');
+      return;
+    }
+    const targetRole = roleNameOf(bulkRoleId, roles);
+    const warning = isFullAccessRoleName(targetRole)
+      ? `\n\n⚠ ${targetRole} يملك كل صلاحيات النظام، وسيصبح كل من حُدد منهم مديراً كاملاً.`
+      : '';
+    if (!window.confirm(
+      `تعيين دور "${targetRole}" لـ ${selectedIds.length} مستخدماً؟${warning}\n\nسيُطبَّق فوراً على جلساتهم.`,
+    )) return;
     try {
       const result = await bulkAssignRole({ userIds: selectedIds, roleId: bulkRoleId });
       toast.success(`تم تعيين الدور لـ ${result.updated} مستخدمين`);
@@ -443,8 +519,12 @@ const UnifiedIAM: React.FC = () => {
                 <select
                   value={createForm.roleId}
                   onChange={(e) => setCreateForm((prev) => ({ ...prev, roleId: e.target.value }))}
-                  className="rounded-xl border border-slate-200 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  required
+                  className={`rounded-xl border px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
+                    createForm.roleId ? 'border-slate-200' : 'border-amber-400 bg-amber-50'
+                  }`}
                 >
+                  <option value="">— اختر الدور *</option>
                   {roles.map((role) => (
                     <option key={role.id} value={role.id}>
                       {role.name}
@@ -463,28 +543,88 @@ const UnifiedIAM: React.FC = () => {
                     type="button"
                     onClick={async () => {
                       if (!createForm.email) {
-                        toast.error('يجب إدخال البريد الإلكتروني لإرسال الدعوة');
+                        toast.error('يجب إدخال البريد الإلكتروني لإنشاء الدعوة');
+                        return;
+                      }
+                      if (!createForm.roleId) {
+                        toast.error('اختر الدور صراحةً قبل إنشاء الدعوة');
                         return;
                       }
                       try {
-                        toast.info('جاري إرسال رسالة الدعوة...');
+                        toast.info('جاري إنشاء الدعوة...');
                         const result = await inviteUser({
                           email: createForm.email,
-                          roleId: createForm.roleId || undefined,
+                          roleId: createForm.roleId,
                         });
-                        toast.success('تم إرسال الدعوة بنجاح إلى ' + result.email);
+                        // FC-SEC-006 — this build has no mail transport, so the
+                        // invitation is only a record plus a link. The previous
+                        // copy claimed "sent by email" and then discarded the
+                        // link, leaving the admin with a green toast and no way
+                        // to reach the invitee.
+                        setPendingInvitation({
+                          email: result.email,
+                          link: result.invitationLink,
+                          expiresAt: result.expiresAt,
+                        });
+                        toast.success('تم إنشاء الدعوة — انسخ الرابط وأرسله يدوياً');
                       } catch (e) {
-                        toast.error('فشل إرسال الدعوة');
+                        toast.error(getErrorMessage(e, 'فشل إنشاء الدعوة'));
                       }
                     }}
                     className="flex-1 rounded-xl bg-blue-600 text-white py-2.5 font-bold hover:bg-blue-700 transition flex items-center justify-center gap-2 shadow-sm"
                   >
                     <Activity className="w-5 h-5" />
-                    إرسال دعوة عبر البريد
+                    إنشاء دعوة
                   </button>
                 </div>
               </form>
             </motion.div>
+
+            {/* FC-SEC-006 — the invitation deliverable. Shown, copyable, and
+                explicit that nothing was emailed. */}
+            {pendingInvitation && (
+              <motion.div
+                initial={{ y: 10, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                className="rounded-2xl border border-amber-300 bg-amber-50/70 p-5 mb-4"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <h4 className="text-sm font-bold text-amber-900 mb-1">
+                      دعوة جاهزة لـ {pendingInvitation.email}
+                    </h4>
+                    <p className="text-xs text-amber-800 mb-3">
+                      لا يوجد خادم بريد في هذا التثبيت، لذلك لم يُرسل أي بريد. أرسل هذا الرابط
+                      إلى المدعوّ بنفسك — صالح حتى{' '}
+                      {new Date(pendingInvitation.expiresAt).toLocaleString('ar-EG')}
+                    </p>
+                    <input
+                      readOnly
+                      value={pendingInvitation.link}
+                      onFocus={(e) => e.currentTarget.select()}
+                      aria-label="رابط الدعوة"
+                      className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-mono text-slate-700"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={copyInvitationLink}
+                      className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-bold text-white hover:bg-amber-700 transition"
+                    >
+                      نسخ الرابط
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPendingInvitation(null)}
+                      className="rounded-lg border border-amber-300 px-4 py-2 text-sm font-bold text-amber-800 hover:bg-amber-100 transition"
+                    >
+                      إخفاء
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
 
             {/* Filters & Bulk Actions */}
             <motion.div
@@ -541,8 +681,12 @@ const UnifiedIAM: React.FC = () => {
                 <select
                   value={bulkRoleId}
                   onChange={(e) => setBulkRoleId(e.target.value)}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm"
+                  aria-label="الدور المطلوب تعيينه"
+                  className={`rounded-lg border bg-white px-3 py-1.5 text-sm ${
+                    bulkRoleId ? 'border-slate-300' : 'border-amber-400 bg-amber-50'
+                  }`}
                 >
+                  <option value="">— اختر الدور *</option>
                   {roles.map((role) => (
                     <option key={role.id} value={role.id}>
                       {role.name}
@@ -611,7 +755,11 @@ const UnifiedIAM: React.FC = () => {
                           <td className="p-3">
                             <select
                               value={user.roleId}
-                              onChange={(e) => handleUpdateUser(user.id, { roleId: e.target.value })}
+                              onChange={(e) => {
+                                const next = e.target.value;
+                                e.target.value = user.roleId;
+                                void handleRowRoleChange(user, next);
+                              }}
                               className="rounded border border-slate-300 px-2 py-1 text-xs"
                             >
                               {roles.map((role) => (

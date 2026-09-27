@@ -16,6 +16,7 @@ import { Observable, Subject, map } from 'rxjs';
 import { PrismaService } from '../prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { resolvePermissionGrants } from '../auth/permission-catalog';
+import { isPasswordPolicyCompliant, passwordPolicyMessage } from '../common/password-policy';
 import { AcceptInvitationDto } from './dto/accept-invitation.dto';
 import { BulkAssignRoleDto, BulkDeleteUsersDto } from './dto/bulk-actions.dto';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -82,6 +83,15 @@ export class UsersService {
       );
     }
     return grants;
+  }
+
+  // FC-SEC-004 — one policy, enforced on every path that stores a password hash.
+  // Previously only the ADMIN_PASSWORD env value was checked, so any user created
+  // through this service could hold `12345678`.
+  private assertPasswordPolicy(password: unknown): void {
+    if (!isPasswordPolicyCompliant(String(password ?? ''))) {
+      throw new BadRequestException(passwordPolicyMessage(String(password ?? '')));
+    }
   }
 
   private assertRoleSelection(dto: { roleId?: string; roleName?: string }, actor?: ActorContext): void {
@@ -206,6 +216,16 @@ export class UsersService {
 
     if (!username) {
       throw new BadRequestException('username is required');
+    }
+
+    this.assertPasswordPolicy(dto.password);
+
+    const usernameTaken = await this.prisma.user.findFirst({
+      where: { username },
+      select: { id: true },
+    });
+    if (usernameTaken) {
+      throw new BadRequestException('username already in use');
     }
 
     const user = await this.prisma.user.create({
@@ -419,6 +439,8 @@ export class UsersService {
       throw new NotFoundException('Invitation user is missing');
     }
 
+    this.assertPasswordPolicy(dto.password);
+
     const requestedUsername = dto.username?.trim();
     if (requestedUsername && requestedUsername !== user.username) {
       const usernameExists = await this.prisma.user.findFirst({ where: { username: requestedUsername } });
@@ -493,6 +515,23 @@ export class UsersService {
       this.assertRoleSelection(dto, actor);
       const role = await this.resolveRole(dto.roleId, dto.roleName);
       roleId = role.id;
+    }
+
+    if (dto.password) {
+      this.assertPasswordPolicy(dto.password);
+    }
+
+    // FC-SEC-004 + P2002 — a duplicate username must surface as a 409 with a
+    // readable message, not as a Prisma 500. The global exception filter added in
+    // Phase 7 covers every other unique constraint in the system.
+    if (dto.username && dto.username.trim() !== existing.username) {
+      const clash = await this.prisma.user.findFirst({
+        where: { username: dto.username.trim() },
+        select: { id: true },
+      });
+      if (clash) {
+        throw new BadRequestException('username already in use');
+      }
     }
 
     const updated = await this.prisma.user.update({
@@ -861,8 +900,17 @@ export class UsersService {
     });
   }
 
+  /**
+   * FC-SEC-006 — the invitation link must point at the UI that is actually
+   * serving this build. The previous default was `http://localhost:5173` while
+   * the application is served from the production image on 4173, so every
+   * generated link was dead. An explicit APP_BASE_URL always wins.
+   */
   private buildInvitationLink(token: string) {
-    const base = (process.env.APP_BASE_URL || 'http://localhost:5173').replace(/\/$/, '');
+    const configured = String(process.env.APP_BASE_URL || '').trim();
+    const frontendOrigin = String(process.env.FRONTEND_ORIGIN || '').trim();
+    const port = String(process.env.FRONTEND_PORT || '4173').trim();
+    const base = (configured || frontendOrigin || `http://localhost:${port}`).replace(/\/+$/, '');
     return `${base}/accept-invitation?token=${encodeURIComponent(token)}`;
   }
 

@@ -1,10 +1,10 @@
 // ENTERPRISE FIX: Phase 6 - Final Polish & Production Handover - 2026-03-05
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { isPasswordPolicyCompliant, isWeakLegacyPassword } from '../src/common/password-policy';
 
 const prisma = new PrismaClient();
 const ENTERPRISE_DEFAULT_PASSWORD = 'SecurePassword2026!';
-const LEGACY_WEAK_ADMIN_PASSWORDS = new Set(['admin123', 'admin123!', 'admin', 'password', '12345678', 'admin@123']);
 
 const defaultRoles = [
   { name: 'SuperAdmin', description: 'Full access to all system modules', permissions: ['*'], color: '#ef4444' },
@@ -45,14 +45,7 @@ const defaultRoles = [
 ] as const;
 
 function validatePasswordPolicy(password: string) {
-  const candidate = String(password || '');
-  const hasMinLength = candidate.length >= 8;
-  const hasUpper = /[A-Z]/.test(candidate);
-  const hasLower = /[a-z]/.test(candidate);
-  const hasDigit = /\d/.test(candidate);
-  const hasSpecial = /[^A-Za-z0-9]/.test(candidate);
-
-  return hasMinLength && hasUpper && hasLower && hasDigit && hasSpecial;
+  return isPasswordPolicyCompliant(password);
 }
 
 function resolveDefaultPassword() {
@@ -61,7 +54,7 @@ function resolveDefaultPassword() {
     return ENTERPRISE_DEFAULT_PASSWORD;
   }
 
-  if (LEGACY_WEAK_ADMIN_PASSWORDS.has(rawPassword.toLowerCase()) || !validatePasswordPolicy(rawPassword)) {
+  if (isWeakLegacyPassword(rawPassword) || !validatePasswordPolicy(rawPassword)) {
     console.warn('[Seed] Ignoring weak ADMIN_PASSWORD value and enforcing enterprise default password.');
     return ENTERPRISE_DEFAULT_PASSWORD;
   }
