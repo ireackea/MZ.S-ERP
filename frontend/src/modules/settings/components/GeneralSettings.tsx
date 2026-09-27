@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Save, ShieldAlert } from 'lucide-react';
 import { usePermissions } from '@hooks/usePermissions';
 import { toast } from '@services/toastService';
+import { loadSystemSettings, reportSettingsSave, saveSystemSettings } from '@services/systemSettingsApi';
 import type { SystemSettings } from '../../../types';
 
 interface GeneralSettingsProps {
@@ -15,10 +16,31 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, onUpdateSet
   const canView = hasPermission('settings.view.general');
   const canEdit = hasPermission('settings.update.system');
   const [form, setForm] = useState<SystemSettings>(settings);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setForm(settings);
   }, [settings]);
+
+  // Gate 2.1 - the screen opens on the server's answer, not on a client-only
+  // default. Before, the form was seeded from a value the server had never seen,
+  // and saving did nothing at all.
+  useEffect(() => {
+    let cancelled = false;
+    void loadSystemSettings()
+      .then((fresh) => {
+        if (!cancelled && fresh && Object.keys(fresh).length) {
+          setForm((current) => ({ ...current, ...fresh }));
+        }
+      })
+      .catch(() => {
+        // A failed read must not blank the form. What is on screen stays, and the
+        // save below reports the truth if that fails too.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (!canView) {
     return (
@@ -33,14 +55,32 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, onUpdateSet
     setForm((current) => ({ ...current, [key]: value }));
   };
 
-  const handleSave = (event: React.FormEvent) => {
+  const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!canEdit) {
       toast.error('لا تملك صلاحية تعديل الإعدادات العامة.');
       return;
     }
-    onUpdateSettings(form);
-    toast.success('تم حفظ الإعدادات العامة بنجاح.');
+
+    // Gate 3.4 — this used to be `onUpdateSettings(form); toast.success(...)`,
+    // which wrote to a client-side store and reported success. There was no
+    // server write at all: `saveSettings` had zero call sites and the backend had
+    // no settings module, so the company name was back to its default on the next
+    // reload, on every report that prints it.
+    try {
+      setSaving(true);
+      const { changed } = await saveSystemSettings(form);
+      reportSettingsSave(changed);
+      // Re-read from the server rather than trusting the form, so a value the
+      // server coerced is what the screen now shows.
+      const fresh = await loadSystemSettings();
+      setForm((current) => ({ ...current, ...fresh }));
+      onUpdateSettings?.({ ...form, ...fresh });
+    } catch (error: any) {
+      toast.error(error?.message || 'تعذّر حفظ الإعدادات العامة.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -82,7 +122,11 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, onUpdateSet
       </div>
 
       <div className="flex justify-end">
-        <button type="submit" className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white">
+        <button
+                type="submit"
+                disabled={saving || !canEdit}
+                className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
+              >
           <Save size={16} /> حفظ الإعدادات العامة
         </button>
       </div>

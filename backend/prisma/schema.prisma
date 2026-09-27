@@ -68,6 +68,7 @@ model User {
   inviteExpires          DateTime?
   isEmailConfirmed       Boolean          @default(false)
   sentInvitations        Invitation[]     @relation("InvitationSender")
+  updatedSystemSettings   SystemSetting[]
   acceptedInvitation     Invitation?      @relation("InvitationRecipient")
   auditLogs              AuditLog[]       @relation("AuditActor")
   activeSessions         ActiveSession[]
@@ -385,6 +386,31 @@ model UnloadingRule {
   @@index([ruleName])
   @@index([isActive])
   @@map("unloading_rules")
+}
+
+/// Gate 2.1 — the server-side home for company settings.
+///
+/// Key/value rather than one column per setting, so adding a preference does not
+/// need a migration. `valueType` carries what a plain TEXT column cannot, and is
+/// what the settings screen renders against. `updatedById` uses SetNull, like the
+/// opening-balance author: deleting a user must not take the company settings
+/// with them.
+model SystemSetting {
+  key         String   @id
+  value       String?
+  valueType   String   @default("string")
+  category    String   @default("general")
+  label       String?
+  updatedById String?
+  reason      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  updatedBy User? @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([category])
+  @@index([updatedById])
+  @@map("system_settings")
 }
 
 model ReferenceDataValue {

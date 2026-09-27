@@ -20,6 +20,7 @@ import { FormulationModule } from './formulation/formulation.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { UnloadingRuleModule } from './unloading-rule/unloading-rule.module';
 import { ReferenceDataModule } from './reference-data/reference-data.module';
+import { SystemSettingsModule } from './system-settings/system-settings.module';
 import { TimeModule } from './common/time/time.module';
 import { PartnersModule } from './partners/partners.module';
 import { OrdersModule } from './orders/orders.module';
@@ -43,6 +44,7 @@ import { StocktakingModule } from './stocktaking/stocktaking.module';
     FormulationModule,
     UnloadingRuleModule,
     ReferenceDataModule,
+    SystemSettingsModule,
     TimeModule,
     PartnersModule,
     OrdersModule,
