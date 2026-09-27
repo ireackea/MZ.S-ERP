@@ -177,3 +177,17 @@ status_board:
   implying corruption, and the test pins the distinction.
   Owner decisions: the empty SYSTEM_RUN_REPORT_2026-03-28.md was deleted after inspection (0 bytes, no content, so
   nothing was lost). REF-001 is deferred by the owner's decision while the contracts that were just proven stay intact.
+- 2026-09-26 (DATA-001 follow-up): changing Transaction.quantity to `string | number` for the wire contract created a trap
+  TypeScript cannot see: `0 + "10.5"` is `"010.5"`, because + concatenates when either side is a string. The invoice
+  subtotal was reduce((sum, row) => sum + row.quantity, 0), so a 10.5 receipt printed as 010.5. The accumulator was
+  inferred as any, which is why the typecheck stayed quiet.
+  Two lessons worth recording, because both were learned the expensive way. First, a contract test is the only guard that
+  works here: the bug is invisible to tsc, to unit tests that do not render the invoice, and to an API-level E2E that
+  never touches the presentation layer. Second, the guard is deliberately narrow. A first version followed a decimal
+  through a local alias and produced four findings, three false positives, because `const x = Number(field)` and
+  `return -x` are both safe and look the same to a regex. A guard that cries wolf gets deleted, so the scope was cut back
+  to the shape that actually caused the bug.
+  The guard was verified by injection: reintroducing the exact bug fails it, removing it passes. A test that has never failed
+  has not been shown to work. It also asserts 0 + "10.5" === "010.5" itself so a change in JavaScript semantics cannot
+  leave it protecting against nothing.
+  Result: audit 145/145, frontend 50/50, CI 10/10.

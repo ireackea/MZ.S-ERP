@@ -1298,8 +1298,8 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                 id: 'all',
                 title: 'كل العمليات',
                 rows: sortedRows,
-                subtotalNet: sortedRows.reduce((sum, row) => sum + row.quantity, 0),
-                subtotalSupplier: sortedRows.reduce((sum, row) => sum + row.supplierNet, 0),
+                subtotalNet: sortedRows.reduce((sum: number, row) => sum + Number(row.quantity), 0),
+                subtotalSupplier: sortedRows.reduce((sum: number, row) => sum + Number(row.supplierNet), 0),
             }];
         }
 
@@ -1318,8 +1318,8 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                 id: key,
                 title: printConfig.grouping === 'day' ? `يوم: ${key}` : `نوع: ${key}`,
                 rows: sortedRows,
-                subtotalNet: sortedRows.reduce((sum, row) => sum + row.quantity, 0),
-                subtotalSupplier: sortedRows.reduce((sum, row) => sum + row.supplierNet, 0),
+                subtotalNet: sortedRows.reduce((sum: number, row) => sum + Number(row.quantity), 0),
+                subtotalSupplier: sortedRows.reduce((sum: number, row) => sum + Number(row.supplierNet), 0),
             };
         });
     }, [operationRowsForPrint, printConfig.grouping, invoiceSortMode]);
