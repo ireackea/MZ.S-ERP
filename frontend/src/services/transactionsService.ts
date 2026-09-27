@@ -5,6 +5,7 @@ import apiClient from '@api/client';
 // ENTERPRISE FIX: Phase 0.3 – Final Arabic Encoding Fix & 10/10 Declaration - 2026-03-13
 import { Transaction } from '../types';
 import { canonicalizeOperationType } from '../utils/operationTypes';
+import { toApiDecimal, toApiDecimalOptional } from '../utils/decimal';
 
 type ApiListResponse = {
   data?: any[];
@@ -40,12 +41,12 @@ const normalizeApiTransaction = (row: any): Transaction => {
     date: String(row?.date || new Date().toISOString().split('T')[0]),
     itemId: String(row?.itemId ?? row?.item?.publicId ?? row?.item?.id ?? ''),
     type: canonicalizeOperationType(row?.type || 'وارد') as Transaction['type'],
-    quantity: Number(row?.quantity ?? 0),
+    quantity: toApiDecimal(row?.quantity ?? 0, 'quantity') as string,
     warehouseInvoice: String(row?.warehouseInvoice ?? ''),
     supplierOrReceiver: String(row?.supplierOrReceiver ?? ''),
-    supplierNet: row?.supplierNet == null ? undefined : Number(row.supplierNet),
-    difference: row?.difference == null ? undefined : Number(row.difference),
-    packageCount: row?.packageCount == null ? undefined : Number(row.packageCount),
+    supplierNet: toApiDecimalOptional(row?.supplierNet, 'supplierNet'),
+    difference: toApiDecimalOptional(row?.difference, 'difference'),
+    packageCount: toApiDecimalOptional(row?.packageCount, 'packageCount'),
     supplierInvoice: row?.supplierInvoice ?? undefined,
     weightSlip: row?.weightSlip ?? undefined,
     truckNumber: row?.truckNumber ?? undefined,
@@ -56,8 +57,8 @@ const normalizeApiTransaction = (row: any): Transaction => {
     unloadingRuleId: row?.unloadingRuleId ?? undefined,
     unloadingDuration: row?.unloadingDuration == null ? undefined : Number(row.unloadingDuration),
     delayDuration: row?.delayDuration == null ? undefined : Number(row.delayDuration),
-    delayPenalty: row?.delayPenalty == null ? undefined : Number(row.delayPenalty),
-    calculatedFine: row?.calculatedFine == null ? undefined : Number(row.calculatedFine),
+    delayPenalty: toApiDecimalOptional(row?.delayPenalty, 'delayPenalty'),
+    calculatedFine: toApiDecimalOptional(row?.calculatedFine, 'calculatedFine'),
     notes: row?.notes ?? undefined,
     attachmentData: row?.attachmentData ?? undefined,
     attachmentName: row?.attachmentName ?? undefined,
@@ -74,14 +75,18 @@ const toCreatePayload = (transaction: Transaction, options?: { includeId?: boole
   itemId: transaction.itemId,
   date: transaction.date,
   type: transaction.type,
-  quantity: Number(transaction.quantity ?? 0),
+  // FC-DATA-001 — this is the payload that reaches POST /transactions, so it is
+  // the one place that must never hand the server a float. Every decimal field
+  // goes through the boundary; a value that already lost precision is refused
+  // here rather than becoming a confusing 400 at the other end.
+  quantity: toApiDecimal(transaction.quantity ?? 0, 'quantity') as string,
   supplierOrReceiver: transaction.supplierOrReceiver,
   warehouseId: transaction.warehouseId,
   warehouseInvoice: transaction.warehouseInvoice,
   supplierInvoice: transaction.supplierInvoice,
-  supplierNet: transaction.supplierNet,
-  difference: transaction.difference,
-  packageCount: transaction.packageCount,
+  supplierNet: toApiDecimalOptional(transaction.supplierNet, 'supplierNet'),
+  difference: toApiDecimalOptional(transaction.difference, 'difference'),
+  packageCount: toApiDecimalOptional(transaction.packageCount, 'packageCount'),
   weightSlip: transaction.weightSlip,
   truckNumber: transaction.truckNumber,
   trailerNumber: transaction.trailerNumber,
@@ -91,8 +96,8 @@ const toCreatePayload = (transaction: Transaction, options?: { includeId?: boole
   unloadingRuleId: transaction.unloadingRuleId,
   unloadingDuration: transaction.unloadingDuration,
   delayDuration: transaction.delayDuration,
-  delayPenalty: transaction.delayPenalty,
-  calculatedFine: transaction.calculatedFine,
+  delayPenalty: toApiDecimalOptional(transaction.delayPenalty, 'delayPenalty'),
+  calculatedFine: toApiDecimalOptional(transaction.calculatedFine, 'calculatedFine'),
   notes: transaction.notes,
   attachmentData: transaction.attachmentData,
   attachmentName: transaction.attachmentName,

@@ -3,8 +3,12 @@ import { v4 as uuidv4 } from 'uuid';
 import { isInboundOperationType, isOutboundOperationType } from '../utils/operationTypes';
 
 function toSignedMovement(transaction: Transaction): number {
-  if (isInboundOperationType(transaction.type)) return transaction.quantity;
-  if (isOutboundOperationType(transaction.type)) return -transaction.quantity;
+  // FC-DATA-001 — quantity is a decimal string on the wire; the arithmetic here
+  // is local, so it converts once at the edge rather than pretending the field
+  // is a number everywhere.
+  const quantity = Number(transaction.quantity);
+  if (isInboundOperationType(transaction.type)) return quantity;
+  if (isOutboundOperationType(transaction.type)) return -quantity;
   return 0;
 }
 

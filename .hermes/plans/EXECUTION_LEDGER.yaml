@@ -107,3 +107,33 @@ status_board:
   Note: there is still no UI for the deficit queue. The API and the realtime alert exist; the screen to work the queue
   does not. That is the remaining gap and it is listed as such rather than described as complete.
   Verification: contract 12/12, E2E 6/6, regression 43/43, adversarial 11/11, CI 10/10.
+- 2026-09-26 (DEF-001 blocking follow-up): DATA-001 changed the wire contract to require a decimal string, but the
+  main data-entry screen was never migrated. frontend/src/components/DailyOperations.tsx:110 sends
+  `quantity: Number(row.quantity ?? 0)`, and line 806 sends `Number(form.quantity)`, so a fractional quantity is
+  posted as a JSON number and the new validator refuses it.
+  Proven against the running stack, not inferred: POST /api/transactions/bulk with the exact payload the screen
+  builds returns 400 "the number 10.5 has already lost precision. Send \"10.5\" instead", while the same payload
+  with an integer quantity returns 201. A warehouse user entering 10.5 tonnes on the operations screen gets a
+  validation error with no obvious cause. This is more severe than any remaining item: the primary workflow of the
+  application is broken for fractional quantities, and it was missed because every test so far drove the API
+  directly rather than through the screen that builds these payloads.
+- 2026-09-26 (DATA-001 closing): migrated every screen that builds a movement payload. Four writers were posting
+  floats, not one: transactionsService.toCreatePayload (the path that actually reaches POST /transactions), the bulk
+  payload in DailyOperations, the single-transaction row, and the Excel import. The Excel import matters most, since a
+  value that has already been through a spreadsheet cell and a parser is the most likely place for a lost digit to
+  enter the system unnoticed.
+  The type was the root cause and not the calls: `Transaction.quantity` was declared `number` while the wire form is a
+  string, so every caller was told it held a number. Changing it to `DecimalValue = string | number` made TypeScript
+  name 24 sites that were silently assuming a number, and each of those was fixed explicitly at the point of use. A
+  union rather than a plain string, because pretending the field is always a string would only move the cast somewhere
+  less visible.
+  `toApiDecimal` refuses a non-integer number instead of round-tripping it, which matters: String(0.1 + 0.2) is
+  "0.30000000000000004" and Number() of that string is itself, so a round-trip check would have passed a value that is
+  already wrong.
+  Two guards so this cannot recur silently: a contract assertion that both payload writers route their decimal fields
+  through the boundary and never call Number() on quantity, and an E2E that posts the exact payload the operations screen
+  builds. The E2E is the check whose absence caused this; every earlier test hand-wrote its payload, so nothing ever
+  looked at the code that builds one.
+  Verified on the running stack: the same request that returned 400 before now returns 201 with quantity 10.500, and the
+  balance reads 10.600 after a second 0.1 movement.
+  Result: frontend 50/50 (was 46), data-001 contract 12/12, E2E 44/44, CI 10/10, adversarial 11/11.

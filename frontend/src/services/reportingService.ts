@@ -72,7 +72,10 @@ export const generateStockCard = (
 
   // Iterate through ALL history to calculate running balance correctly
   for (const t of sortedTxns) {
-    const qty = t.quantity;
+    // FC-DATA-001 — the row arrives as a decimal string. Convert once, here, so
+    // every aggregation below works on a number without a dozen scattered casts
+    // and without any of them being forgotten.
+    const qty = Number(t.quantity);
     
     // Determine Flow Direction for Balance Calculation
     // In: Import (وارد), Return (مرتجع), Production (انتاج)

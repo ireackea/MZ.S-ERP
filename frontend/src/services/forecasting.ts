@@ -29,7 +29,7 @@ export const generateForecast = (items: Item[], transactions: Transaction[], loo
         
         if (diff <= lookbackDays && diff >= 0) {
             const current = consumptionMap.get(t.itemId) || 0;
-            consumptionMap.set(t.itemId, current + t.quantity);
+            consumptionMap.set(t.itemId, current + Number(t.quantity));
         }
     }
   });

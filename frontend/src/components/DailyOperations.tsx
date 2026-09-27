@@ -31,6 +31,7 @@ import {
     isWasteOperationType,
 } from '../utils/operationTypes';
 import { readFirstWorksheetMatrix } from '../utils/excelWorkbook';
+import { toApiDecimal, toApiDecimalOptional } from '../utils/decimal';
 import {
     Highlighter,
     OPERATION_PRINT_COLUMNS,
@@ -107,14 +108,16 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                 itemId: row.itemId,
                 date: row.date,
                 type: row.type,
-                quantity: Number(row.quantity ?? 0),
+                // FC-DATA-001 — the wire form is a decimal string. Number() here
+                // is what made 10.5 a float the server has to refuse.
+                quantity: toApiDecimal(row.quantity ?? 0, 'quantity') as string,
                 supplierOrReceiver: row.supplierOrReceiver,
                 warehouseId: row.warehouseId,
                 warehouseInvoice: row.warehouseInvoice,
                 supplierInvoice: row.supplierInvoice,
-                supplierNet: row.supplierNet,
-                difference: row.difference,
-                packageCount: row.packageCount,
+                supplierNet: toApiDecimalOptional(row.supplierNet, 'supplierNet'),
+                difference: toApiDecimalOptional(row.difference, 'difference'),
+                packageCount: toApiDecimalOptional(row.packageCount, 'packageCount'),
                 weightSlip: row.weightSlip,
                 truckNumber: row.truckNumber,
                 trailerNumber: row.trailerNumber,
@@ -124,8 +127,8 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                 unloadingRuleId: row.unloadingRuleId,
                 unloadingDuration: row.unloadingDuration,
                 delayDuration: row.delayDuration,
-                delayPenalty: row.delayPenalty,
-                calculatedFine: row.calculatedFine,
+                delayPenalty: toApiDecimalOptional(row.delayPenalty, 'delayPenalty'),
+                calculatedFine: toApiDecimalOptional(row.calculatedFine, 'calculatedFine'),
                 notes: row.notes,
                 attachmentData: row.attachmentData,
                 attachmentName: row.attachmentName,
@@ -491,11 +494,11 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
             if (originalTx && originalTx.itemId === itemId) {
                 if (isOutboundOperationType(originalTx.type)) {
                     // It was deducted, so add it back to see what's available
-                    availableStock += originalTx.quantity;
+                    availableStock += Number(originalTx.quantity);
                 } else if (isInboundOperationType(originalTx.type)) {
                     // It was added, so subtract it. If we are changing from 'Import' to 'Export',
                     // we can't use the imported amount as part of the available stock for the export.
-                    availableStock -= originalTx.quantity;
+                    availableStock -= Number(originalTx.quantity);
                 }
             }
         }
@@ -803,8 +806,12 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
         const newTransaction: Transaction = {
             ...normalizedForm as Transaction,
             id: uuidv4(),
-            quantity: Number(form.quantity),
-            supplierNet: form.supplierNet ? Number(form.supplierNet) : 0,
+            // FC-DATA-001 — the string the operator typed is kept as a string all
+            // the way to the request. This value is also what the offline queue
+            // persists and replays, so converting it here to a number would put
+            // a float in IndexedDB and the replay would be refused too.
+            quantity: toApiDecimal(form.quantity, 'quantity') as string,
+            supplierNet: toApiDecimalOptional(form.supplierNet, 'supplierNet') as string | undefined,
             timestamp: Date.now()
         };
 
@@ -860,7 +867,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
         };
 
         // Stock Validation
-        if (!validateStockAvailability(editingTransaction.itemId, editingTransaction.type, editingTransaction.quantity, editingTransaction.id)) {
+        if (!validateStockAvailability(editingTransaction.itemId, editingTransaction.type, Number(editingTransaction.quantity), editingTransaction.id)) {
             return;
         }
 
@@ -2003,11 +2010,16 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                     warehouseInvoice: String(invoice),
                     itemId: itemId,
                     supplierOrReceiver: String(partnerName),
-                    quantity: Number(quantity || 0),
-                    supplierNet: parseFlexibleNumber(getValue('supplierNet')) || 0,
+                    // FC-DATA-001 — an imported sheet is the most likely place for
+                    // a precision-losing float to enter the system, because the
+                    // value has been through a spreadsheet cell and a parser
+                    // already. The boundary refuses it here, where the row can
+                    // still be corrected, instead of at the server.
+                    quantity: toApiDecimal(quantity || 0, 'quantity') as string,
+                    supplierNet: toApiDecimalOptional(getValue('supplierNet'), 'supplierNet'),
 
                     // New Fields
-                    packageCount: parseFlexibleNumber(getValue('packageCount')) || undefined,
+                    packageCount: toApiDecimalOptional(getValue('packageCount'), 'packageCount'),
                     weightSlip: directWeightSlipValue || normalizeCellText(getValue('weightSlip')),
                     supplierInvoice: normalizeCellText(getValue('supplierInvoice')),
                     trailerNumber: ['رقم الجرار/المقطورة', 'رقم المقورة/الحاوية', 'رقم المقورة']
@@ -2941,7 +2953,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                                 }
 
                                                 if (column.key === 'delayPenalty') {
-                                                    return <td key={column.key} className="p-1 border-l bg-orange-50/10 text-center font-bold text-red-600" style={getBatchColumnStyle(column)}>{formatCurrencyLYD(form.delayPenalty)}</td>;
+                                                    return <td key={column.key} className="p-1 border-l bg-orange-50/10 text-center font-bold text-red-600" style={getBatchColumnStyle(column)}>{formatCurrencyLYD(Number(form.delayPenalty))}</td>;
                                                 }
 
                                                 if (column.key === 'saveAction') {
@@ -3263,7 +3275,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                                                 <div className="flex flex-col gap-1 text-[11px]">
                                                                     <div className="flex justify-between w-32"><span className="text-slate-500">الكمية:</span> <span className="font-bold">{t.quantity}</span></div>
                                                                     {t.supplierNet && <div className="flex justify-between w-32"><span className="text-slate-500">صافي المورد:</span> <span>{t.supplierNet}</span></div>}
-                                                                    {t.difference !== 0 && <div className={`flex justify-between w-32 pt-1 border-t border-slate-100 ${t.difference && t.difference < 0 ? 'text-red-600' : 'text-green-600'}`}><span>الفرق:</span> <span className="font-bold dir-ltr">{formatNumber(t.difference)}</span></div>}
+                                                                    {Number(t.difference) !== 0 && <div className={`flex justify-between w-32 pt-1 border-t border-slate-100 ${Number(t.difference) && Number(t.difference) < 0 ? 'text-red-600' : 'text-green-600'}`}><span>الفرق:</span> <span className="font-bold dir-ltr">{formatNumber(Number(t.difference))}</span></div>}
                                                                     {t.weightSlip && <div className="flex justify-between w-32 text-slate-600"><span>رقم نموذج الوزن:</span> <span className="font-mono"><Highlighter text={t.weightSlip} highlight={debouncedQuery} /></span></div>}
                                                                 </div>
                                                             </td>
@@ -3307,7 +3319,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                                                 <div className="mt-2 pt-1 border-t border-slate-100">
                                                                     {t.delayPenalty ? (
                                                                         <div className="text-red-600 font-bold text-[11px] bg-red-50 border border-red-100 px-2 py-1 rounded w-fit">
-                                                                            <AlertTriangle size={10} className="inline ml-1" />غرامة: {formatCurrencyLYD(t.delayPenalty)}
+                                                                            <AlertTriangle size={10} className="inline ml-1" />غرامة: {formatCurrencyLYD(Number(t.delayPenalty))}
                                                                         </div>
                                                                     ) : <span className="text-green-600 text-[10px] block">لا توجد غرامة تأخير</span>}
                                                                 </div>
@@ -3884,7 +3896,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                                             <td className="p-2 font-bold">{items.find(i => i.id === t.itemId)?.name}</td>
                                                             <td className="p-2">{t.quantity}</td>
                                                             <td className="p-2">{t.supplierNet}</td>
-                                                            <td className={`p-2 font-bold dir-ltr ${t.difference && t.difference < 0 ? 'text-red-600' : 'text-green-600'}`}>{t.difference?.toFixed(3)}</td>
+                                                            <td className={`p-2 font-bold dir-ltr ${Number(t.difference) && Number(t.difference) < 0 ? 'text-red-600' : 'text-green-600'}`}>{Number(t.difference).toFixed(3)}</td>
                                                             <td className="p-2 text-red-600 font-bold">{t.delayPenalty || '-'}</td>
                                                         </tr>
                                                     ))}
@@ -4059,7 +4071,7 @@ const DailyOperations: React.FC<DailyOperationsProps> = ({
                                     </div>
                                     <div className="bg-white border border-orange-200 rounded p-2 flex flex-col justify-center items-center">
                                         <span className="text-xs text-slate-400">غرامة التأخير المعتمدة (د.ل)</span>
-                                        <span className="font-bold text-red-600">{formatCurrencyLYD(editingTransaction.delayPenalty)}</span>
+                                        <span className="font-bold text-red-600">{formatCurrencyLYD(Number(editingTransaction.delayPenalty))}</span>
                                     </div>
                                 </div>
 

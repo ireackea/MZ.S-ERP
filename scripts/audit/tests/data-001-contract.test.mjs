@@ -170,3 +170,40 @@ assert.match(writes, /applyStockDeltas\(tx, new Map\(\[\[itemId, delta\]\]\), \{
   assert.doesNotMatch(adjustmentDto, /@Type\(\(\) => Number\)/,
     'the adjustment DTO must not coerce quantity to a number');
 });
+
+test('every screen that builds a movement payload sends decimals as strings', () => {
+  // This is the gap that reached production once: DATA-001 moved the wire contract
+  // to decimal strings and the operations screen kept sending `Number(quantity)`,
+  // so entering 10.5 tonnes produced a 400 with no obvious cause. Every test up
+  // to that point drove the API directly, so nothing ever looked at the code that
+  // builds the payload. These assertions are that missing check.
+  const decimal = read('frontend/src/utils/decimal.ts');
+  assert.match(decimal, /export const toApiDecimal/);
+  assert.match(decimal, /export const toApiDecimalOptional/);
+  assert.match(decimal, /has already lost precision/,
+    'a float must be refused at the boundary rather than coerced');
+  assert.match(decimal, /typeof input === 'string'/, 'a typed value must be passed through, not parsed and re-stringified');
+
+  const types = read('frontend/src/types.ts');
+  assert.match(types, /export type DecimalValue = string \| number/,
+    'the type must admit both so a cast cannot hide a float');
+
+  // The two writers of a movement payload.
+  for (const file of [
+    'frontend/src/services/transactionsService.ts',
+    'frontend/src/components/DailyOperations.tsx',
+  ]) {
+    const source = read(file);
+    assert.match(source, /import \{[^}]*\} from '[^']*utils\/decimal'/,
+      `${file} must import the decimal boundary`);
+    assert.match(source, /quantity: toApiDecimal\(/,
+      `${file} must send quantity through toApiDecimal`);
+    assert.doesNotMatch(source, /quantity: Number\(/,
+      `${file} must not send a float for quantity`);
+  }
+
+  // The offline queue replays the persisted body verbatim, so a float stored in
+  // IndexedDB would be refused on replay long after the operator left.
+  assert.match(read('frontend/src/components/DailyOperations.tsx'),
+    /quantity: toApiDecimal\(form\.quantity, 'quantity'\) as string/);
+});

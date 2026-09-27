@@ -98,6 +98,13 @@ export interface Item {
   warehouseId?: DataScope;
 }
 
+/**
+ * A decimal as it exists in this app: the canonical wire form is a string, but a
+ * number is tolerated on the way in from a form and from a local store. Use
+ * `toApiDecimal` from utils/decimal to convert anything on the way out.
+ */
+export type DecimalValue = string | number;
+
 export interface Transaction {
   id: string;
   publicId?: string;
@@ -106,10 +113,22 @@ export interface Transaction {
   date: string;
   itemId: string;
   type: OperationType;
-  quantity: number;
-  supplierNet?: number;
-  difference?: number;
-  packageCount?: number;
+  /**
+   * FC-DATA-001 — a decimal crosses the wire as a string, never a JS float.
+   *
+   * On the way in from the API it is a string. In a locally-built row a number
+   * may still be present, which is why the type is the union rather than a plain
+   * string: too many screens do arithmetic on these values before they reach
+   * `toApiDecimal`, and pretending otherwise would just move the cast.
+   *
+   * The rule that matters is at the boundary: nothing is sent until
+   * `toApiDecimal` has accepted it, because a float that has already lost
+   * precision cannot be recovered on the server.
+   */
+  quantity: DecimalValue;
+  supplierNet?: DecimalValue;
+  difference?: DecimalValue;
+  packageCount?: DecimalValue;
   warehouseInvoice: string;
   supplierInvoice?: string;
   weightSlip?: string;
@@ -122,8 +141,8 @@ export interface Transaction {
   unloadingRuleId?: string;
   unloadingDuration?: number;
   delayDuration?: number;
-  delayPenalty?: number;
-  calculatedFine?: number;
+  delayPenalty?: DecimalValue;
+  calculatedFine?: DecimalValue;
   notes?: string;
   attachmentData?: string;
   attachmentName?: string;
