@@ -3,7 +3,8 @@
 // ENTERPRISE FIX: Phase 0.1 – Final Encoding & Lock Fix - 2026-03-13
 // ENTERPRISE FIX: Legacy Migration Phase 3 - Professional PDF Reporting - 2026-02-27
 import { BadRequestException, Injectable } from '@nestjs/common';
-import * as puppeteer from 'puppeteer';
+// FC-OPS-002 — browser resolution and launch diagnostics live in one place.
+import { launchBrowser } from '../common/pdf-browser';
 // FC-API-002 — the printer must not re-derive movement direction; it reuses the
 // canonical classifier so a printed report can never disagree with the API.
 import {
@@ -89,10 +90,9 @@ export class ReportService {
     const model = this.resolvePrintModel(payload);
     const html = this.buildHtmlTemplate(model);
 
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
+    // FC-OPS-002 — launch through the shared helper so a missing browser is a
+    // 503 that names the cause instead of a 500 carrying a puppeteer stack trace.
+    const browser = await launchBrowser();
 
     try {
       const page = await browser.newPage();

@@ -1,12 +1,13 @@
 // ENTERPRISE FIX: Professional PDF Reporting - 2026-02-27
 import { BadRequestException, HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import * as puppeteer from 'puppeteer';
 import { PrismaService } from '../prisma.service';
 import { GenerateReportDto } from './dto/generate-report.dto';
 import { ReportDto } from './dto/report.dto';
 import { PrintReportDto, RenderHtmlPdfDto } from './dto/print-report.dto';
 import { TimeService } from '../common/time/time.service';
 import { warehouseScopeCondition } from '../common/scope';
+// FC-OPS-002 — browser resolution and launch diagnostics live in one place.
+import { launchBrowser } from '../common/pdf-browser';
 import {
   isInboundType,
   isOutboundType,
@@ -560,10 +561,8 @@ export class ReportService {
     }
 
     const html = this.buildPrintHtml(dto);
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
+    // FC-OPS-002 — shared launcher: a missing browser is a 503 naming the cause.
+    const browser = await launchBrowser();
 
     try {
       const page = await browser.newPage();
@@ -604,15 +603,11 @@ export class ReportService {
       throw new HttpException('PDF renderer is busy', HttpStatus.TOO_MANY_REQUESTS);
     }
     this.activePdfRenders += 1;
-    let browser: puppeteer.Browser | undefined;
+    let browser: Awaited<ReturnType<typeof launchBrowser>> | undefined;
 
     try {
-      browser = await puppeteer.launch({
-        headless: true,
-        timeout: 15_000,
-        protocolTimeout: 20_000,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-      });
+      // FC-OPS-002 — shared launcher, with the timeouts this endpoint needs.
+      browser = await launchBrowser({ timeout: 15_000, protocolTimeout: 20_000 });
       const page = await browser.newPage();
       page.setDefaultTimeout(15_000);
       page.setDefaultNavigationTimeout(15_000);
