@@ -43,6 +43,7 @@ import {
   type UsersStatusFilter,
 } from '@services/usersService';
 import UnifiedIamRoleModal from './unified-iam/RoleModal';
+import ChangeMyPassword from './unified-iam/ChangeMyPassword';
 import {
   INITIAL_CREATE_FORM,
   getErrorMessage,
@@ -503,10 +504,16 @@ const UnifiedIAM: React.FC = () => {
           </div>
         </div>
 
-        {/* Users Tab */}
-        {activeTab === 'users' && (
-          <>
-            {/* Create User Form */}
+            {/* Users Tab */}
+            {activeTab === 'users' && (
+              <>
+                {/* FC-SEC-010 — self-service password change. Previously the
+                    system had no way to change a password at all, which is why
+                    the superadmin password stayed pinned to the .env value. */}
+                <div className="mb-4">
+                  <ChangeMyPassword />
+                </div>
+                {/* Create User Form */}
             <motion.div
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}

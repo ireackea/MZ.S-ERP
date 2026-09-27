@@ -24,6 +24,7 @@ import { migratePermissionGrants } from './permission-catalog';
 import {
   isPasswordPolicyCompliant,
   isWeakLegacyPassword,
+  passwordPolicyMessage,
 } from '../common/password-policy';
 
 type JwtUser = {
@@ -33,6 +34,9 @@ type JwtUser = {
   permissions: string[];
   name?: string | null;
   sessionId?: string;
+  // FC-SEC-010 — read fresh from the database on every request, so a forced
+  // password change takes effect without waiting for a token to expire.
+  mustChangePassword?: boolean;
 };
 
 @Injectable()
@@ -188,6 +192,7 @@ export class AuthService {
       failedAttempts: number;
       lockoutUntil: Date | null;
       isActive: boolean;
+      passwordSetByUser: boolean;
     },
     superAdminRoleId: string,
   ) {
@@ -203,15 +208,27 @@ export class AuthService {
       updates.roleId = superAdminRoleId;
     }
 
-    const defaultAdminPassword = this.getDefaultAdminPassword();
-    const isPasswordSynced = await this.verifyPassword(defaultAdminPassword, user.passwordHash);
-    if (!isPasswordSynced) {
-      updates.passwordHash = await bcrypt.hash(defaultAdminPassword, 10);
-      updates.failedAttempts = 0;
-      updates.lockoutUntil = null;
-      updates.isActive = true;
-      console.warn('[Auth Service] SuperAdmin password synchronized from ADMIN_PASSWORD.');
+    // FC-SEC-010 — this used to re-write the hash to ADMIN_PASSWORD on every
+    // boot whenever it differed, which pinned the superadmin password to the
+    // .env file forever: unreadable, unrotatable, and readable by anyone with
+    // file access. The env value now only seeds an account that has never had a
+    // password of its own.
+    if (!user.passwordSetByUser) {
+      const defaultAdminPassword = this.getDefaultAdminPassword();
+      const isPasswordSynced = await this.verifyPassword(defaultAdminPassword, user.passwordHash);
+      if (!isPasswordSynced) {
+        updates.passwordHash = await bcrypt.hash(defaultAdminPassword, 10);
+        updates.failedAttempts = 0;
+        updates.lockoutUntil = null;
+        updates.isActive = true;
+        console.warn('[Auth Service] SuperAdmin seeded from ADMIN_PASSWORD; set your own password to detach from it.');
+      } else if ((user.failedAttempts || 0) > 0 || user.lockoutUntil || user.isActive === false) {
+        updates.failedAttempts = 0;
+        updates.lockoutUntil = null;
+        updates.isActive = true;
+      }
     } else if ((user.failedAttempts || 0) > 0 || user.lockoutUntil || user.isActive === false) {
+      // A rotated password must not be undone by the unlock side effect.
       updates.failedAttempts = 0;
       updates.lockoutUntil = null;
       updates.isActive = true;
@@ -242,6 +259,7 @@ export class AuthService {
         failedAttempts: true,
         lockoutUntil: true,
         isActive: true,
+        passwordSetByUser: true,
       },
     });
     if (adminByUsername) {
@@ -259,6 +277,7 @@ export class AuthService {
         failedAttempts: true,
         lockoutUntil: true,
         isActive: true,
+        passwordSetByUser: true,
       },
     });
     if (adminByEmail) {
@@ -282,10 +301,15 @@ export class AuthService {
         firstName: 'System',
         lastName: 'SuperAdmin',
         isActive: true,
+        // FC-SEC-010 — the seeded password is the value in .env, so it is
+        // marked temporary. The operator is forced to replace it on first use,
+        // which is also what sets passwordSetByUser and detaches the account
+        // from the env file for good.
+        mustChangePassword: true,
         roleId: superAdminRole.id,
       },
     });
-    console.log('[Auth Service] SuperAdmin seeded successfully!');
+    console.log('[Auth Service] SuperAdmin seeded successfully.');
   }
 
   private async verifyPassword(plain: string, hash: string): Promise<boolean> {
@@ -517,6 +541,10 @@ export class AuthService {
         username: user.username || user.email || 'user',
         role: user.role?.name || 'Viewer',
         permissions,
+        // FC-SEC-010 — the UI needs this at login to force a password change
+        // before anything else is reachable, and it must come from the server
+        // rather than being inferred from the absence of a session.
+        mustChangePassword: user.mustChangePassword,
         name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || undefined,
       },
     };
@@ -696,9 +724,94 @@ export class AuthService {
       username: currentUser.username,
       role: currentUser.role?.name || 'Viewer',
       permissions: this.normalizePermissions(currentUser.role?.permissions),
+      mustChangePassword: currentUser.mustChangePassword,
       name: currentUser.firstName || currentUser.lastName ? `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim() : currentUser.username,
       sessionId,
     };
+  }
+
+  /**
+   * FC-SEC-010 — a user changing their own password.
+   *
+   * The system had no password change, reset or recovery path of any kind. A
+   * password was set once at creation or invitation accept and could never be
+   * changed again by anybody, including its owner. On a warehouse floor where
+   * terminals are shared, that is not a gap but an operational dead end.
+   *
+   * The current password is required so a borrowed or unattended session cannot
+   * silently take the account over, and every other session is revoked so a
+   * password change actually ends whoever else was holding it.
+   */
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+    clientMeta?: { ipAddress?: string; userAgent?: string },
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException('Account not found');
+    }
+
+    const current = String(currentPassword || '');
+    if (!current) {
+      throw new BadRequestException('كلمة المرور الحالية مطلوبة');
+    }
+    if (!(await this.verifyPassword(current, user.passwordHash))) {
+      await this.auditService.log({
+        action: 'PASSWORD_CHANGE_REJECTED',
+        actorId: user.id,
+        actorUsername: user.username,
+        actorRole: 'unknown',
+        targetUserId: user.id,
+        targetResource: 'auth.change-password',
+        status: 'failed',
+        message: 'Password change refused: the current password did not match',
+      });
+      throw new BadRequestException('كلمة المرور الحالية غير صحيحة');
+    }
+
+    const next = String(newPassword || '');
+    if (next === current) {
+      throw new BadRequestException('كلمة المرور الجديدة يجب أن تختلف عن الحالية');
+    }
+    if (!isPasswordPolicyCompliant(next)) {
+      throw new BadRequestException(passwordPolicyMessage(next));
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash: await bcrypt.hash(next, 10),
+        // Detaches the account from ADMIN_PASSWORD for a superadmin, and clears
+        // the forced-change prompt for everyone.
+        passwordSetByUser: true,
+        mustChangePassword: false,
+        failedAttempts: 0,
+        lockoutUntil: null,
+      },
+    });
+
+    // Every session ends, including this one, so the next request must
+    // re-authenticate with the new password.
+    await this.prisma.activeSession.updateMany({
+      where: { userId, isRevoked: false },
+      data: { isRevoked: true },
+    });
+
+    await this.auditService.log({
+      action: 'PASSWORD_CHANGED',
+      actorId: user.id,
+      actorUsername: user.username,
+      actorRole: 'unknown',
+      targetUserId: user.id,
+      targetResource: 'auth.change-password',
+      status: 'success',
+      message: 'Password changed by the account owner; all sessions revoked',
+      metadata: { ipAddress: this.resolveClientIp(clientMeta) },
+    });
+
+    return { changed: true, sessionsRevoked: true };
   }
 }
 

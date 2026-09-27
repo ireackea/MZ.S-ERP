@@ -23,6 +23,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { ListUsersDto } from './dto/list-users.dto';
 import { LockUserDto } from './dto/lock-user.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { UpdateRolePermissionsDto } from './dto/role-permissions.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UsersService } from './users.service';
@@ -124,6 +125,14 @@ export class UsersController {
   @Post(':id/lock')
   async lockAccount(@Param('id') id: string, @Body() dto: LockUserDto, @Req() req: any) {
     return this.usersService.setLockStatus(id, dto, this.resolveActor(req));
+  }
+
+  // FC-SEC-010 — the recovery path when someone is locked out. The issued
+  // password is temporary and every session of that account is revoked.
+  @Permissions('users.update')
+  @Post(':id/reset-password')
+  async resetPassword(@Param('id') id: string, @Body() dto: ResetPasswordDto, @Req() req: any) {
+    return this.usersService.resetPassword(id, dto.newPassword, this.resolveActor(req));
   }
 
   @Permissions('users.update')

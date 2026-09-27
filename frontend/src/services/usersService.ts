@@ -25,6 +25,11 @@ export interface UserDto {
   isActive: boolean;
   failedAttempts: number;
   lockoutUntil?: string | null;
+  /** FC-SEC-010 — the user list previously could not tell an invited account
+   *  from a deactivated one, nor show who still holds a temporary password. */
+  isEmailConfirmed?: boolean;
+  mustChangePassword?: boolean;
+  createdOpeningBalanceCount?: number;
   createdAt: string;
   updatedAt: string;
   roleId: string;
@@ -81,6 +86,9 @@ const userFromApi = (row: any): UserDto => ({
   isActive: Boolean(row?.isActive),
   failedAttempts: Number(row?.failedAttempts || 0),
   lockoutUntil: row?.lockoutUntil ?? null,
+  isEmailConfirmed: Boolean(row?.isEmailConfirmed),
+  mustChangePassword: Boolean(row?.mustChangePassword),
+  createdOpeningBalanceCount: Number(row?.createdOpeningBalanceCount || 0),
   createdAt: String(row?.createdAt || ''),
   updatedAt: String(row?.updatedAt || ''),
   roleId: String(row?.roleId || row?.role?.id || ''),

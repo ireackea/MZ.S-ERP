@@ -48,6 +48,7 @@ type UserAuditLog = {
 type UserListRecord = Prisma.UserGetPayload<{
   include: {
     role: true;
+    createdOpeningBalances: { select: { id: true } };
   };
 }>;
 
@@ -158,7 +159,7 @@ export class UsersService {
       this.prisma.user.count({ where }),
       this.prisma.user.findMany({
         where,
-        include: { role: true },
+        include: { role: true, createdOpeningBalances: { select: { id: true } } },
         orderBy: [{ createdAt: 'desc' }],
         skip: (page - 1) * limit,
         take: limit,
@@ -310,7 +311,7 @@ export class UsersService {
         isActive: dto.isActive ?? true,
         roleId: role.id,
       },
-      include: { role: true },
+      include: { role: true, createdOpeningBalances: { select: { id: true } } },
     });
 
     await this.writeAudit({
@@ -447,6 +448,10 @@ export class UsersService {
     return {
       role,
       permissions,
+      // FC-SEC-010 — carried by the principal, which verifyToken rebuilds from
+      // the database on every request, so a forced change takes effect without
+      // waiting for a token to expire.
+      mustChangePassword: Boolean(principal?.mustChangePassword),
     };
   }
 
@@ -470,7 +475,7 @@ export class UsersService {
 
     const invitation = await this.prisma.invitation.findFirst({
       where: { token: cleanToken },
-      include: { role: true },
+      include: { role: true, createdOpeningBalances: { select: { id: true } } },
     });
     if (!invitation) throw new NotFoundException('Invitation not found');
 
@@ -521,7 +526,7 @@ export class UsersService {
 
     const updated = await this.prisma.user.update({
       where: { id: user.id },
-      include: { role: true },
+      include: { role: true, createdOpeningBalances: { select: { id: true } } },
       data: {
         username: requestedUsername || user.username,
         firstName: dto.firstName?.trim() || user.firstName,
@@ -610,7 +615,7 @@ export class UsersService {
   async updateUser(id: string, dto: UpdateUserDto, actor: ActorContext) {
     const existing = await this.prisma.user.findUnique({
       where: { id },
-      include: { role: true },
+      include: { role: true, createdOpeningBalances: { select: { id: true } } },
     });
     if (!existing) throw new NotFoundException('User not found');
 
@@ -663,7 +668,7 @@ export class UsersService {
         roleId,
         passwordHash: dto.password ? await bcrypt.hash(dto.password, 10) : undefined,
       },
-      include: { role: true },
+      include: { role: true, createdOpeningBalances: { select: { id: true } } },
     });
 
     await this.writeAudit({
@@ -690,7 +695,7 @@ export class UsersService {
   async deleteUser(id: string, actor: ActorContext) {
     const existing = await this.prisma.user.findUnique({
       where: { id },
-      include: { role: true },
+      include: { role: true, createdOpeningBalances: { select: { id: true } } },
     });
     if (!existing) throw new NotFoundException('User not found');
 
@@ -735,7 +740,7 @@ export class UsersService {
   async setLockStatus(id: string, dto: LockUserDto, actor: ActorContext) {
     const existing = await this.prisma.user.findUnique({
       where: { id },
-      include: { role: true },
+      include: { role: true, createdOpeningBalances: { select: { id: true } } },
     });
     if (!existing) throw new NotFoundException('User not found');
 
@@ -767,7 +772,7 @@ export class UsersService {
         lockoutUntil,
         failedAttempts: locked ? existing.failedAttempts : 0,
       },
-      include: { role: true },
+      include: { role: true, createdOpeningBalances: { select: { id: true } } },
     });
 
     await this.writeAudit({
@@ -932,7 +937,7 @@ export class UsersService {
 
     const targetUsers = await this.prisma.user.findMany({
       where: { id: { in: userIds } },
-      include: { role: true },
+      include: { role: true, createdOpeningBalances: { select: { id: true } } },
     });
 
     if (!targetUsers.length) return { deleted: 0 };
@@ -977,6 +982,72 @@ export class UsersService {
     return { deleted: result.count };
   }
 
+  /**
+   * FC-SEC-010 — administrator password reset.
+   *
+   * A reset is the recovery path when someone is locked out, which the system
+   * previously had none of. The password handed over is temporary: the account
+   * is marked `mustChangePassword`, so the holder is forced to replace it
+   * before the session becomes useful, and every existing session is revoked so
+   * the person who lost access cannot still be inside.
+   */
+  async resetPassword(id: string, newPassword: string, actor: ActorContext) {
+    const existing = await this.prisma.user.findUnique({
+      where: { id },
+      include: { role: true, createdOpeningBalances: { select: { id: true } } },
+    });
+    if (!existing) throw new NotFoundException('User not found');
+
+    const actorRole = actor.role.toLowerCase();
+    if (existing.role.name.toLowerCase() === 'superadmin' && actorRole !== 'superadmin') {
+      throw new ForbiddenException('Only SuperAdmin can reset a SuperAdmin password');
+    }
+    if (id === actor.id) {
+      throw new BadRequestException(
+        'Use "change my password" instead — it verifies the current password and does not lock you out.',
+      );
+    }
+
+    this.assertPasswordPolicy(newPassword);
+
+    await this.prisma.user.update({
+      where: { id },
+      data: {
+        passwordHash: await bcrypt.hash(newPassword, 10),
+        passwordSetByUser: true,
+        mustChangePassword: true,
+        failedAttempts: 0,
+        lockoutUntil: null,
+        isActive: true,
+      },
+    });
+
+    await this.prisma.activeSession.updateMany({
+      where: { userId: id, isRevoked: false },
+      data: { isRevoked: true },
+    });
+
+    await this.auditService.log({
+      action: 'PASSWORD_RESET_BY_ADMIN',
+      actorId: actor.id,
+      actorUsername: actor.username,
+      actorRole: actor.role,
+      targetUserId: id,
+      targetResource: 'users.password-reset',
+      status: 'success',
+      message: `Reset the password for ${existing.username}; all their sessions were revoked`,
+      metadata: { username: existing.username },
+    });
+    this.publish('user.password-reset', id, actor.id);
+
+    return {
+      reset: true,
+      id,
+      username: existing.username,
+      mustChangePassword: true,
+    };
+  }
+
   private toRoleDto(role: RoleRecord) {
     return {
       id: role.id,
@@ -1002,6 +1073,11 @@ export class UsersService {
       isActive: user.isActive,
       failedAttempts: user.failedAttempts,
       lockoutUntil: user.lockoutUntil,
+      // FC-SEC-010 — the user list could not distinguish an invited account from
+      // a deactivated one, nor show who still holds a temporary password.
+      isEmailConfirmed: user.isEmailConfirmed,
+      mustChangePassword: user.mustChangePassword,
+      createdOpeningBalanceCount: user.createdOpeningBalances?.length ?? 0,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
       roleId: user.roleId,

@@ -72,6 +72,8 @@ export type AuditAction =
   | 'ROLE_DELETED'
   | 'PASSWORD_POLICY_VIOLATION'
   | 'PASSWORD_CHANGED'
+  | 'PASSWORD_CHANGE_REJECTED'
+  | 'PASSWORD_RESET_BY_ADMIN'
   | 'PERMISSION_CHECK';
 
 export interface AuditLogEntry {

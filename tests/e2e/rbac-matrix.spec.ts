@@ -61,6 +61,20 @@ const login = async (username: string, password: string) => {
   return cookie;
 };
 
+/**
+ * The auth traffic class allows 20 requests per 15 minutes and this suite
+ * creates a session per role. Logging the admin in once per test exhausted the
+ * budget mid-run and every later assertion then spent its time in backoff, which
+ * reads as a hang rather than a rate limit. The admin session is memoised; a
+ * per-user login is still fresh because each fixture has its own username.
+ */
+let adminSessionCookie: string | null = null;
+const adminLogin = async (): Promise<string> => {
+  if (adminSessionCookie) return adminSessionCookie;
+  adminSessionCookie = await login(adminUsername, adminPassword);
+  return adminSessionCookie;
+};
+
 const createdUserIds: string[] = [];
 const createdRoleIds: string[] = [];
 
@@ -101,7 +115,7 @@ afterAll(() => {
 
 describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
   it('never issues a wildcard grant to a built-in non-superadmin role', async () => {
-    const adminCookie = await login(adminUsername, adminPassword);
+    const adminCookie = await adminLogin();
     const roles = await request('/users/roles', { headers: { Cookie: adminCookie } });
     expect(roles.response.status).toBe(200);
 
@@ -116,7 +130,7 @@ describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
     // role-templates.ts and the app never reconciled it, so Manager/Operator/
     // Viewer held no dashboard.view and no stocktaking access. Every previous
     // spec logged in as superadmin and therefore could not see it.
-    const adminCookie = await login(adminUsername, adminPassword);
+    const adminCookie = await adminLogin();
     const expected: Record<string, string[]> = {
       Manager: ['dashboard.view', 'items.create', 'items.update', 'partners.view', 'inventory.view.stocktaking'],
       Operator: ['dashboard.view', 'inventory.view.stocktaking', 'partners.view'],
@@ -146,7 +160,7 @@ describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
   });
 
   it('a granted module wildcard is honoured by the API, and an ungranted one is not', async () => {
-    const adminCookie = await login(adminUsername, adminPassword);
+    const adminCookie = await adminLogin();
     const built = await createUserWithPermissions(adminCookie, 'scoped', ['items.*']);
     const cookie = await login(built.username, PASSWORD);
 
@@ -161,7 +175,7 @@ describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
   });
 
   it('a limited role cannot reach the users module it was not granted', async () => {
-    const adminCookie = await login(adminUsername, adminPassword);
+    const adminCookie = await adminLogin();
     const built = await createUserWithPermissions(adminCookie, 'nousers', ['items.view']);
     const cookie = await login(built.username, PASSWORD);
 
@@ -178,7 +192,7 @@ describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
   });
 
   it('a role change takes effect on the live session without re-login', async () => {
-    const adminCookie = await login(adminUsername, adminPassword);
+    const adminCookie = await adminLogin();
     const built = await createUserWithPermissions(adminCookie, 'live', ['items.view']);
     const cookie = await login(built.username, PASSWORD);
 
@@ -198,7 +212,7 @@ describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
   });
 
   it('locks a session immediately without re-login', async () => {
-    const adminCookie = await login(adminUsername, adminPassword);
+    const adminCookie = await adminLogin();
     const built = await createUserWithPermissions(adminCookie, 'lockme', ['items.view']);
     const cookie = await login(built.username, PASSWORD);
 
@@ -216,7 +230,7 @@ describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
   });
 
   it('a weak password is refused for a limited role user too, not only the bootstrap admin', async () => {
-    const adminCookie = await login(adminUsername, adminPassword);
+    const adminCookie = await adminLogin();
     const suffix = randomUUID().slice(0, 8);
 
     const result = await request('/users', {
@@ -228,7 +242,7 @@ describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
   });
 
   it('FC-SEC-008: a built-in role can never be deleted, and a role with users is refused', async () => {
-    const adminCookie = await login(adminUsername, adminPassword);
+    const adminCookie = await adminLogin();
     const roles = await request('/users/roles', { headers: { Cookie: adminCookie } });
     const list = data(roles.body) as Array<{ id: string; name: string }>;
 
@@ -275,7 +289,7 @@ describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
   });
 
   it('FC-SEC-008: a built-in role name cannot be shadowed by a custom role', async () => {
-    const adminCookie = await login(adminUsername, adminPassword);
+    const adminCookie = await adminLogin();
     for (const name of ['Admin', 'admin', 'Viewer']) {
       const result = await request('/users/roles', {
         method: 'POST',
@@ -288,7 +302,7 @@ describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
   });
 
   it('FC-SEC-009: an admin may unlock what an admin may lock', async () => {
-    const adminCookie = await login(adminUsername, adminPassword);
+    const adminCookie = await adminLogin();
     const roles = data(await request('/users/roles', { headers: { Cookie: adminCookie } }).then((r) => r.body));
     const adminRole = (roles as Array<{ id: string; name: string }>).find((r) => r.name === 'Admin')!;
 
@@ -334,7 +348,7 @@ describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
   });
 
   it('FC-SEC-009: an admin may not delete their own account, by either route', async () => {
-    const adminCookie = await login(adminUsername, adminPassword);
+    const adminCookie = await adminLogin();
     const all = data(await request('/users?limit=200', { headers: { Cookie: adminCookie } }).then((r) => r.body));
     const list = all as Array<{ id: string; username: string; role: { name: string } }>;
     const me = list.find((entry) => entry.username === adminUsername);
@@ -362,5 +376,92 @@ describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
     // The account is still there and still usable.
     const still = await request('/users/permissions/me', { headers: { Cookie: adminCookie } });
     expect(still.response.status).toBe(200);
-  });
+  }, 30000);
+
+  it('FC-SEC-010: a user can change their own password and it takes effect', async () => {
+    const adminCookie = await adminLogin();
+    const suffix = randomUUID().slice(0, 8);
+    const username = `matrix_pw_${suffix}`;
+
+    const created = await request('/users', {
+      method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password: PASSWORD, roleName: 'Viewer' }),
+    });
+    expect(created.response.status).toBe(201);
+    createdUserIds.push(String(data(created.body).id));
+
+    const userCookie = await login(username, PASSWORD);
+
+    // The full policy is enforced, not merely a length check. 12345678 was a
+    // valid password for any account before FC-SEC-004.
+    const weak = await request('/auth/change-password', {
+      method: 'POST',
+      headers: { Cookie: userCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword: PASSWORD, newPassword: '12345678' }),
+    });
+    expect(weak.response.status).toBe(400);
+
+    // The current password is required, so an unattended session cannot take
+    // the account over silently.
+    const wrong = await request('/auth/change-password', {
+      method: 'POST',
+      headers: { Cookie: userCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword: 'WrongPass1!', newPassword: 'BrandNew1!' }),
+    });
+    expect(wrong.response.status).toBe(400);
+
+    const changed = await request('/auth/change-password', {
+      method: 'POST',
+      headers: { Cookie: userCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword: PASSWORD, newPassword: 'BrandNew1!' }),
+    });
+    expect(changed.response.status).toBe(201);
+
+    // Every session was revoked, including the one that made the change.
+    const after = await request('/users/permissions/me', { headers: { Cookie: userCookie } });
+    expect(after.response.status).toBe(401);
+
+    // The new password works and the old one is dead.
+    const withNew = await login(username, 'BrandNew1!');
+    expect((await request('/users/permissions/me', { headers: { Cookie: withNew } })).response.status).toBe(200);
+    const stale = await request('/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password: PASSWORD }),
+    });
+    expect(stale.response.status).toBe(401);
+  }, 90000);
+
+  it('FC-SEC-010: an admin reset issues a temporary password and flags the account', async () => {
+    const adminCookie = await adminLogin();
+    const suffix = randomUUID().slice(0, 8);
+    const username = `matrix_reset_${suffix}`;
+
+    const created = await request('/users', {
+      method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password: PASSWORD, roleName: 'Viewer' }),
+    });
+    expect(created.response.status).toBe(201);
+    const userId = String(data(created.body).id);
+    createdUserIds.push(userId);
+
+    const reset = await request(`/users/${userId}/reset-password`, {
+      method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newPassword: 'Temporary99!' }),
+    });
+    expect(reset.response.status).toBe(201);
+    expect(data(reset.body).mustChangePassword).toBe(true);
+
+    // The account is flagged, and the flag is read fresh on every request
+    // because verifyToken re-reads the user row.
+    const session = await login(username, 'Temporary99!');
+    const me = await request('/users/permissions/me', { headers: { Cookie: session } });
+    expect(me.response.status).toBe(200);
+    // /users/permissions/me returns the principal directly, not a `data`
+    // envelope, so data() would unwrap to undefined here.
+    expect(me.body?.mustChangePassword).toBe(true);
+  }, 90000);
 });

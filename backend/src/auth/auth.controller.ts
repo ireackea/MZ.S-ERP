@@ -7,6 +7,7 @@ import { Request, Response } from 'express';
 import { Public } from './decorators/public.decorator';
 import { AuthService } from './auth.service';
 import { CreateInitialAdminDto } from './dto/create-initial-admin.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { ResetLoginAttemptsDto } from './dto/reset-login-attempts.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -107,6 +108,28 @@ export class AuthController {
   @Get('me')
   async me(@Req() req: Request & { user?: unknown }) {
     return req.user;
+  }
+
+  /**
+   * FC-SEC-010 — the only way out of the password this system could not
+   * previously change. Revokes every session, so the caller must sign in again
+   * with the new password.
+   */
+  @AllowAuthenticated()
+  @Post('change-password')
+  async changePassword(
+    @Body() dto: ChangePasswordDto,
+    @Req() req: Request & { user?: { id?: string } },
+  ) {
+    return this.authService.changePassword(
+      String(req.user?.id || ''),
+      dto.currentPassword,
+      dto.newPassword,
+      {
+        ipAddress: String(req.ip || req.socket?.remoteAddress || '0.0.0.0'),
+        userAgent: String(req.headers['user-agent'] || 'unknown'),
+      },
+    );
   }
 
   // FC-SEC-003 — one-time first-run admin bootstrap, server-side only.

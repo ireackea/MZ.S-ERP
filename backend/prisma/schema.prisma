@@ -38,6 +38,15 @@ model User {
   isActive               Boolean          @default(true)
   failedAttempts         Int              @default(0)
   lockoutUntil           DateTime?
+  // FC-SEC-010 — the superadmin password used to be re-written from
+  // ADMIN_PASSWORD on every boot whenever the stored hash differed, so it could
+  // never be rotated away from the value in .env. `passwordSetByUser` closes
+  // that: the env value seeds the account once, and after the operator chooses
+  // their own password the env value is never written again.
+  passwordSetByUser      Boolean          @default(false)
+  // Set when the current password is temporary — an admin reset, or the very
+  // first seed — so the UI can force a change before anything else is reachable.
+  mustChangePassword     Boolean          @default(false)
   theme                  String           @default("classic")
   roleId                 String
   role                   Role             @relation(fields: [roleId], references: [id])
