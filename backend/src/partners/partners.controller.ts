@@ -30,7 +30,6 @@ export class PartnersController {
   }
 
   @Permissions('partners.delete')
-  @Roles('Admin', 'SuperAdmin')
   @Delete(':id')
   remove(@Param('id') id: string, @Headers('idempotency-key') key: string | undefined, @Req() req: any) {
     return this.partnersService.remove(id, req.user?.sub || req.user?.id, req.user?.username, key);

@@ -46,7 +46,6 @@ export class ItemController {
   }
 
   @Permissions('items.delete')
-  @Roles('Admin', 'SuperAdmin')
   @Post('delete')
   async deleteMany(@Body() dto: DeleteItemsDto) {
     return this.itemService.deleteByPublicIds(dto.publicIds);
@@ -69,7 +68,6 @@ export class ItemController {
   }
 
   @Permissions('items.delete')
-  @Roles('Admin', 'SuperAdmin')
   @Post('delete-permanent')
   async deletePermanent(@Body() dto: DeleteItemsDto, @Req() req: any) {
     const userId = req.user?.sub || req.user?.id;

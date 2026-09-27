@@ -43,7 +43,6 @@ export class StocktakingController {
   }
 
   @Permissions('inventory.close.stocktaking')
-  @Roles('Admin', 'SuperAdmin')
   @Post(':id/close')
   close(@Param('id') id: string, @Body() dto: CloseStocktakingDto, @Headers('idempotency-key') key: string | undefined, @Req() req: any) {
     return this.stocktakingService.close(id, dto, req.user?.sub || req.user?.id, req.user?.username, key, req.user?.role === 'SuperAdmin' ? 'all' : 'default');

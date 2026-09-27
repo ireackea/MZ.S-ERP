@@ -15,7 +15,6 @@ export class OpeningBalanceController {
   @Permissions('opening-balances.create')
   @Post()
   @HttpCode(HttpStatus.OK)
-  @Roles('Admin', 'SuperAdmin')
   create(@Body() dto: CreateOpeningBalanceDto, @Req() req: any) {
     // FC-SEC-011 — the author of a fiscal-year starting position is recorded.
     return this.service.setBalance(dto, this.actor(req));
@@ -28,7 +27,6 @@ export class OpeningBalanceController {
   }
 
   @Permissions('opening-balances.bulk')
-  @Roles('Admin', 'SuperAdmin')
   @Post('bulk')
   async bulk(@Body() dto: BulkUpdateBalanceDto, @Req() req: any) {
     return this.service.bulkUpsert(dto, this.actor(req));

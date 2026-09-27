@@ -54,7 +54,6 @@ export class TransactionController {
   }
 
   @Permissions('transactions.adjust')
-  @Roles('Admin', 'SuperAdmin')
   @Post('stock-adjustments')
   async createStockAdjustment(
     @Body() dto: StockAdjustmentDto,
@@ -91,7 +90,6 @@ export class TransactionController {
   }
 
   @Permissions('transactions.migrate')
-  @Roles('Admin', 'SuperAdmin')
   @Post('migrate-from-local')
   async migrateFromLocal(
     @Body() dto: MigrateFromLocalDto,

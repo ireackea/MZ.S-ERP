@@ -39,7 +39,12 @@ test('realtime and backup paths have an explicit scope boundary', () => {
   const backup = read('backend/src/backup/backup.controller.ts');
   assert.match(realtime, /event\.scope/);
   assert.match(realtime, /SuperAdmin/);
-  assert.match(backup, /@Roles\('Admin', 'SuperAdmin'\)/);
+  // FC-SEC-013 — this used to assert `@Roles('Admin','SuperAdmin')` on the backup
+  // controller as the boundary proof. The role gate is gone, and it was never the
+  // real boundary anyway: a grant an administrator could see and make in the IAM
+  // matrix had no effect while it stood. The permission is the boundary.
+  assert.match(backup, /@Permissions\('backup\.(restore|delete|create)'\)/);
+  assert.doesNotMatch(backup, /@Roles\(/);
 });
 
 test('scope tests are part of the executable contract', () => {

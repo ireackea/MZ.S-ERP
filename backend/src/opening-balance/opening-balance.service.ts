@@ -105,7 +105,7 @@ export class OpeningBalanceService {
               category: true,
             },
           },
-          creator: { select: { id: true, username: true, fullName: true } },
+          creator: { select: { id: true, username: true, firstName: true, lastName: true } },
         },
       }),
     ]);
@@ -130,7 +130,11 @@ export class OpeningBalanceService {
             ? {
               id: existing.creator.id,
               username: existing.creator.username,
-              fullName: [existing.creator.fullName].filter(Boolean).join(' ') || existing.creator.username,
+              // `User` has no `fullName` column; the display name is composed the
+              // same way UsersService.toUserDto composes it.
+              fullName: [existing.creator.firstName, existing.creator.lastName]
+                .filter(Boolean)
+                .join(' ') || existing.creator.username,
             }
             : null,
           createdAt: existing.createdAt,

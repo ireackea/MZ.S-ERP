@@ -574,4 +574,88 @@ describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
     expect(await idsFor('inactive')).toContain(deactivated);
     expect(await idsFor('locked')).toContain(locked);
   }, 90000);
+
+  it('FC-SEC-011: an opening balance reports the author, and the year reads cleanly', async () => {
+    // TypeScript cannot catch a Prisma `select` naming a column that does not
+    // exist, so an author join written against a non-existent `fullName` column
+    // type-checked cleanly and then returned 500 for every caller. The only thing
+    // that catches it is driving the endpoint.
+    const adminCookie = await adminLogin();
+    const items = await request('/items?limit=1', { headers: { Cookie: adminCookie } });
+    const list = data(items.body) as Array<{ publicId: string }>;
+    const item = list[0];
+    expect(item?.publicId, 'the suite needs at least one item').toBeTruthy();
+    const suffix = randomUUID().slice(0, 8);
+
+    const set = await request('/opening-balances', {
+      method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemPublicId: item.publicId, financialYear: 2047, quantity: 4, unitCost: 1.25 }),
+    });
+    expect(set.response.status).toBe(200);
+
+    const year = await request('/opening-balances/2047', { headers: { Cookie: adminCookie } });
+    expect(year.response.status).toBe(200);
+    const rows = year.body as Array<{ itemPublicId: string; createdBy: { username: string } | null }>;
+    expect(Array.isArray(rows)).toBe(true);
+
+    // The author is whoever made the call, not the administrator by default.
+    const ours = rows.find((row) => row.itemPublicId === item.publicId);
+    expect(ours, 'the balance just written must appear').toBeTruthy();
+    expect(ours!.createdBy?.username).toBe(adminUsername);
+
+    // Now the guarantee that matters: an author who is later deleted must not
+    // break the read. This is the case that would have returned a 500 had the
+    // relation been left as NO ACTION while `createdBy` was being written.
+    const role = await request('/users/roles', {
+      method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: `MatrixBal_${suffix}`,
+        permissions: ['opening-balances.create', 'opening-balances.view', 'items.view'],
+      }),
+    });
+    expect(role.response.status).toBe(201);
+    const roleId = String(data(role.body).id);
+    createdRoleIds.push(roleId);
+
+    const author = await request('/users', {
+      method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: `matrix_author_${suffix}`, password: PASSWORD, roleId }),
+    });
+    expect(author.response.status).toBe(201);
+    const authorId = String(data(author.body).id);
+    createdUserIds.push(authorId);
+
+    const authorCookie = await login(`matrix_author_${suffix}`, PASSWORD);
+    const second = await request('/items?limit=2', { headers: { Cookie: authorCookie } });
+    const secondItem = (data(second.body) as Array<{ publicId: string }>)[1] ?? item;
+
+    const byAuthor = await request('/opening-balances', {
+      method: 'POST',
+      headers: { Cookie: authorCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemPublicId: secondItem.publicId, financialYear: 2048, quantity: 2, unitCost: 3 }),
+    });
+    expect(byAuthor.response.status).toBe(200);
+
+    const beforeDelete = await request('/opening-balances/2048', { headers: { Cookie: adminCookie } });
+    expect(beforeDelete.response.status).toBe(200);
+    const authored = (beforeDelete.body as Array<{ itemPublicId: string; createdBy: { username: string } | null }>)
+      .find((row) => row.itemPublicId === secondItem.publicId);
+    expect(authored?.createdBy?.username).toBe(`matrix_author_${suffix}`);
+
+    const removed = await request(`/users/${authorId}`, {
+      method: 'DELETE',
+      headers: { Cookie: adminCookie },
+    });
+    expect(removed.response.status).toBe(200);
+
+    const after = await request('/opening-balances/2048', { headers: { Cookie: adminCookie } });
+    expect(after.response.status).toBe(200);
+    const survivor = (after.body as Array<{ itemPublicId: string; createdBy: unknown }>)
+      .find((row) => row.itemPublicId === secondItem.publicId);
+    expect(survivor, 'the balance must survive its author').toBeTruthy();
+    expect(survivor!.createdBy).toBeNull();
+  }, 120000);
 });

@@ -75,14 +75,14 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
   { id: 'transactions.create', module: 'transactions', action: 'create', label: 'إنشاء حركة', description: 'إنشاء حركة واردة/صادرة جماعية أو مفردة.', route: 'POST /transactions, POST /transactions/bulk, POST /transactions/bulk-import' },
   { id: 'transactions.update', module: 'transactions', action: 'update', label: 'تعديل حركة', description: 'تعديل حركة قائمة.', route: 'PATCH /transactions/:id, PUT /transactions/:id' },
   { id: 'transactions.delete', module: 'transactions', action: 'delete', label: 'حذف حركة', description: 'حذف حركة.', route: 'DELETE /transactions/:id, POST /transactions/delete' },
-  { id: 'transactions.adjust', module: 'transactions', action: 'adjust', label: 'تسوية مخزنية', description: 'إنشاء تسوية مخزنية (مقصر على Admin/SuperAdmin).', route: 'POST /transactions/stock-adjustments' },
-  { id: 'transactions.migrate', module: 'transactions', action: 'migrate', label: 'ترحيل الحركات من التخزين المحلي', description: 'ترحيل حركات من localStorage إلى قاعدة البيانات (مقصر على Admin/SuperAdmin).', route: 'POST /transactions/migrate-from-local', apiOnly: true },
+  { id: 'transactions.adjust', module: 'transactions', action: 'adjust', label: 'تسوية مخزنية', description: 'إنشاء تسوية مخزنية.', route: 'POST /transactions/stock-adjustments' },
+  { id: 'transactions.migrate', module: 'transactions', action: 'migrate', label: 'ترحيل الحركات من التخزين المحلي', description: 'ترحيل حركات من localStorage إلى قاعدة البيانات.', route: 'POST /transactions/migrate-from-local', apiOnly: true },
   { id: 'transactions.reconcile', module: 'transactions', action: 'reconcile', label: 'مطابقة الأرصدة', description: 'كشف تقرير مطابقة الأرصدة.', route: 'GET /balances/reconciliation', apiOnly: true },
 
   // ── opening-balances ─────────────────────────────────────────────────────
   { id: 'opening-balances.view', module: 'opening-balances', action: 'view', label: 'عرض الأرصدة الافتتاحية', description: 'قراءة الأرصدة الافتتاحية لسنة محددة.', route: 'GET /opening-balances/:year' },
-  { id: 'opening-balances.create', module: 'opening-balances', action: 'create', label: 'إدخال رصيد افتتاحي', description: 'تعيين رصيد افتتاحي (مقصر على Admin/SuperAdmin).', route: 'POST /opening-balances' },
-  { id: 'opening-balances.bulk', module: 'opening-balances', action: 'bulk', label: 'رفع جماعي للأرصدة', description: 'رفع جماعي للأرصدة الافتتاحية (مقصر على Admin/SuperAdmin).', route: 'POST /opening-balances/bulk', apiOnly: true },
+  { id: 'opening-balances.create', module: 'opening-balances', action: 'create', label: 'إدخال رصيد افتتاحي', description: 'تعيين رصيد افتتاحي.', route: 'POST /opening-balances' },
+  { id: 'opening-balances.bulk', module: 'opening-balances', action: 'bulk', label: 'رفع جماعي للأرصدة', description: 'رفع جماعي للأرصدة الافتتاحية.', route: 'POST /opening-balances/bulk', apiOnly: true },
 
   // ── formulation ──────────────────────────────────────────────────────────
   { id: 'formulation.view', module: 'formulation', action: 'view', label: 'عرض التركيبات', description: 'قراءة التركيبات.', route: 'GET /formulations' },
@@ -94,20 +94,20 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
   { id: 'partners.view', module: 'partners', action: 'view', label: 'عرض العملاء والموردين', description: 'قراءة قائمة الشركاء.', route: 'GET /partners' },
   { id: 'partners.create', module: 'partners', action: 'create', label: 'إضافة شريك', description: 'إضافة عميل أو مورد.', route: 'POST /partners' },
   { id: 'partners.update', module: 'partners', action: 'update', label: 'تعديل شريك', description: 'تعديل بيانات شريك قائم.', route: 'PUT /partners/:id' },
-  { id: 'partners.delete', module: 'partners', action: 'delete', label: 'حذف شريك', description: 'حذف شريك (مقصر على Admin/SuperAdmin).', route: 'DELETE /partners/:id' },
+  { id: 'partners.delete', module: 'partners', action: 'delete', label: 'حذف شريك', description: 'حذف شريك.', route: 'DELETE /partners/:id' },
 
   // ── sales (orders) ───────────────────────────────────────────────────────
   { id: 'sales.view.orders', module: 'sales', action: 'view', label: 'عرض الطلبات', description: 'قراءة طلبات الشراء.', route: 'GET /orders' },
   { id: 'sales.create.orders', module: 'sales', action: 'create', label: 'إنشاء طلب', description: 'إنشاء طلب شراء.', route: 'POST /orders' },
   { id: 'sales.update.orders', module: 'sales', action: 'update', label: 'تعديل الطلبات', description: 'تعديل طلب أو إكماله.', route: 'PUT /orders/:id, POST /orders/:id/complete' },
-  { id: 'sales.delete.orders', module: 'sales', action: 'delete', label: 'حذف الطلبات', description: 'حذف طلب شراء (مقصر على Admin/SuperAdmin).', route: 'DELETE /orders/:id' },
+  { id: 'sales.delete.orders', module: 'sales', action: 'delete', label: 'حذف الطلبات', description: 'حذف طلب شراء.', route: 'DELETE /orders/:id' },
 
   // ── inventory (stocktaking) ──────────────────────────────────────────────
   { id: 'inventory.view.stocktaking', module: 'inventory', action: 'view', label: 'عرض الجرد', description: 'قراءة جرد شهر محدد.', route: 'GET /stocktaking/:monthKey' },
   { id: 'inventory.create.stocktaking', module: 'inventory', action: 'create', label: 'إنشاء جرد', description: 'فتح جرد جديد.', route: 'POST /stocktaking' },
   { id: 'inventory.update.stocktaking', module: 'inventory', action: 'update', label: 'تعديل الجرد', description: 'تحديث بنود الجرد وحل التعارضات وإعادة الفتح.', route: 'PUT /stocktaking/:id/entries, POST /stocktaking/:id/entries/:entryId/resolve, POST /stocktaking/:id/reopen' },
   { id: 'inventory.adjust.stock', module: 'inventory', action: 'adjust', label: 'عزل عجز المخزون', description: 'إغلاق عجز المخزون الذي لم يغطّه الرصيد الفعلي.', route: 'POST /stock-deficits/:publicId/write-off, POST /stock-deficits/:publicId/reopen' },
-    { id: 'inventory.close.stocktaking', module: 'inventory', action: 'close', label: 'إقفال الجرد', description: 'إقفال الجرد وتثبيت تسويات الفروقات (مقصر على Admin/SuperAdmin).', route: 'POST /stocktaking/:id/close' },
+    { id: 'inventory.close.stocktaking', module: 'inventory', action: 'close', label: 'إقفال الجرد', description: 'إقفال الجرد وتثبيت تسويات الفروقات.', route: 'POST /stocktaking/:id/close' },
 
   // ── reports ──────────────────────────────────────────────────────────────
   { id: 'reports.view', module: 'reports', action: 'view', label: 'عرض التقارير', description: 'قراءة نتائج التقارير.', route: 'GET /reports' },
