@@ -57,6 +57,12 @@ export class SystemResetDto {
   timestamp?: string;
 }
 
+export class ResetPreviewDto {
+  @IsString()
+  @IsIn(SYSTEM_RESET_SCOPES)
+  scope!: SystemResetScope;
+}
+
 export class ResetChallengeDto {
   @IsString()
   @IsOptional()

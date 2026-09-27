@@ -35,20 +35,33 @@ test('gate 0 the reset cannot silently skip a table it failed to clear', () => {
   assert.match(service, /keptSuperAdminId/, 'the surviving account must be reported, not guessed at');
 });
 
-test('gate 0 the pre-reset backup is still optional, and that is deliberate', () => {
-  // This is Gate 2.3 and it is NOT fixed here. Asserted so the gap is tracked in
-  // the suite rather than only in a document: a reset that cannot fail because
-  // its safety net is best-effort is the next thing to change, and a reader
-  // should not have to find that in a plan file.
-  assert.match(
+test('gate 0/2.3 the pre-reset backup is mandatory, and must be restorable', () => {
+  // This guard was written at Gate 0 to *track the gap*: it asserted that a failed
+  // backup was still logged and ignored, so the next session would find the
+  // weakness in the suite rather than in a plan file. It failed on its own once
+  // Gate 2.3 closed the gap, which is the point of writing it that way.
+  //
+  // It now asserts the closure. A reset that cannot fail because its safety net is
+  // best-effort is not a reset an operator can be told is safe.
+  assert.doesNotMatch(
     service,
-    /createBackup !== false/,
-    'still defaults to attempting a backup, but `false` is still accepted',
+    /non-fatal/,
+    'a failed backup that is logged and ignored is how a reset destroys data with no way back',
   );
   assert.match(
     service,
-    /non-fatal/,
-    'a failed backup is still logged and ignored — Gate 2.3 must make this fatal',
+    /SYSTEM_RESET_BACKUP_FAILED/,
+    'a failed backup must abort the reset, not merely be noted',
+  );
+  assert.match(
+    service,
+    /SYSTEM_RESET_BACKUP_NOT_RESTORABLE/,
+    'an archive that is not restorable is not a safety net',
+  );
+  assert.match(
+    service,
+    /dto\.createBackup === false && requiresBackup/,
+    'there is no "no backup" reset for a scope that destroys identity',
   );
 });
 

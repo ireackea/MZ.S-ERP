@@ -104,6 +104,9 @@ model AuditLog {
   @@index([entityId])
   @@index([status])
   @@index([timestamp])
+  // Gate 2.8 - `targetUserId` was unindexed while being the only filter
+  // GET /users/:id/audit uses, and it is written on every user-management action.
+  @@index([targetUserId])
   @@map("audit_logs")
 }
 

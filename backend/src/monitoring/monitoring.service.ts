@@ -2,6 +2,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ServiceUnavailableException,
   Injectable,
   Logger,
   UnauthorizedException,
@@ -412,7 +413,18 @@ export class MonitoringService {
     return new Set<ResetStage>(['inventory', 'operational', 'audit', 'identity']);
   }
 
-  private async executeScopedReset(scope: SystemResetScope): Promise<ResetReport> {
+  private async executeScopedReset(
+    scope: SystemResetScope,
+    context: {
+      actorId: string;
+      actorLabel: string;
+      actorRole: string;
+      reason: string;
+      backupId: string | null;
+      ipAddress?: string | null;
+    },
+  ): Promise<ResetReport> {
+    const { actorId, actorLabel, actorRole, reason, backupId, ipAddress } = context;
     const stages = this.resolveResetStages(scope);
     const tablesAffected: ResetTableReport[] = [];
     const absentModels: string[] = [];
@@ -470,11 +482,135 @@ export class MonitoringService {
         });
         tablesAffected.push({ table: 'User (except one SuperAdmin)', rowsDeleted: Number(count ?? 0) });
       }
+
+      // Gate 2.4 - the record is part of the transaction, not a promise about it.
+      //
+      // Written last, after the audit table has been cleared for the scopes that
+      // clear it, so the surviving row describes the deletion that this very
+      // transaction performed. `recordResetAudit` swallowed failures and ran after
+      // the commit, which meant the system could destroy everything and document
+      // nothing, leaving one line in a container log.
+      await tx.auditLog.create({
+        data: {
+          actorId: actorId || 'system',
+          actorUsername: actorLabel,
+          actorRole: actorRole || 'unknown',
+          action: 'SYSTEM_RESET_SUCCESS',
+          targetResource: 'system_reset',
+          entityType: 'SystemReset',
+          entityId: scope,
+          status: 'success',
+          message:
+            `scope=${scope}; reason=${reason}; deleted=`
+            + tablesAffected.map((entry) => `${entry.table}(${entry.rowsDeleted})`).join(', ')
+            + `; backupId=${backupId ?? 'none'}`,
+          ipAddress: ipAddress ?? null,
+          metadata: {
+            scope,
+            reason,
+            tablesAffected,
+            absentModels,
+            keptSuperAdminId,
+            backupId,
+          } as any,
+        } as any,
+      });
     });
 
     return { scope, tablesAffected, absentModels, keptSuperAdminId };
   }
 
+
+  /**
+   * Gate 2.2 — what this reset would actually delete, counted rather than claimed.
+   *
+   * The operator was asked to approve permanent destruction of a database with no
+   * numbers attached: no row counts, no mention that `full` deletes the account
+   * they are sitting in, and no statement of when the last backup was taken. The
+   * scope descriptions in the UI are prose, and prose cannot be wrong in a way you
+   * can check.
+   *
+   * Every number here is a live count from the same delegates the reset will use,
+   * and nothing is written. `blockedBy` names the things that will stop the reset
+   * before it starts, which is the part an operator most needs and least expects.
+   */
+  async previewSystemReset(scope: SystemResetScope, user: any) {
+    const stages = this.resolveResetStages(scope);
+    const now = Date.now();
+    const targets = [];
+
+    for (const target of this.getResetTargets()) {
+      if (!stages.has(target.stage)) continue;
+      const delegate = (this.prisma as any)[target.model];
+      if (!delegate || typeof delegate.count !== 'function') continue;
+
+      let rows = 0;
+      try {
+        rows = Number(await delegate.count());
+      } catch {
+        // A table this role cannot read is still a table the reset will clear.
+        rows = -1;
+      }
+      targets.push({ table: target.table, stage: target.stage, rows });
+    }
+
+    // `full` keeps the oldest SuperAdmin. Whether that is you is the single most
+    // consequential fact on the screen, and it was previously unknowable before
+    // the fact: the keeper is chosen by age, not by whether anyone knows its
+    // password.
+    let keptSuperAdmin: { id: string; username: string } | null = null;
+    if (scope === 'full') {
+      const oldest = await this.prisma.user.findFirst({
+        where: { role: { is: { name: 'SuperAdmin' } } },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true, username: true },
+      });
+      keptSuperAdmin = oldest ?? null;
+    }
+
+    const actorId = String(user?.id || user?.sub || '').trim();
+    const actorWillBeDeleted =
+      scope === 'full' && Boolean(actorId) && keptSuperAdmin?.id !== actorId;
+
+    // Refusals that would otherwise surface only after the password has been
+    // typed, the challenge answered and a justification written.
+    const blockedBy: Array<{ code: string; message: string }> = [];
+    if (scope === 'inventory') {
+      const orderLines = await (this.prisma as any).orderItem?.count?.();
+      if (typeof orderLines === 'number' && orderLines > 0) {
+        blockedBy.push({
+          code: 'SYSTEM_RESET_BLOCKED_BY_SALES',
+          message: `يوجد ${orderLines} سطر بيع يشير إلى أصناف. استخدم نطاق "بيانات" أو احذف الفواتير أولاً.`,
+        });
+      }
+    }
+
+    // The freshness of the safety net, stated before it is relied on.
+    const lastBackup = await this.backupService.listBackups().catch(() => [] as any[]);
+    const newest = (lastBackup as any[])[0] ?? null;
+
+    return {
+      scope,
+      counts: targets,
+      totalRows: targets.reduce((sum, entry) => sum + Math.max(0, entry.rows), 0),
+      keptSuperAdmin,
+      actorWillBeDeleted,
+      blockedBy,
+      lastBackup: newest
+        ? {
+            id: newest.id,
+            createdAt: newest.createdAt,
+            type: newest.type,
+            integrity: newest.integrity,
+            // Gate 1.2: `integrity` is measured now, so "the last backup is
+            // restorable" is a question with an answer rather than a constant.
+            restorable: newest.integrity === 'verified',
+            complete: newest.complete !== false,
+          }
+        : null,
+      generatedAt: new Date(now).toISOString(),
+    };
+  }
 
   async performSystemReset(dto: SystemResetDto, user: any, meta: RequestMeta) {
     const now = Date.now();
@@ -574,46 +710,126 @@ export class MonitoringService {
 
     this.clearResetAttemptState(actorKey);
 
-    // 6) Optional pre-reset backup (best-effort; never blocks reset).
+    // 6) The safety net, which is no longer optional.
+    //
+    // This was `best-effort; never blocks reset`. A failure was logged and the
+    // reset proceeded, so the one guarantee the UI offered — "a backup is created
+    // before the wipe" — was conditional on a `pg_dump` succeeding, and its
+    // failure mode was silence followed by total data loss. An operator who ticked
+    // the box and saw no error had been told a truth that need not be true.
+    //
+    // Three things changed, and each one is a refusal rather than a warning:
+    //
+    // - `createBackup: false` is rejected outright for the scopes that destroy
+    //   identity. There is no "no backup" reset any more.
+    // - A failed backup aborts the reset. The data stays.
+    // - A backup that is not restorable aborts the reset. Gate 1.2 made
+    //   `integrity` measured, so this check is now a measurement and not a
+    //   constant; before that it would have been a comparison against 'verified'
+    //   on every archive and therefore would have passed anything.
+    const DESTRUCTIVE_SCOPES: SystemResetScope[] = ['data', 'full'];
+    const requiresBackup = DESTRUCTIVE_SCOPES.includes(dto.scope);
+
+    if (dto.createBackup === false && requiresBackup) {
+      // Recorded, because "someone tried to reset without a backup" is exactly
+      // the kind of attempt an operator needs to find afterwards. The first version
+      // of this refusal threw without writing a row, and the audit search for it
+      // came back empty.
+      await this.recordResetAudit({
+        user,
+        meta,
+        action: 'SYSTEM_RESET_REFUSED_NO_BACKUP',
+        details: { scope: dto.scope, reason, createBackup: false },
+        status: 'FAILED',
+      });
+      throw new BadRequestException({
+        code: 'SYSTEM_RESET_BACKUP_REQUIRED',
+        message:
+          `لا يمكن تنفيذ نطاق "${dto.scope}" دون نسخة احتياطية. `
+          + 'النسخة الاحتياطية شرط لتنفيذ هذا النطاق، وليس خياراً.',
+      });
+    }
+
     let backupId: string | null = null;
-    if (dto.createBackup !== false) {
+    if (requiresBackup || dto.createBackup !== false) {
+      let created: any;
       try {
-        const created = await this.backupService.createBackup({
+        created = await this.backupService.createBackup({
           type: 'full',
           actor: {
             userId: String(user?.id || user?.sub || 'system'),
             username: String(user?.username || 'system'),
           },
         });
-        backupId = (created as any)?.id || null;
-        this.logger.log(`Pre-reset backup created (id=${backupId})`);
       } catch (err: any) {
-        this.logger.error(`Pre-reset backup failed (non-fatal): ${err?.message || err}`);
+        this.logger.error(`Pre-reset backup failed; the reset is being refused: ${err?.message || err}`);
+        await this.recordResetAudit({
+          user,
+          meta,
+          action: 'SYSTEM_RESET_REFUSED_NO_BACKUP',
+          details: {
+            scope: dto.scope,
+            reason,
+            error: String(err?.message || err),
+          },
+          status: 'FAILED',
+        });
+        throw new ServiceUnavailableException({
+          code: 'SYSTEM_RESET_BACKUP_FAILED',
+          message:
+            'فشل إنشاء النسخة الاحتياطية، ولم يُنفَّذ المسح. '
+            + 'البيانات لم تتغيّر. عالج سبب الفشل ثم أعد المحاولة.',
+          detail: { cause: String(err?.message || err) },
+        });
       }
+
+      backupId = String(created?.id || '') || null;
+
+      // Gate 1.2 made this measurable. An archive with no database in it, or one
+      // whose integrity does not hold, is not a safety net and must not be
+      // accepted as one.
+      const restorable = created?.integrity === 'verified' && created?.complete !== false;
+      if (!restorable) {
+        this.logger.error(
+          `Pre-reset backup is not restorable (integrity=${created?.integrity}, `
+          + `complete=${created?.complete}); the reset is being refused.`,
+        );
+        await this.recordResetAudit({
+          user,
+          meta,
+          action: 'SYSTEM_RESET_REFUSED_UNRESTORABLE_BACKUP',
+          details: { scope: dto.scope, reason, backupId, integrity: created?.integrity ?? null },
+          status: 'FAILED',
+        });
+        throw new ServiceUnavailableException({
+          code: 'SYSTEM_RESET_BACKUP_NOT_RESTORABLE',
+          message:
+            'النسخة الاحتياطية التي أُنشئت غير قابلة للاستعادة، ولم يُنفَّذ المسح. '
+            + 'البيانات لم تتغيّر. تحقّق من النسخ الاحتياطي قبل إعادة الضبط.',
+          detail: {
+            integrity: created?.integrity ?? null,
+            complete: created?.complete ?? null,
+            missingModels: created?.missingModels ?? null,
+          },
+        });
+      }
+
+      this.logger.log(`Pre-reset backup created and verified (id=${backupId})`);
     }
 
     // 7) Execute scoped, atomic reset.
     try {
       this.logger.log(`Starting scoped reset (scope=${dto.scope})...`);
-      const report = await this.executeScopedReset(dto.scope);
+      const report = await this.executeScopedReset(dto.scope, {
+        actorId: String(user?.id || user?.sub || '').trim(),
+        actorLabel,
+        actorRole,
+        reason,
+        backupId,
+        ipAddress: meta.ip,
+      });
       const summary = report.tablesAffected.map((entry) => `${entry.table}(${entry.rowsDeleted})`);
       this.logger.log(`Reset completed. Tables affected: ${summary.join(', ')}`);
-
-      await this.recordResetAudit({
-        user,
-        meta,
-        action: 'SYSTEM_RESET_SUCCESS',
-        details: {
-          scope: dto.scope,
-          reason,
-          tablesAffected: report.tablesAffected,
-          absentModels: report.absentModels,
-          keptSuperAdminId: report.keptSuperAdminId,
-          backupId,
-          createBackup: dto.createBackup !== false,
-        },
-        status: 'SUCCESS',
-      });
 
       return {
         success: true,

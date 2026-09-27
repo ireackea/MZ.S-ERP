@@ -6,7 +6,7 @@ import { Public } from '../auth/decorators/public.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RbacGuard } from '../auth/rbac.guard';
 import { ClientLogDto } from './dto/client-log.dto';
-import { ResetChallengeDto, SystemResetDto } from './dto/system-reset.dto';
+import { ResetChallengeDto, ResetPreviewDto, SystemResetDto } from './dto/system-reset.dto';
 import { MonitoringService } from './monitoring.service';
 
 const extractRequestMeta = (req: Request) => {
@@ -43,6 +43,20 @@ export class MonitoringController {
   }
 
   // Step 2: Execute the reset using both factors (env token + one-time challenge).
+  /**
+   * Gate 2.2 - what this reset would delete, counted.
+   *
+   * Read-only, and deliberately not behind a challenge: its whole purpose is to be
+   * called before the operator types a password and a justification, and asking
+   * for those first would defeat it. It reveals row counts of tables the caller
+   * can already reach through their own permissions, and it writes nothing.
+   */
+  @Permissions('admin.reset_system')
+  @Post('admin/reset-system/preview')
+  async previewReset(@Body() dto: ResetPreviewDto, @Req() req: Request & { user?: any }) {
+    return this.monitoringService.previewSystemReset(dto.scope, req.user);
+  }
+
   @Permissions('admin.reset_system')
   @Post('admin/reset-system')
   async resetSystem(@Body() dto: SystemResetDto, @Req() req: Request & { user?: any }) {
