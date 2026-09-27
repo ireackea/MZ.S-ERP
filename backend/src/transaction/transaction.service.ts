@@ -363,13 +363,29 @@ export class TransactionService {
       return undefined;
     }
 
+    // Gate 4.2 - deactivation is enforced here, not only in the list a screen
+    // happens to be showing.
+    //
+    // `UnloadingRuleService.findAll` filters `isActive: true` unless the caller
+    // holds settings permissions, so the rule disappears from every operator's
+    // dropdown. But the use site looked it up by id alone, so POST /transactions,
+    // the bulk path and PUT /transactions/:id would accept a deactivated rule id
+    // and keep calculating penalties from a rule the business had switched off —
+    // while `deleteMany`'s linkage guard then made that rule permanently
+    // undeletable. Hiding it in the UI is not enforcing it.
     const unloadingRule = await client.unloadingRule.findUnique({
       where: { id: normalized },
-      select: { id: true },
+      select: { id: true, isActive: true, ruleName: true },
     });
 
     if (!unloadingRule) {
       throw new NotFoundException(`Unloading rule not found: ${normalized}`);
+    }
+    if (!unloadingRule.isActive) {
+      throw new BadRequestException(
+        `Unloading rule "${unloadingRule.ruleName}" is deactivated and cannot be applied to a movement. `
+        + 'Choose an active rule, or re-activate it in settings first.',
+      );
     }
 
     return unloadingRule.id;
@@ -441,14 +457,26 @@ export class TransactionService {
       return new Map();
     }
 
+    // The same rule as the single path, so the bulk path is not a way around it.
     const unloadingRules = await client.unloadingRule.findMany({
       where: {
         id: { in: normalizedIdentifiers },
       },
       select: {
         id: true,
+        isActive: true,
+        ruleName: true,
       },
     });
+
+    const inactive = unloadingRules.filter((rule) => !rule.isActive);
+    if (inactive.length) {
+      throw new BadRequestException(
+        `Cannot apply deactivated unloading rule(s): ${inactive
+          .map((rule) => rule.ruleName)
+          .join(', ')}. Choose active rules, or re-activate them in settings first.`,
+      );
+    }
 
     const resolved = new Map<string, string>();
     for (const unloadingRule of unloadingRules) {

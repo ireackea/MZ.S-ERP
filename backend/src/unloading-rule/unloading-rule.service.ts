@@ -150,12 +150,58 @@ export class UnloadingRuleService {
 
     await this.ensureRuleNameIsUnique(ruleName, currentId);
 
+    // Gate 4.1 - an absent `is_active` used to mean "true".
+    //
+    // `is_active` is @IsOptional, which advertises a partial update, and the
+    // service collapsed "not sent" into "active". A client that PUT a new penalty
+    // rate therefore silently re-enabled a rule an administrator had retired, and
+    // it reappeared in every operator's dropdown. Deactivation is the only
+    // supported way to retire a rule that historical transactions still reference,
+    // so this undid the retirement by accident.
+    //
+    // `undefined` now means "leave it alone", and the field is omitted from the
+    // patch so Prisma does not write it.
+    // Spelled out rather than reusing the model's own union: the only thing that
+    // changed is that `isActive` became conditional, and the rest keeps the exact
+    // shape Prisma inferred before.
     return {
       ruleName,
       allowedDurationMinutes: Math.trunc(allowedDurationMinutes),
       penaltyRatePerMinute,
-      isActive: dto.is_active !== false,
+      ...(dto.is_active !== undefined ? { isActive: dto.is_active } : {}),
     };
+  }
+
+  /**
+   * Gate 4.3 — the usage count, from the database, for every rule at once.
+   *
+   * The settings panel derived "in use" from `state.transactions`, which the store
+   * loads with no pagination (the server's default page is 500), and the
+   * reference-data panel derived it from `state.items`, which is hard-capped at
+   * 1000. So past those thresholds a rule or a category that was genuinely
+   * referenced showed "not in use", its Delete button was enabled, the operator
+   * confirmed, and the server refused — or worse, the panel printed a wrong "N
+   * movements" figure that the operator used to justify deleting something.
+   *
+   * One grouped count, no transfer, no truncation. `deleteMany` re-checks
+   * server-side regardless, so this is about the gate being honest rather than
+   * about safety: the banner said the deletion is blocked for referenced values,
+   * and that was not what the code enforced.
+   */
+  async getUsageCounts(): Promise<Record<string, number>> {
+    const grouped = await this.prisma.transaction.groupBy({
+      by: ['unloadingRuleId'],
+      where: { unloadingRuleId: { not: null } },
+      _count: { _all: true },
+    });
+
+    const counts: Record<string, number> = {};
+    for (const row of grouped) {
+      if (row.unloadingRuleId) {
+        counts[String(row.unloadingRuleId)] = Number(row._count?._all ?? 0);
+      }
+    }
+    return counts;
   }
 
   private async ensureRuleNameIsUnique(ruleName: string, currentId?: string) {

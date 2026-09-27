@@ -288,13 +288,25 @@ export const mutationQueueService = {
     });
   },
 
+  /**
+   * Gate 4.7 - retry what failed, not what was refused.
+   *
+   * `blocked` means the server answered 401 or 403: the account was deactivated,
+   * locked, or its role was narrowed. Those are not transient failures and
+   * re-sending them cannot succeed. This used to flip `blocked` back to pending
+   * along with everything else, so the settings "retry all" button produced a fresh
+   * refusal every time it was pressed and the counters never reached zero.
+   *
+   * Dead-lettered tasks are still retried: that state means the payload itself was
+   * rejected repeatedly, and an operator who has fixed the data may want another go.
+   */
   async retryOwner(ownerUserId = getOwnerId()) {
     this.init();
     if (!this.dbPromise || !ownerUserId) return;
     const db = await this.dbPromise;
     const queue = await readAll(db);
     await Promise.all(queue
-      .filter((task) => task.ownerUserId === ownerUserId && ['failed', 'conflict', 'dead-letter', 'blocked'].includes(task.status))
+      .filter((task) => task.ownerUserId === ownerUserId && ['failed', 'conflict', 'dead-letter'].includes(task.status))
       .map((task) => writeTask(db, {
         ...task,
         status: 'pending',
@@ -305,13 +317,25 @@ export const mutationQueueService = {
       })));
   },
 
+  /**
+   * Gate 4.7 - resuming on login must not resurrect what the server refused.
+   *
+   * This ran on every successful login, so a `blocked` task from a previous
+   * session was re-sent the moment the user returned. Blocked tasks now stay
+   * blocked; they are not lost, they keep their `lastError` and remain visible in
+   * settings, and an operator who has genuinely been re-granted the permission can
+   * clear them deliberately.
+   */
   async resumeOwner(ownerUserId: string) {
     this.init();
     if (!this.dbPromise || !ownerUserId) return;
     const db = await this.dbPromise;
     const queue = await readAll(db);
     await Promise.all(queue
-      .filter((task) => task.ownerUserId === ownerUserId && task.status === 'blocked')
+      // Gate 4.7: nothing is resumed. The previous predicate put `blocked` tasks back
+    // to pending on every login, which is a 401/403 loop with no exit. Kept as an
+    // explicit filter rather than an early return so the intent is legible.
+    .filter(() => false)
       .map((task) => writeTask(db, {
         ...task,
         status: 'pending',

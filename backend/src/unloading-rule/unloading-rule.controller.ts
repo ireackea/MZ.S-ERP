@@ -32,6 +32,15 @@ export class UnloadingRuleController {
   constructor(private readonly unloadingRuleService: UnloadingRuleService) {}
 
   @AllowAuthenticated()
+  /**
+   * Gate 4.3 - the real reference counts, so the settings screen stops guessing
+   * from a truncated client store.
+   */
+  @Get('usage-counts')
+  async usageCounts() {
+    return this.unloadingRuleService.getUsageCounts();
+  }
+
   @Get()
   async findAll(@Req() req: any) {
     const permissions = req.user?.permissions;

@@ -14,7 +14,10 @@ const OfflineSettings: React.FC<OfflineSettingsProps> = ({ }) => {
   const { isOffline, isSyncing, pendingCount, conflictCount, failedCount, deadLetterCount, retryFailed } = useOfflineSync();
   const lastLoadedAt = useInventoryStore((state) => state.lastLoadedAt);
   const syncing = useInventoryStore((state) => state.syncing);
-  const error = useInventoryStore((state) => state.error);
+  // Gate 4.7 - the inventory store's error is a *load* failure (a failed items or
+  // transactions fetch), not a sync failure. Rendering it here as a sync alert
+    // pointed the operator at the queue when the queue was fine.
+  const loadError = useInventoryStore((state) => state.error);
 
   if (!hasPermission('settings.view.general')) {
     return (
@@ -39,7 +42,7 @@ const OfflineSettings: React.FC<OfflineSettingsProps> = ({ }) => {
       </div>
       <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="font-black text-slate-900">تنبيهات</div>
-        <div className="mt-4 text-sm text-slate-700">{error || 'لا توجد أخطاء مزامنة حالية.'}</div>
+        <div className="mt-4 text-sm text-slate-700">{loadError || 'لا توجد مهام عالقة. المهام المرفوضة أو المتوقفة نهائيًا تُعرض أعلاه بسببها.'}</div>
       </div>
       <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:col-span-3">
         <div className="flex flex-wrap items-center justify-between gap-3">

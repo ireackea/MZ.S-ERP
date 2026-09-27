@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import apiClient from '@api/client';
 import { Info, Pencil, Plus, Save, ShieldAlert, Trash2, Truck } from 'lucide-react';
 import { usePermissions } from '@hooks/usePermissions';
 import { toast } from '@services/toastService';
@@ -30,15 +31,51 @@ const UnloadingRulesPanel: React.FC<UnloadingRulesPanelProps> = ({ }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [busyRuleId, setBusyRuleId] = useState<string | null>(null);
 
+  // Gate 4.3 - the count comes from the database, not from the client store.
+  //
+  // It used to be derived from `state.transactions`, which the store loads with no
+  // pagination (the server's default page is 500). Past that, a rule that was
+  // genuinely referenced showed "not in use", its Delete button was enabled, and
+  // the panel printed a figure the operator used to justify deleting something —
+  // while a banner above it promised the opposite.
+  //
+  // Until the server answers, the count is unknown rather than zero. Zero is a
+  // claim, and a wrong zero enables a button.
+  const [serverUsage, setServerUsage] = useState<Record<string, number> | null>(null);
+  const usageRequestedRef = useRef(false);
+
+  useEffect(() => {
+    if (usageRequestedRef.current || !canView) return;
+    usageRequestedRef.current = true;
+    void apiClient
+      .get('/unloading-rules/usage-counts')
+      .then((response) => {
+        setServerUsage(response.data && typeof response.data === 'object' ? (response.data as any) : {});
+      })
+      .catch(() => {
+        // Left null so the delete path refuses rather than guessing. The server
+        // re-checks on delete regardless; this is about the gate being honest.
+        setServerUsage({});
+      });
+  }, [canView]);
+
   const usageByRuleId = useMemo(() => {
     const map = new Map<string, number>();
+    if (serverUsage) {
+      for (const [id, count] of Object.entries(serverUsage)) {
+        map.set(String(id), Number(count) || 0);
+      }
+      return map;
+    }
+    // Fallback only while the server has not answered. The delete guard below
+    // treats an absent entry as "unknown", so this cannot enable a delete.
     for (const transaction of transactions) {
       const key = String(transaction.unloadingRuleId || '').trim();
       if (!key) continue;
       map.set(key, (map.get(key) || 0) + 1);
     }
     return map;
-  }, [transactions]);
+  }, [transactions, serverUsage]);
 
   const resetForm = () => {
     setDraft(createEmptyDraft());
@@ -147,7 +184,14 @@ const UnloadingRulesPanel: React.FC<UnloadingRulesPanelProps> = ({ }) => {
       return;
     }
 
-    const usage = usageByRuleId.get(String(rule.id)) || 0;
+    // `|| 0` claimed a rule was unused when the count was merely absent. A count
+    // that has not arrived is not a zero, and a zero is what enables this button.
+    const reported = usageByRuleId.get(String(rule.id));
+    if (reported === undefined) {
+      toast.error('لم يتم تحميل عدد الحركات المرتبطة بعد. أعد المحاولة قبل الحذف.');
+      return;
+    }
+    const usage = reported;
     if (usage > 0) {
       toast.error(`لا يمكن حذف هذه القاعدة لأنها مستخدمة في ${usage} حركة. يمكنك تعطيلها بدلًا من حذفها.`);
       return;
@@ -201,7 +245,8 @@ const UnloadingRulesPanel: React.FC<UnloadingRulesPanelProps> = ({ }) => {
             <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">لا توجد قواعد تفريغ مسجلة حاليًا.</div>
           ) : (
             unloadingRules.map((rule) => {
-              const usage = usageByRuleId.get(String(rule.id)) || 0;
+              const shownUsage = usageByRuleId.get(String(rule.id));
+              const usage = shownUsage === undefined ? 0 : shownUsage;
               const isBusy = busyRuleId === String(rule.id);
               return (
                 <div key={rule.id} className="rounded-2xl border border-slate-200 px-4 py-3">
