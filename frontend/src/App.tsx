@@ -685,18 +685,18 @@ const AppContent = () => {
       <OfflineBanner />
       <Layout currentUser={currentUser} onLogout={handleLogout}>
       <Routes key={location.pathname}>
-        <Route path="/" element={renderProtectedRoute('inventory.view.stock', 'dashboard', withLazyFallback(<DashboardPage />))} />
-        <Route path="/dashboard" element={renderProtectedRoute('inventory.view.stock', 'dashboard', withLazyFallback(<DashboardPage />))} />
-        <Route path="/balances" element={renderProtectedRoute('inventory.view.stock', 'balances', withLazyFallback(<StockBalances settings={systemSettings} />))} />
-        <Route path="/operations" element={renderProtectedRoute('inventory.view.operations', 'operations', withLazyFallback(<OperationsPage />))} />
-        <Route path="/transactions" element={renderProtectedRoute('inventory.view.operations', 'operations', withLazyFallback(<OperationsPage />))} />
-        <Route path="/items" element={renderProtectedRoute('inventory.view.items', 'items', withLazyFallback(<ItemsPage />))} />
+        <Route path="/" element={renderProtectedRoute('inventory.view.stocktaking', 'dashboard', withLazyFallback(<DashboardPage />))} />
+        <Route path="/dashboard" element={renderProtectedRoute('inventory.view.stocktaking', 'dashboard', withLazyFallback(<DashboardPage />))} />
+        <Route path="/balances" element={renderProtectedRoute('inventory.view.stocktaking', 'balances', withLazyFallback(<StockBalances settings={systemSettings} />))} />
+        <Route path="/operations" element={renderProtectedRoute('transactions.view', 'operations', withLazyFallback(<OperationsPage />))} />
+        <Route path="/transactions" element={renderProtectedRoute('transactions.view', 'operations', withLazyFallback(<OperationsPage />))} />
+        <Route path="/items" element={renderProtectedRoute('items.view', 'items', withLazyFallback(<ItemsPage />))} />
         <Route path="/stocktaking" element={renderProtectedRoute('inventory.view.stocktaking', 'stocktaking', withLazyFallback(<StocktakingPage />))} />
-        <Route path="/stock-card" element={renderProtectedRoute('inventory.reports.stock_card', 'stock-card', withLazyFallback(<StockCardReport items={scopedItems} transactions={scopedTransactions} companyName={systemSettings.companyName} companyAddress={systemSettings.address} companyPhone={systemSettings.phone} canExport={canExportInventory} onExport={(rowCount) => logDataExport('stock-card', rowCount)} />))} />
+        <Route path="/stock-card" element={renderProtectedRoute('reports.view', 'stock-card', withLazyFallback(<StockCardReport items={scopedItems} transactions={scopedTransactions} companyName={systemSettings.companyName} companyAddress={systemSettings.address} companyPhone={systemSettings.phone} canExport={canExportInventory} onExport={(rowCount) => logDataExport('stock-card', rowCount)} />))} />
         <Route
           path="/statement"
           element={renderProtectedRoute(
-            'inventory.reports.statement',
+            'reports.view',
             'statement',
             withLazyFallback(
               <Statement
@@ -715,11 +715,11 @@ const AppContent = () => {
         <Route path="/orders" element={renderProtectedRoute('sales.view.orders', 'orders', withLazyFallback(<Orders orders={scopedOrders} partners={partners} items={scopedItems} onAddOrder={handleAddOrder} onUpdateOrder={handleUpdateOrder} onCompleteOrder={handleCompleteOrder} />))} />
         <Route path="/reports" element={renderProtectedRoute('reports.view', 'reports', withLazyFallback(<ReportsPage />))} />
         <Route path="/formulation" element={renderProtectedRoute('formulation.view', 'formulation', withLazyFallback(<FormulationPage />))} />
-        <Route path="/opening-balance" element={renderProtectedRoute('inventory.view.opening_balances', 'opening-balance', withLazyFallback(<OpeningBalanceRoutePage />))} />
+        <Route path="/opening-balance" element={renderProtectedRoute('opening-balances.view', 'opening-balance', withLazyFallback(<OpeningBalanceRoutePage />))} />
         <Route
           path="/settings"
           element={renderProtectedRoute(
-            'settings.view',
+            'settings.view.general',
             'settings',
             withLazyFallback(
               <SettingsPage
@@ -737,13 +737,13 @@ const AppContent = () => {
         <Route
           path="/users"
           element={renderProtectedRoute(
-            'users.view.management',
+            'users.view',
             'users',
             withLazyFallback(<UnifiedIAM />)
           )}
         />
         <Route path="/backup" element={renderProtectedRoute('backup.view', 'backup', withLazyFallback(<BackupCenterPage currentUser={currentUser} />))} />
-        <Route path="*" element={renderProtectedRoute('inventory.view.stock', 'fallback-dashboard', withLazyFallback(<DashboardPage />))} />
+        <Route path="*" element={renderProtectedRoute('inventory.view.stocktaking', 'fallback-dashboard', withLazyFallback(<DashboardPage />))} />
       </Routes>
     </Layout>
     </>

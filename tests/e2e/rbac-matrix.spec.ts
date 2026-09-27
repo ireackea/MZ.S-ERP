@@ -844,6 +844,16 @@ describe('ا-٦ pending invitations can be seen, and an expired one is not calle
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
     );
 
+    // The invite also creates a placeholder user for the invited address, and it
+    // was not registered for cleanup — so every run of this spec left another
+    // inactive user behind. The queue is where its id is readable.
+    const afterInvite = await request('/users/invitations?status=pending', {
+      headers: { Cookie: adminCookie },
+    });
+    const placeholderId = (data(afterInvite.body) as any[])
+      .find((entry) => entry.email === email)?.recipientUserId;
+    if (placeholderId) createdUserIds.push(String(placeholderId));
+
     // The real token, so "the token is not leaked" is a fact about a known
     // secret rather than a check for a key that happens to be missing.
     const link = String(invitation.invitationLink ?? '');
