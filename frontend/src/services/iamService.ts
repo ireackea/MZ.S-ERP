@@ -13,8 +13,7 @@ import {
   UserRole,
   UserSession,
 } from '../types';
-import { expandRequestedPermissions, hasGrantedPermission } from './permissionAliases';
-import { resolveRoleFallbackPermissions } from './rolePermissionFallbacks';
+import { expandRequestedPermissions, hasGrantedPermission } from './permissionMatcher';
 import {
   ALL_PERMISSION_IDS,
   FULL_ACCESS_TOKEN,
@@ -254,15 +253,10 @@ export function hasPermission(user: User | undefined, permissionId: string): boo
     return true;
   }
 
-  // No server-issued list yet (e.g. during bootstrap): use the canonical role
-  // grants for display only.
-  if (directPermissions.length === 0) {
-    const fallback = resolveRoleFallbackPermissions(normalizedUser.role);
-    if (hasGrantedPermission(fallback, permissionId)) {
-      return true;
-    }
-  }
-
+  // FC-SEC-005 — fail-closed. This previously fell back to a hand-written
+  // Admin/SuperAdmin grant table when the server had not issued a permission
+  // list yet, so the bootstrap window reported capabilities nobody had been
+  // granted. An empty list is now an honest "no".
   const role = getUserRole(normalizedUser);
   return hasGrantedPermission(role?.permissionIds || [], permissionId);
 }

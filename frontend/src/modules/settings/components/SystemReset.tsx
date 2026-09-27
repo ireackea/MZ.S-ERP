@@ -22,8 +22,7 @@ import {
 } from 'lucide-react';
 import { usePermissions } from '@hooks/usePermissions';
 import { useSession } from '@hooks/useSession';
-import { hasGrantedPermission } from '@services/permissionAliases';
-import { resolveRoleFallbackPermissions } from '@services/rolePermissionFallbacks';
+import { hasGrantedPermission } from '@services/permissionMatcher';
 import { toast } from '@services/toastService';
 import {
   systemResetService,
@@ -152,10 +151,12 @@ const SystemReset: React.FC<SystemResetProps> = ({ currentUser }) => {
   const effectiveRole = String(currentUser?.role || session?.user?.role || '').trim();
   const currentUserPermissions = normalizePermissions(currentUser?.permissions);
   const sessionUserPermissions = normalizePermissions(session?.user?.permissions);
-  const roleFallback = currentUserPermissions.length > 0 || sessionUserPermissions.length > 0
-    ? []
-    : resolveRoleFallbackPermissions(effectiveRole);
-  const effectivePermissions = [...new Set([...permissions, ...currentUserPermissions, ...sessionUserPermissions, ...roleFallback])];  const isSuperAdmin = effectiveRole.toLowerCase() === 'superadmin';
+  // FC-SEC-005 — fail-closed. The role-name fallback used to hand this screen a
+  // full Admin grant whenever no permission list had arrived yet, which is
+  // exactly the window during bootstrap. The gate now depends only on grants the
+  // server actually issued.
+  const effectivePermissions = [...new Set([...permissions, ...currentUserPermissions, ...sessionUserPermissions])];
+  const isSuperAdmin = effectiveRole.toLowerCase() === 'superadmin';
   const canViewReset = hasPermission(RESET_PERMISSION) || hasGrantedPermission(effectivePermissions, RESET_PERMISSION);
   const canExecuteReset = canViewReset && isSuperAdmin;
 

@@ -64,7 +64,7 @@ const ItemsPageContent: React.FC = () => {
   const actorId = String(session?.user?.id || 'system');
   const actorName = String(session?.user?.name || session?.user?.username || 'system');
 
-  const canView = hasPermission('items.view') || hasPermission('items.*') || hasPermission('inventory.view.stock');
+  const canView = hasPermission('items.view') || hasPermission('items.*') || hasPermission('transactions.view');
   const canEdit = hasPermission('items.sync') || hasPermission('items.*');
   const canArchive = hasPermission('items.archive') || hasPermission('items.*');
   const canRestore = hasPermission('items.restore') || hasPermission('items.*');
@@ -72,7 +72,7 @@ const ItemsPageContent: React.FC = () => {
   const canGenerateCodes = hasPermission('items.generate_codes') || hasPermission('items.*');
   const canImport = hasPermission('items.import') || hasPermission('items.*');
   const canUpload = hasPermission('items.upload') || hasPermission('items.*');
-  const canExportExcel = hasPermission('inventory.export.stock') || hasPermission('reports.export.general') || hasPermission('items.*');
+  const canExportExcel = hasPermission('reports.generate') || hasPermission('items.*');
   const canPrint = hasPermission('reports.generate') || hasPermission('reports.*') || hasPermission('items.*');
 
   const [search, setSearch] = useState('');

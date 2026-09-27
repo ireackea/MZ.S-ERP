@@ -5,8 +5,7 @@
 import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { DatabaseBackup, FileText, Globe2, LayoutGrid, Package, RefreshCcw, Settings2, Shield, Users } from 'lucide-react';
 import { usePermissions } from '@hooks/usePermissions';
-import { hasGrantedPermission } from '@services/permissionAliases';
-import { resolveRoleFallbackPermissions } from '@services/rolePermissionFallbacks';
+import { hasGrantedPermission } from '@services/permissionMatcher';
 import type { ReportColumnConfig, SystemSettings, User } from '../../../types';
 
 const GeneralSettings = lazy(() => import('../components/GeneralSettings'));
@@ -72,10 +71,13 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   ]), []);
 
   const effectivePermissions = useMemo(() => {
+    // FC-SEC-005 — fail-closed. This used to substitute a hand-written
+    // SuperAdmin/Admin grant list whenever the server sent an empty permission
+    // array, so a session with zero permissions rendered admin tabs the API
+    // would then refuse. An empty list now means no tabs.
     const currentUserPermissions = normalizePermissions(currentUser?.permissions);
-    const roleFallback = currentUserPermissions.length > 0 ? [] : resolveRoleFallbackPermissions(currentUser?.role);
-    return [...new Set([...permissions, ...currentUserPermissions, ...roleFallback])];
-  }, [currentUser?.permissions, currentUser?.role, permissions]);
+    return [...new Set([...permissions, ...currentUserPermissions])];
+  }, [currentUser?.permissions, permissions]);
   const visibleTabs = tabs.filter((tab) => hasPermission(tab.permission) || hasGrantedPermission(effectivePermissions, tab.permission));
   const grantedPermissionsPreview = useMemo(
     () => permissions.slice().sort().slice(0, 8),

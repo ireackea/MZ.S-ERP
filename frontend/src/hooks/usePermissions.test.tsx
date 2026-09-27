@@ -15,7 +15,7 @@ describe('usePermissions', () => {
     mocks.useSession.mockReset();
   });
 
-  it('FC-SEC-002: يوسّع معرّفات المسارات القديمة إلىصلاحيات الكتالوج', () => {
+  it('FC-SEC-005: يطابق مفاتيح الكتالوج القانونية فقط', () => {
     mocks.useSession.mockReturnValue({
       data: {
         isAuthenticated: true,
@@ -28,69 +28,36 @@ describe('usePermissions', () => {
 
     const { result } = renderHook(() => usePermissions());
 
-    // Legacy UI gates still resolve to the canonical backend grants.
-    expect(result.current.hasPermission('inventory.view.operations')).toBe(true);
-    expect(result.current.hasPermission('inventory.view.items')).toBe(true);
-    expect(result.current.hasPermission('inventory.view.opening_balances')).toBe(true);
-    expect(result.current.hasPermission('inventory.reports.stock_card')).toBe(true);
-    expect(result.current.hasPermission('inventory.reports.statement')).toBe(true);
+    expect(result.current.hasPermission('items.view')).toBe(true);
+    expect(result.current.hasPermission('transactions.view')).toBe(true);
+    expect(result.current.hasPermission('opening-balances.view')).toBe(true);
+    expect(result.current.hasPermission('reports.view')).toBe(true);
 
-    // Stocktaking is its own catalog permission now — it is NOT implied by items.view.
+    // Stocktaking is its own catalog permission, never implied by items.view.
     expect(result.current.hasPermission('inventory.view.stocktaking')).toBe(false);
   });
 
-  it('FC-SEC-002: يمنح الجرد لمن يملك inventory.*', () => {
+  it('FC-SEC-005: مفاتيح قديمة لم تعد تُقبل، وFail-Closed', () => {
     mocks.useSession.mockReturnValue({
       data: {
         isAuthenticated: true,
         user: {
           role: 'manager',
-          permissions: ['inventory.*'],
+          permissions: ['items.view'],
         },
       },
     });
 
     const { result } = renderHook(() => usePermissions());
 
-    expect(result.current.hasPermission('inventory.view.stocktaking')).toBe(true);
-    expect(result.current.hasPermission('inventory.close.stocktaking')).toBe(true);
+    // The legacy gate keys are gone. A key the catalog does not define must
+    // never match, otherwise a typo would read as a grant.
+    expect(result.current.hasPermission('inventory.view.items')).toBe(false);
+    expect(result.current.hasPermission('settings.view.users')).toBe(false);
+    expect(result.current.hasPermission('items.delete')).toBe(false);
   });
 
-  it('FC-SEC-002: يدعم settings.view القديم كمدخل متوافق', () => {
-    mocks.useSession.mockReturnValue({
-      data: {
-        isAuthenticated: true,
-        user: {
-          role: 'admin',
-          permissions: ['settings.view'],
-        },
-      },
-    });
-
-    const { result } = renderHook(() => usePermissions());
-
-    // A role still holding the legacy grant satisfies the canonical check.
-    expect(result.current.hasPermission('settings.view.general')).toBe(true);
-  });
-
-  it('يعتبر admin.reset_system كافيًا لعرض تبويب إعادة الضبط', () => {
-    mocks.useSession.mockReturnValue({
-      data: {
-        isAuthenticated: true,
-        user: {
-          role: 'admin',
-          permissions: ['admin.reset_system'],
-        },
-      },
-    });
-
-    const { result } = renderHook(() => usePermissions());
-
-    expect(result.current.hasPermission('settings.view.reset')).toBe(true);
-    expect(result.current.hasPermission('admin.reset_system')).toBe(true);
-  });
-
-  it('لا يمنح صلاحيات محلية عندما تكون قائمة صلاحيات الخادم فارغة', () => {
+  it('FC-SEC-005: لا يمنح صلاحيات محلية عندما تكون قائمة صلاحيات الخادم فارغة', () => {
     mocks.useSession.mockReturnValue({
       data: {
         isAuthenticated: true,
@@ -103,7 +70,10 @@ describe('usePermissions', () => {
 
     const { result } = renderHook(() => usePermissions());
 
+    // A zero-permission session must stay zero. The old role-name fallback
+    // turned exactly this into a full Admin grant in the display layer.
     expect(result.current.permissions).toEqual([]);
     expect(result.current.hasPermission('admin.reset_system')).toBe(false);
+    expect(result.current.hasPermission('users.view')).toBe(false);
   });
 });

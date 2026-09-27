@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { User } from '../types';
 import { useOfflineSync } from '../hooks/useOfflineSync';
-import { hasGrantedPermission } from '../services/permissionAliases';
+import { hasGrantedPermission } from '@services/permissionMatcher';
 
 interface LayoutProps {
   children: React.ReactNode;

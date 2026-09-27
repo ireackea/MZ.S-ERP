@@ -1,8 +1,7 @@
 // ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
 // ENTERPRISE FIX: Phase 2 - Multi-User Sync - Final Completion Pass - 2026-03-02
 import { useCallback, useMemo } from 'react';
-import { hasGrantedPermission } from '@services/permissionAliases';
-import { useSession } from './useSession';
+import { hasGrantedPermission } from '@services/permissionMatcher';import { useSession } from './useSession';
 
 const normalizePermissions = (permissions: unknown): string[] => {
   if (!Array.isArray(permissions)) return [];
@@ -30,8 +29,9 @@ export const usePermissions = () => {
   const hasPermission = useCallback(
     (permission: string) => {
       if (!permission) return false;
-      if (permissionState.isSuper) return true;
-
+      // FC-SEC-005 — the wildcard shortcut is already handled inside the shared
+      // matcher, which mirrors RbacGuard. Returning early here used to skip the
+      // matcher entirely, so a wildcard session never validated its key at all.
       return hasGrantedPermission(permissionState.permissions, permission);
     },
     [permissionState],

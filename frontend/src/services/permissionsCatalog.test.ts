@@ -10,7 +10,7 @@ import {
   diffAgainstBundledCatalog,
   hasCatalogDrift,
 } from './permissionCatalogSync';
-import { expandRequestedPermissions, hasGrantedPermission } from './permissionAliases';
+import { expandRequestedPermissions, hasGrantedPermission } from './permissionMatcher';
 
 describe('FC-SEC-002 frontend permission catalog mirror', () => {
   it('has unique, well-formed ids grouped under their module', () => {
@@ -44,12 +44,21 @@ describe('FC-SEC-002 frontend permission catalog mirror', () => {
     expect(countGrantedInGroup([], group)).toBe(0);
   });
 
-  it('migrates a legacy grant to its canonical catalog id', () => {
-    expect(expandRequestedPermissions('inventory.view.items')).toEqual(['inventory.view.items', 'items.view']);
-    expect(hasGrantedPermission(['items.view'], 'inventory.view.items')).toBe(true);
-    expect(hasGrantedPermission(['items.*'], 'settings.view.users')).toBe(false);
-    expect(hasGrantedPermission(['users.view'], 'settings.view.users')).toBe(true);
+  it('FC-SEC-005: يطابق backend دون ترجمة مفاتيح قديمة', () => {
+    // The shared matcher is deliberately the identity on expansion: legacy ids
+    // are migrated on the stored role row in the backend catalog, so by the time
+    // a session reaches the UI both sides speak canonical ids only.
+    expect(expandRequestedPermissions('items.view')).toEqual(['items.view']);
+
+    expect(hasGrantedPermission(['items.view'], 'items.view')).toBe(true);
+    expect(hasGrantedPermission(['items.*'], 'items.delete')).toBe(true);
+    expect(hasGrantedPermission(['items.view'], 'items.delete')).toBe(false);
     expect(hasGrantedPermission([FULL_ACCESS_TOKEN], 'anything.at_all')).toBe(true);
+
+    // Fail-closed: an id the catalog does not define never matches.
+    expect(hasGrantedPermission(['items.*'], 'settings.view.users')).toBe(false);
+    expect(hasGrantedPermission(['users.view'], 'settings.view.users')).toBe(false);
+    expect(hasGrantedPermission(['users.*'], 'settings.view.users')).toBe(false);
   });
 
   it('reports drift against the backend catalog', () => {

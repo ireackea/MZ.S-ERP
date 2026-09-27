@@ -11,11 +11,11 @@ const PermissionsMatrix: React.FC<PermissionsMatrixProps> = ({ }) => {
   const { hasPermission } = usePermissions();
   const config = useMemo(() => getIamConfig(), []);
 
-  if (!hasPermission('settings.view.permissions')) {
+  if (!hasPermission('users.update')) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
         <div className="mb-2 flex items-center gap-2 font-bold"><ShieldAlert size={18} />لا تملك صلاحية عرض مصفوفة الصلاحيات</div>
-        <div>تحتاج إلى الصلاحية <code>settings.view.permissions</code>.</div>
+        <div>تحتاج إلى الصلاحية <code>users.update</code>.</div>
       </div>
     );
   }

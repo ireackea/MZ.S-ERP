@@ -25,11 +25,11 @@ const PrintingTemplates: React.FC<PrintingTemplatesProps> = ({
   useEffect(() => setLocalReports(reportConfig), [reportConfig]);
   useEffect(() => setLocalOpening(openingBalanceReportConfig), [openingBalanceReportConfig]);
 
-  if (!hasPermission('settings.view.printing')) {
+  if (!hasPermission('settings.view.general')) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
         <div className="mb-2 flex items-center gap-2 font-bold"><ShieldAlert size={18} />لا تملك صلاحية عرض قوالب الطباعة</div>
-        <div>تحتاج إلى الصلاحية <code>settings.view.printing</code>.</div>
+        <div>تحتاج إلى الصلاحية <code>settings.view.general</code>.</div>
       </div>
     );
   }

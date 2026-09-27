@@ -121,11 +121,11 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ }) => {
     }
   };
 
-  if (!hasPermission('settings.view.audit')) {
+  if (!hasPermission('users.audit')) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
         <div className="mb-2 flex items-center gap-2 font-bold"><ShieldAlert size={18} />لا تملك صلاحية عرض سجلات التدقيق</div>
-        <div>تحتاج إلى الصلاحية <code>settings.view.audit</code>.</div>
+        <div>تحتاج إلى الصلاحية <code>users.audit</code>.</div>
       </div>
     );
   }

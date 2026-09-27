@@ -26,8 +26,8 @@ const OperationsPage: React.FC = () => {
   const updateStockFromTransaction = useInventoryStore((state) => state.updateStockFromTransaction);
   const actorId = String(session?.user?.id || 'system');
   const actorName = String(session?.user?.name || session?.user?.username || 'system');
-  const canImport = hasPermission('inventory.create.inbound') || hasPermission('inventory.create.outbound');
-  const canExport = hasPermission('inventory.export.stock') || hasPermission('reports.export.general');
+  const canImport = hasPermission('transactions.create');
+  const canExport = hasPermission('reports.generate');
 
   const partners = useMemo<Partner[]>(() => {
     const uniqueNames = Array.from(

@@ -15,11 +15,11 @@ const OfflineSettings: React.FC<OfflineSettingsProps> = ({ }) => {
   const syncing = useInventoryStore((state) => state.syncing);
   const error = useInventoryStore((state) => state.error);
 
-  if (!hasPermission('settings.view.offline')) {
+  if (!hasPermission('settings.view.general')) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
         <div className="mb-2 flex items-center gap-2 font-bold"><ShieldAlert size={18} />لا تملك صلاحية عرض إعدادات الأوفلاين</div>
-        <div>تحتاج إلى الصلاحية <code>settings.view.offline</code>.</div>
+        <div>تحتاج إلى الصلاحية <code>settings.view.general</code>.</div>
       </div>
     );
   }

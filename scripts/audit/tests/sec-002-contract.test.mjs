@@ -3,14 +3,15 @@
 // mirror, or the default role templates disagree.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const repoRoot = process.cwd();
 const backendCatalogPath = join(repoRoot, 'backend/src/auth/permission-catalog.ts');
 const backendRoleTemplatesPath = join(repoRoot, 'backend/src/auth/role-templates.ts');
 const frontendCatalogPath = join(repoRoot, 'frontend/src/services/permissionsCatalog.ts');
-const frontendAliasesPath = join(repoRoot, 'frontend/src/services/permissionAliases.ts');
+const frontendMatcherPath = join(repoRoot, 'frontend/src/services/permissionMatcher.ts');
+const retiredFrontendAliasesPath = join(repoRoot, 'frontend/src/services/permissionAliases.ts');
 
 const read = (path) => readFileSync(path, 'utf8');
 
@@ -101,23 +102,28 @@ test('default role templates only grant catalog permissions', () => {
   assert.match(templates, /assertKnownPermissions\(role\.permissions\)/, 'default roles are not validated at import time');
 });
 
-test('legacy alias map only points at canonical catalog ids', () => {
-  const aliases = read(frontendAliasesPath);
-  const aliasSection = aliases.slice(aliases.indexOf('LEGACY_PERMISSION_ALIASES'));
-  const canonicalTargets = [...aliasSection.matchAll(/^\s*'[^']+':\s*\[([^\]]+)\]/gm)]
-    .flatMap((m) => [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]));
-  const legacyKeys = new Set(
-    [...aliasSection.matchAll(/^\s*'([^']+)':\s*\[/gm)].map((m) => m[1]),
+test('FC-SEC-005 — the frontend keeps no legacy permission alias table', () => {
+  // Legacy id migration belongs to the backend catalog, which runs on the
+  // stored role row. While the frontend also carried a 36-entry map, every
+  // settings gate depended on a shim that no test tied to the catalog, so
+  // removing the shim as "cleanup" would have locked nine screens to SuperAdmin.
+  assert.equal(
+    existsSync(retiredFrontendAliasesPath),
+    false,
+    'frontend/src/services/permissionAliases.ts is back; legacy ids must not be translated in the UI',
   );
-  const targetsNotInCatalog = canonicalTargets.filter((id) => !backendIds.includes(id));
-  assert.deepEqual(
-    targetsNotInCatalog,
-    [],
-    `legacy aliases point at non-catalog ids: ${targetsNotInCatalog.join(', ')}`,
+  assert.ok(existsSync(frontendMatcherPath), 'the canonical frontend matcher is missing');
+});
+
+test('the frontend matcher mirrors the backend wildcard semantics', () => {
+  const matcher = read(frontendMatcherPath);
+  assert.match(matcher, /endsWith\('\.\*'\)/, 'matcher must handle module wildcards');
+  assert.match(matcher, /startsWith\(`\$\{prefix\}\.`\)/, 'matcher must scope a wildcard to its own module');
+  assert.doesNotMatch(
+    matcher,
+    /LEGACY_PERMISSION_ALIASES/,
+    'the frontend matcher must not reintroduce a legacy alias map',
   );
-  // A legacy key must not also be a canonical id, or the direction is ambiguous.
-  const bothDirections = [...legacyKeys].filter((key) => backendIds.includes(key));
-  assert.deepEqual(bothDirections, [], `alias keys collide with canonical ids: ${bothDirections.join(', ')}`);
 });
 
 test('the backend serves the catalog so the frontend can consume it', () => {
