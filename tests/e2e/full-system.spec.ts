@@ -5,6 +5,7 @@ import process from 'node:process';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import puppeteer, { type Browser, type HTTPResponse, type Page } from 'puppeteer';
 import { backendUrl, e2ePassword as password, frontendUrl, getMetricsHeaders, e2eUsername as username } from './support/runtimeConfig';
+import { cleanupRole } from './support/dbCleanup';
 
 const screenshotDir = path.resolve(process.cwd(), 'artifacts', 'phase3');
 const downloadDir = path.join(screenshotDir, 'downloads');
@@ -313,6 +314,14 @@ describe('full system production flow', () => {
   afterAll(async () => {
     if (adminSession?.cookieHeader && tempUserId) {
       await apiRequest(`/api/users/${tempUserId}`, { method: 'DELETE' }, adminSession.cookieHeader).catch(() => null);
+    }
+
+    // The temporary role used to survive every run. Nothing else removes it —
+    // there is no role delete route — so each execution left another
+    // Phase3RestrictedRole_<timestamp> row in the roles table and 14 of them
+    // had accumulated in the live database.
+    if (tempRoleId) {
+      cleanupRole(tempRoleId);
     }
 
     if (browser) {

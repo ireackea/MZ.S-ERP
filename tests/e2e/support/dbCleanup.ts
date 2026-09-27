@@ -32,3 +32,40 @@ export const cleanupRole = (roleId: string): boolean => {
   if (!roleId) return false;
   return runSql(`DELETE FROM roles WHERE id = '${roleId.replace(/'/g, "''")}'`);
 };
+
+/** A role is only removable once nothing references it, so clear the link first. */
+export const cleanupRoleAndUsers = (roleId: string): boolean => {
+  if (!roleId) return false;
+  const safe = roleId.replace(/'/g, "''");
+  return runSql(
+    `DELETE FROM users WHERE "roleId" = '${safe}'; DELETE FROM roles WHERE id = '${safe}';`,
+  );
+};
+
+export const cleanupUser = (userId: string): boolean => {
+  if (!userId) return false;
+  return runSql(`DELETE FROM users WHERE id = '${userId.replace(/'/g, "''")}'`);
+};
+
+export const cleanupUsersByPrefix = (prefix: string): boolean => {
+  if (!prefix) return false;
+  return runSql(
+    `DELETE FROM invitations WHERE email LIKE '${prefix.replace(/'/g, "''")}%';`
+    + `DELETE FROM users WHERE username LIKE '${prefix.replace(/'/g, "''")}%';`,
+  );
+};
+
+/**
+ * Removes roles that match a test naming pattern and hold no users. The E2E
+ * suite used to leave `Phase3RestrictedRole_*` behind with no cleanup path,
+ * because the API has no role delete route; 14 of them were sitting in the
+ * production roles table.
+ */
+export const cleanupOrphanRolesByPattern = (pattern: string): boolean => {
+  if (!pattern) return false;
+  const safe = pattern.replace(/'/g, "''");
+  return runSql(
+    `DELETE FROM roles r WHERE r.name LIKE '${safe}'`
+    + ` AND NOT EXISTS (SELECT 1 FROM users u WHERE u."roleId" = r.id);`,
+  );
+};
