@@ -725,3 +725,78 @@ describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
     expect(createRole.response.status).toBe(403);
   }, 120000);
 });
+/**
+ * F-48 - the user list could not answer "has this person ever signed in".
+ *
+ * `email`, `failedAttempts` and `mustChangePassword` all existed on the DTO and
+ * were never rendered, and nothing recorded a last login, so an administrator
+ * triaging an account had nothing to go on: a dormant account, an account that
+ * has never been used, and an account someone keeps mistyping into all looked
+ * identical in the list.
+ *
+ * The negative case is the one worth trusting. Asserting only that the field is
+ * present would pass against a hardcoded value, so this requires a real
+ * timestamp for an account that has signed in and null for one that has not.
+ *
+ * It deliberately spends no auth traffic. The auth traffic class allows 20
+ * requests per 15 minutes and the seventeen tests above already come close to
+ * that ceiling, so a login here would push the suite into 429s and the failure
+ * would have nothing to do with the assertion. The signed-in account is
+ * superadmin itself, whose session this run created.
+ */
+const f48RunStart = Date.now();
+
+describe('F-48 last login is reported from the session table, not invented', () => {
+  it('separates an account that has signed in from one that never has', async () => {
+    const suffix = randomUUID().slice(0, 8);
+    const adminCookie = await adminLogin();
+
+    const roles = await request('/users/roles', { headers: { Cookie: adminCookie } });
+    const viewerRole = data(roles.body).find((r: any) => r.name === 'Viewer');
+    expect(viewerRole).toBeTruthy();
+
+    // Created and never signed in. Creating a user is not an auth path, so this
+    // costs nothing against the traffic class.
+    const never = await request('/users', {
+      method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: `f48never_${suffix}`,
+        password: PASSWORD,
+        roleId: viewerRole.id,
+        firstName: 'F48',
+        lastName: 'Never',
+        email: `f48never_${suffix}@example.test`,
+      }),
+    });
+    expect(never.response.status).toBe(201);
+    const neverId = String(data(never.body).id);
+    createdUserIds.push(neverId);
+
+    const list = await request('/users?limit=200', { headers: { Cookie: adminCookie } });
+    expect(list.response.status).toBe(200);
+    const rows = data(list.body) as any[];
+
+    const signedIn = rows.find((r) => r.username === adminUsername);
+    const neverRow = rows.find((r) => r.id === neverId);
+    expect(signedIn, 'the signed-in account must appear in the list').toBeTruthy();
+    expect(neverRow, 'the account that never signed in must appear in the list').toBeTruthy();
+
+    expect(signedIn.lastLoginAt, 'an account that signed in must report when').toBeTruthy();
+    const seen = new Date(signedIn.lastLoginAt).getTime();
+    expect(Number.isNaN(seen), 'lastLoginAt must parse as a date').toBe(false);
+
+    // Bounded by the run, so a stale or hardcoded timestamp cannot pass. The
+    // lower bound is the start of the run rather than this test, because the
+    // admin session is memoised from an earlier test.
+    const now = Date.now();
+    expect(seen).toBeGreaterThanOrEqual(f48RunStart - 60_000);
+    expect(seen).toBeLessThanOrEqual(now + 60_000);
+
+    // The negative case is what stops this being a constant.
+    expect(neverRow.lastLoginAt, 'an account with no session must not report a login').toBeNull();
+
+    // And the email the table now renders has to survive the mapper too.
+    expect(neverRow.email).toBe(`f48never_${suffix}@example.test`);
+  }, 120000);
+});

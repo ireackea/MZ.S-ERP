@@ -38,6 +38,10 @@ export interface UserDto {
    *  from a deactivated one, nor show who still holds a temporary password. */
   isEmailConfirmed?: boolean;
   mustChangePassword?: boolean;
+  /** F-48 — most recent session activity, or null when the account has never
+   *  signed in. Read from the session table by the list endpoint only, which is
+   *  the only place that renders it. */
+  lastLoginAt?: string | null;
   createdOpeningBalanceCount?: number;
   createdAt: string;
   updatedAt: string;
@@ -101,6 +105,7 @@ const userFromApi = (row: any): UserDto => ({
   lockoutUntil: row?.lockoutUntil ?? null,
   isEmailConfirmed: Boolean(row?.isEmailConfirmed),
   mustChangePassword: Boolean(row?.mustChangePassword),
+  lastLoginAt: row?.lastLoginAt ?? null,
   createdOpeningBalanceCount: Number(row?.createdOpeningBalanceCount || 0),
   createdAt: String(row?.createdAt || ''),
   updatedAt: String(row?.updatedAt || ''),

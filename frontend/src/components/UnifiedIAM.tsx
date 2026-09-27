@@ -118,6 +118,10 @@ const UnifiedIAM: React.FC = () => {
   };
 
   const selectedIds = useMemo(() => Object.keys(selected).filter((id) => selected[id]), [selected]);
+  const allSelected = useMemo(
+    () => users.length > 0 && users.every((u) => selected[u.id]),
+    [users, selected],
+  );
   const pageCount = Math.max(1, Math.ceil(total / limit));
 
   const loadRoles = async () => {
@@ -763,10 +767,25 @@ const UnifiedIAM: React.FC = () => {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-slate-200">
-                      <th className="p-3 text-right text-xs font-bold text-slate-500">تحديد</th>
+                      <th className="w-10 p-3" aria-label="تحديد الكل">
+                        <input
+                          type="checkbox"
+                          checked={allSelected && users.length > 0}
+                          onChange={(e) =>
+                            setSelected((prev) => {
+                              const next = { ...prev };
+                              if (e.target.checked) users.forEach((u) => (next[u.id] = true));
+                              else users.forEach((u) => delete next[u.id]);
+                              return next;
+                            })
+                          }
+                          className="accent-emerald-600"
+                        />
+                      </th>
                       <th className="p-3 text-right text-xs font-bold text-slate-500">المستخدم</th>
                       <th className="p-3 text-right text-xs font-bold text-slate-500">الدور</th>
                       <th className="p-3 text-right text-xs font-bold text-slate-500">الحالة</th>
+                      <th className="p-3 text-right text-xs font-bold text-slate-500">آخر دخول</th>
                       <th className="p-3 text-right text-xs font-bold text-slate-500">آخر تحديث</th>
                       <th className="p-3 text-right text-xs font-bold text-slate-500">الإجراءات</th>
                     </tr>
@@ -774,13 +793,13 @@ const UnifiedIAM: React.FC = () => {
                   <tbody>
                     {loading ? (
                       <tr>
-                        <td colSpan={6} className="p-8 text-center text-slate-500">
+                        <td colSpan={7} className="p-8 text-center text-slate-500">
                           جاري التحميل...
                         </td>
                       </tr>
                     ) : users.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="p-8 text-center text-slate-500">
+                        <td colSpan={7} className="p-8 text-center text-slate-500">
                           لا يوجد مستخدمين
                         </td>
                       </tr>
@@ -798,6 +817,9 @@ const UnifiedIAM: React.FC = () => {
                           <td className="p-3">
                             <div className="font-semibold text-slate-800">{user.fullName}</div>
                             <div className="text-xs text-slate-500">{user.username}</div>
+                            {user.email && (
+                              <div className="text-xs text-slate-400">{user.email}</div>
+                            )}
                           </td>
                           <td className="p-3">
                             <select
@@ -858,6 +880,28 @@ const UnifiedIAM: React.FC = () => {
                             })()}
                           </td>
                           <td className="p-3 text-xs text-slate-500">
+                          <td className="p-3 text-xs text-slate-500">
+                            {user.lastLoginAt ? (
+                              <span title={formatDateTime(user.lastLoginAt)}>
+                                {formatDateTime(user.lastLoginAt)}
+                              </span>
+                            ) : (
+                              <span
+                                title="لا توجد أي جلسة مسجّلة لهذا الحساب"
+                                className="font-semibold text-amber-700"
+                              >
+                                لم يدخل بعد
+                              </span>
+                            )}
+                            {Number(user.failedAttempts || 0) > 0 && (
+                              <div
+                                title={`${user.failedAttempts} محاولة دخول فاشلة`}
+                                className="mt-1 inline-block rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-700"
+                              >
+                                {user.failedAttempts} محاولة فاشلة
+                              </div>
+                            )}
+                          </td>
                             {formatDateTime(user.updatedAt)}
                           </td>
                           <td className="p-3">

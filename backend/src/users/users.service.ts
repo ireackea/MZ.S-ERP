@@ -188,8 +188,39 @@ export class UsersService {
       }),
     ]);
 
+    // F-48 — "has this person ever signed in" is the question an administrator
+    // actually asks of a user list, and nothing answered it. The session table
+    // already holds the answer, so this is a grouping rather than a new column
+    // that would have to be kept true on every login path.
+    //
+    // Revoked sessions still count: signing in and then being signed out is a
+    // login that happened, and hiding it would report a user who has genuinely
+    // used the system as never having used it.
+    //
+    // lastActivityAt is written once at session creation and never refreshed
+    // afterwards, so this is a sign-in time and not a live-activity time. That
+    // is what the column claims to show. Refreshing it per request would make
+    // this a write on every authenticated call, which is a different change and
+    // should be decided on its own merits.
+    const userIds = rows.map((row) => row.id);
+    const lastSeenByUser = new Map<string, Date>();
+
+    if (userIds.length > 0) {
+      const sessions = await this.prisma.activeSession.groupBy({
+        by: ['userId'],
+        where: { userId: { in: userIds } },
+        _max: { lastActivityAt: true },
+      });
+
+      for (const session of sessions) {
+        if (session._max.lastActivityAt) {
+          lastSeenByUser.set(session.userId, session._max.lastActivityAt);
+        }
+      }
+    }
+
     const response = {
-      data: rows.map((row) => this.toUserDto(row)),
+      data: rows.map((row) => this.toUserDto(row, lastSeenByUser.get(row.id) ?? null)),
       total,
       page,
       limit,
@@ -1106,7 +1137,11 @@ export class UsersService {
     };
   }
 
-  private toUserDto(user: UserListRecord) {
+  // F-48 — `lastLoginAt` is only known to the list query, which reads the
+  // session table for the whole page in one grouping. Every other caller
+  // (getById, create, update, onboarding) omits it rather than issuing a query
+  // per user to fill in a field the list is the only place that renders.
+  private toUserDto(user: UserListRecord, lastLoginAt: Date | null = null) {
     const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
     return {
       id: user.id,
@@ -1125,6 +1160,7 @@ export class UsersService {
       // a deactivated one, nor show who still holds a temporary password.
       isEmailConfirmed: user.isEmailConfirmed,
       mustChangePassword: user.mustChangePassword,
+      lastLoginAt,
       createdOpeningBalanceCount: user.createdOpeningBalances?.length ?? 0,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
