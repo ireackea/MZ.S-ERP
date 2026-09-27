@@ -126,16 +126,57 @@ export class AuthService {
 
   private async ensureDefaultRoles() {
     for (const role of DEFAULT_ROLES) {
-      const existing = await this.prisma.role.findUnique({ where: { name: role.name }, select: { id: true } });
-      if (existing) continue;
-      await this.prisma.role.create({
-        data: {
-          name: role.name,
-          description: role.description,
-          permissions: JSON.stringify(role.permissions),
-          color: role.color,
-        },
+      const templatePermissions = [...new Set(role.permissions)];
+      const existing = await this.prisma.role.findUnique({
+        where: { name: role.name },
+        select: { id: true, permissions: true },
       });
+
+      if (!existing) {
+        await this.prisma.role.create({
+          data: {
+            name: role.name,
+            description: role.description,
+            permissions: JSON.stringify(templatePermissions),
+            color: role.color,
+          },
+        });
+        continue;
+      }
+
+      // FC-SEC-006 — repair a built-in role that is missing grants from its
+      // template. The row originally came from `prisma/seed.ts`, which shipped a
+      // narrower list than `role-templates.ts` and was never reconciled, so
+      // Manager/Operator/Viewer held no `dashboard.view` and no stocktaking
+      // access. The previous `if (existing) continue` meant the template could
+      // never catch up.
+      //
+      // The repair is deliberately ADDITIVE. It only adds template grants the row
+      // is missing and never removes one, so an administrator who deliberately
+      // widened or narrowed a built-in role keeps their decision; the guard
+      // against a silent rewrite is that the diff is logged and audited.
+      const stored = this.normalizePermissions(existing.permissions);
+      const missing = templatePermissions.filter((permission) => !stored.includes(permission));
+      if (!missing.length) continue;
+
+      const merged = [...new Set([...stored, ...missing])].sort();
+      await this.prisma.role.update({
+        where: { id: existing.id },
+        data: { permissions: JSON.stringify(merged) },
+      });
+      console.warn(
+        `[Auth Service] Role "${role.name}" was missing ${missing.length} template grant(s); repaired: ${missing.join(', ')}`,
+      );
+      await this.auditService.log({
+        action: 'ROLE_TEMPLATE_REPAIRED',
+        actorId: 'system',
+        actorUsername: 'system',
+        actorRole: 'system',
+        targetResource: `roles/${existing.id}`,
+        status: 'success',
+        message: `Added ${missing.length} missing template grant(s) to built-in role ${role.name}`,
+        metadata: { role: role.name, added: missing },
+      }).catch(() => undefined);
     }
   }
 

@@ -2,47 +2,22 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { isPasswordPolicyCompliant, isWeakLegacyPassword } from '../src/common/password-policy';
+import { DEFAULT_ROLES } from '../src/auth/role-templates';
 
 const prisma = new PrismaClient();
 const ENTERPRISE_DEFAULT_PASSWORD = 'SecurePassword2026!';
 
-const defaultRoles = [
-  { name: 'SuperAdmin', description: 'Full access to all system modules', permissions: ['*'], color: '#ef4444' },
-  {
-    name: 'Admin',
-    description: 'Users, reports, backup, and core operations management',
-    permissions: [
-      'users.*',
-      'reports.*',
-      'backup.*',
-      'items.*',
-      'transactions.*',
-      'formulation.*',
-      'opening-balances.*',
-      'theme.*',
-      'monitoring.logs.write',
-    ],
-    color: '#2563eb',
-  },
-  {
-    name: 'Manager',
-    description: 'Transactions management with read access to reports and inventories',
-    permissions: ['transactions.*', 'reports.view', 'items.view', 'formulation.view', 'opening-balances.view', 'backup.view'],
-    color: '#10b981',
-  },
-  {
-    name: 'Operator',
-    description: 'Operational write access for transactions',
-    permissions: ['transactions.create', 'transactions.update', 'transactions.delete', 'transactions.view', 'items.view'],
-    color: '#f59e0b',
-  },
-  {
-    name: 'Viewer',
-    description: 'Read-only access',
-    permissions: ['items.view', 'transactions.view', 'reports.view', 'formulation.view', 'opening-balances.view', 'backup.view'],
-    color: '#6b7280',
-  },
-] as const;
+// FC-SEC-006 — this file used to carry its own `defaultRoles` list, and it was
+// narrower than `role-templates.ts`: Manager/Operator/Viewer were seeded without
+// `dashboard.view`, `inventory.*` or `partners.view`. Because the app only
+// creates a role when it is missing, the seed's list won on every install and
+// the template could never take effect. There is now one definition.
+const defaultRoles = DEFAULT_ROLES.map((role) => ({
+  name: role.name,
+  description: role.description,
+  permissions: [...role.permissions],
+  color: role.color,
+}));
 
 function validatePasswordPolicy(password: string) {
   return isPasswordPolicyCompliant(password);
