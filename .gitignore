@@ -34,3 +34,5 @@ _BACKUP_*/
 .env
 !.env.example
 logs/
+# Written by the running backup service, not configuration.
+backups/*.json

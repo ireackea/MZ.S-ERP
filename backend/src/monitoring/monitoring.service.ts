@@ -15,6 +15,7 @@ import { DatabaseInfrastructureService } from '../database/database-infrastructu
 import { PrismaService } from '../prisma.service';
 import { ClientLogDto } from './dto/client-log.dto';
 import { ResetChallengeDto, SystemResetDto, SystemResetScope } from './dto/system-reset.dto';
+import { buildAuditRow } from '../audit/audit-row';
 
 type HealthStatus = {
   status: 'healthy' | 'degraded';
@@ -469,8 +470,22 @@ export class MonitoringService {
           continue;
         }
 
-        const { count } = await delegate.deleteMany({});
-        tablesAffected.push({ table: target.table, rowsDeleted: Number(count ?? 0) });
+        // Each delete is attributed to the table that raised it. A foreign key
+        // violation anywhere in this list otherwise surfaced as a bare 500 with
+        // the whole transaction rolled back, so the operator had no way to tell
+        // which table blocked the reset or what still points at it.
+        try {
+          const { count } = await delegate.deleteMany({});
+          tablesAffected.push({ table: target.table, rowsDeleted: Number(count ?? 0) });
+        } catch (error) {
+          const cause = error instanceof Error ? error.message : String(error);
+          this.logger.error(`Reset stopped while clearing ${target.table}: ${cause}`);
+          throw new ConflictException({
+            code: 'SYSTEM_RESET_TARGET_FAILED',
+            message: `تعذّر إتمام إعادة الضبط أثناء تفريغ الجدول ${target.table}.`,
+            detail: { table: target.table, model: target.model, cause },
+          });
+        }
       }
 
       // Users last. Many tables point at them, active_sessions and
@@ -491,8 +506,21 @@ export class MonitoringService {
       // the commit, which meant the system could destroy everything and document
       // nothing, leaving one line in a container log.
       await tx.auditLog.create({
-        data: {
-          actorId: actorId || 'system',
+        // FC-AUD-002 - built by the shared writer, with no cast.
+        //
+        // The previous version of this row used `actorId` and `message`, which are
+        // the *column* names, and put an object in `metadata`, which is a String.
+        // It compiled because the data object was cast with `as any`, and it failed
+        // at runtime here, in the middle of a reset, as
+        //
+        //   Invalid `prisma.auditLog.create()` invocation:
+        //   Unknown argument `actorId`.
+        //
+        // Only the first bad name is reported, so that one line hid two more. The
+        // fix is not three renames: it is one writer, typed, that the audit service
+        // uses too - so the next caller cannot repeat this.
+        data: buildAuditRow({
+          actorId,
           actorUsername: actorLabel,
           actorRole: actorRole || 'unknown',
           action: 'SYSTEM_RESET_SUCCESS',
@@ -512,8 +540,8 @@ export class MonitoringService {
             absentModels,
             keptSuperAdminId,
             backupId,
-          } as any,
-        } as any,
+          },
+        }),
       });
     });
 

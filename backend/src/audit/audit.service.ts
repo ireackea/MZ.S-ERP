@@ -6,6 +6,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { redactMetadata } from './audit-redaction';
+import { buildAuditRow } from './audit-row';
 
 /**
  * FC-AUD-001 — a Prisma client, or the transaction-scoped client handed to a
@@ -285,27 +286,27 @@ export class AuditService {
     const prisma = this.getPrisma();
     await prisma.$transaction(async (tx) => {
       await tx.auditLog.create({
-        data: {
+        // FC-AUD-002 — the row is built by the shared builder, with no cast.
+        //
+        // The inline version used `actorId` and `message`, which are the *column*
+        // names; the Prisma fields are `userId` and `details`. It compiled because
+        // the data object was cast, and it failed at runtime inside a system reset.
+        data: buildAuditRow({
           id: nextEntry.id,
-          timestamp: new Date(nextEntry.timestamp),
+          timestamp: nextEntry.timestamp,
           action: nextEntry.action,
-          // FC-AUD-001 — these were hardcoded, which broke the trail in two ways
-          // at once: `targetUserId` was never written, so the whole column was
-          // permanently NULL and `GET /users/:id/audit` always returned nothing;
-          // and `entityType` was 'User' for every row regardless of what the
-          // entry was about. Both are now taken from the caller, falling back to
-          // the previous values so no existing caller changes behaviour.
-          entityType: nextEntry.entityType || 'User',
-          entityId: nextEntry.entityId || nextEntry.actorId || 'system',
-          targetUserId: nextEntry.targetUserId ?? null,
-          targetResource: nextEntry.targetResource ?? null,
-          details: nextEntry.message,
-          ipAddress: this.extractIpAddress(nextEntry.metadata),
-          metadata: this.toMetadataJson(nextEntry),
+          actorId: nextEntry.actorId,
           actorUsername: nextEntry.actorUsername,
           actorRole: nextEntry.actorRole,
-          status: nextEntry.status === 'success' ? 'SUCCESS' : 'FAILED',
-        },
+          targetUserId: nextEntry.targetUserId,
+          targetResource: nextEntry.targetResource,
+          entityType: nextEntry.entityType,
+          entityId: nextEntry.entityId,
+          message: nextEntry.message,
+          status: nextEntry.status,
+          metadata: nextEntry.metadata,
+          ipAddress: this.extractIpAddress(nextEntry.metadata),
+        }),
       });
     });
 

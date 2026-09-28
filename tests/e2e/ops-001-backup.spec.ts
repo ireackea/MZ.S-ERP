@@ -1,6 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+/**
+ * Every physical table the schema declares.
+ *
+ * Prisma keeps the model name unless the model says `@@map`, and the schema
+ * mixes both conventions — `Item` is a table called `Item`, `AuditLog` is
+ * `audit_logs` — so the mapping has to be read rather than guessed.
+ */
+const schemaTableNames = (): string[] => {
+  const schema = readFileSync(join(process.cwd(), 'backend/prisma/schema.prisma'), 'utf8');
+  const names: string[] = [];
+  for (const model of schema.matchAll(/^model\s+(\w+)\s*\{([\s\S]*?)^\}/gm)) {
+    const [, modelName, body] = model;
+    const mapped = body.match(/@@map\("([^"]+)"\)/);
+    names.push(mapped ? mapped[1] : modelName);
+  }
+  // The migration bookkeeping table is not part of the business data.
+  return names.filter((name) => name !== '_prisma_migrations').sort();
+};
 
 /**
  * FC-OPS-001 — live database round trip.
@@ -140,18 +161,21 @@ describeLive('FC-OPS-001 live database round trip', () => {
 
     expect(tables.length).toBeGreaterThanOrEqual(20);
 
-    // Everything the plan lists must be present and countable. These are the
-    // real physical table names (the schema mixes PascalCase and snake_case).
-    for (const required of [
-      'Item', 'Transaction', 'partners', 'orders', 'order_items', 'OpeningBalance',
-      'formulations', 'formulation_items', 'stocktaking_sessions', 'stocktaking_entries',
-      'stocktaking_counts', 'reference_data_values', 'unloading_rules',
-      'users', 'roles', 'permissions', 'role_permissions', 'user_roles',
-      'invitations', 'audit_logs',
-    ]) {
-      expect(tables, `missing table ${required}`).toContain(required);
+    // The required list is derived from the schema, not typed out by hand.
+    //
+    // The hand-written version listed `permissions`, `role_permissions` and
+    // `user_roles` — three tables this design never had. Roles carry a JSON
+    // permission list and a user has one role, so the test was asserting against
+    // a schema that does not exist, and it failed for a reason that had nothing
+    // to do with backups. A test whose expected values are wrong is worse than
+    // no test, because it is read as evidence.
+    const required = schemaTableNames();
+
+    expect(required.length).toBeGreaterThanOrEqual(20);
+    for (const table of required) {
+      expect(tables, `missing table ${table}`).toContain(table);
       // And a pg_dump of it is readable.
-      expect(Number(psql(`SELECT count(*) FROM "${required}";`)).toString()).toMatch(/^\d+$/);
+      expect(Number(psql(`SELECT count(*) FROM "${table}";`)).toString()).toMatch(/^\d+$/);
     }
   }, 180_000);
 

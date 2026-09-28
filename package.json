@@ -53,6 +53,7 @@
     "test:backend:attachments": "npm exec vitest -- --run backend/src/item/attachment-safety.test.ts",
     "test:backend:reports": "npm exec vitest -- --run backend/src/common/operation-type.test.ts",
     "test:backend:pgdump": "npm exec vitest -- --run backend/src/backup/pg-dump.test.ts",
+    "test:e2e:reset-success": "npm exec vitest -- --run tests/e2e/reset-success.spec.ts",
     "test:e2e:backup": "npm exec vitest -- --run tests/e2e/ops-001-backup.spec.ts",
     "test:e2e:audit": "npm exec vitest -- --run tests/e2e/audit-durability.spec.ts",
     "test:e2e:rbac": "npm exec vitest -- --run tests/e2e/rbac-contract.spec.ts",
