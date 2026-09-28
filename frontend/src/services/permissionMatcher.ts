@@ -28,12 +28,26 @@ const normalize = (value: unknown): string[] =>
 
 /**
  * `granted` is a `module.*` wildcard and `required` sits under it.
- * Mirrors RbacGuard.matchWildcard exactly.
+ * Mirrors the backend's `permission-matching.ts` exactly, and a test asserts the
+ * two agree on a shared table of cases.
  */
 const matchWildcard = (granted: string, required: string): boolean => {
   if (!granted.endsWith('.*')) return false;
   const prefix = granted.slice(0, -2);
   return required === prefix || required.startsWith(`${prefix}.`);
+};
+
+/**
+ * Gate 5.1 - exported so callers validate a grant string with the same parse
+ * rather than re-implementing `endsWith('.*')`. `iamService` had its own copy of
+ * exactly this line.
+ */
+export const isWildcardGrant = (grant: string, knownModuleKeys?: ReadonlySet<string>): boolean => {
+  if (typeof grant !== 'string' || !grant.endsWith('.*')) return false;
+  const prefix = grant.slice(0, -2);
+  if (!prefix) return false;
+  if (knownModuleKeys && !knownModuleKeys.has(prefix)) return false;
+  return true;
 };
 
 /**

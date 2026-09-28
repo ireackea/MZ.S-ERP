@@ -13,6 +13,7 @@ import {
   ROLES_METADATA_KEY,
 } from './auth.constants';
 import { isKnownPermission } from './permission-catalog';
+import { isPermissionGranted } from './permission-matching';
 
 type Principal = {
   role: string;
@@ -123,19 +124,15 @@ export class RbacGuard implements CanActivate {
     return requiredRoles.some((role) => String(role || '').toLowerCase() === normalizedRole);
   }
 
+  /**
+   * Gate 5.1 - delegates to the shared matcher.
+   *
+   * `every` semantics and the "empty requirement is not a match" rule now live in
+   * one place. The local copy allowed an empty requirement list, so a route that
+   * reached the guard with no metadata was treated as allowed; `canActivate`
+   * checks for that above, but the rule now holds where the matching happens.
+   */
   private hasPermission(userPermissions: string[], requiredPermissions: string[]): boolean {
-    if (!requiredPermissions.length) return true;
-    if (userPermissions.includes('*')) return true;
-
-    return requiredPermissions.every((permission) => {
-      if (userPermissions.includes(permission)) return true;
-      return userPermissions.some((granted) => this.matchWildcard(granted, permission));
-    });
-  }
-
-  private matchWildcard(grantedPermission: string, requiredPermission: string): boolean {
-    if (!grantedPermission.endsWith('.*')) return false;
-    const prefix = grantedPermission.slice(0, -2);
-    return requiredPermission === prefix || requiredPermission.startsWith(`${prefix}.`);
+    return isPermissionGranted(userPermissions, requiredPermissions);
   }
 }

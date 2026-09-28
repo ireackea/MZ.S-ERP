@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { ReferenceDataService } from '../reference-data/reference-data.service';
+import { isPermissionGranted } from '../auth/permission-matching';
 
 @Injectable()
 export class AppBootstrapService {
@@ -9,19 +10,16 @@ export class AppBootstrapService {
     private readonly referenceDataService: ReferenceDataService,
   ) {}
 
-  private hasPermission(permissions: string[], permission: string) {
-    if (permissions.includes('*') || permissions.includes(permission)) {
-      return true;
-    }
-
-    return permissions.some((granted) => {
-      if (!granted.endsWith('.*')) {
-        return false;
-      }
-
-      const prefix = granted.slice(0, -2);
-      return permission === prefix || permission.startsWith(`${prefix}.`);
-    });
+  /**
+   * Gate 5.1 - delegates to the shared matcher.
+   *
+   * This was a third independent copy. It is called with a role's raw permission
+   * array, so a divergence between it and the guard's would show inactive
+   * unloading rules to a role that cannot see them — a leak, not a lockout — with
+   * no test failing.
+   */
+  private hasPermission(permissions: string[], permission: string): boolean {
+    return isPermissionGranted(permissions, [permission]);
   }
 
   private parsePermissions(raw: string | null | undefined): string[] {

@@ -1,3 +1,4 @@
+import { isWildcardGrant } from './permission-matching';
 /**
  * FC-SEC-002 — Single Permission Catalog (backend is the source of truth).
  *
@@ -192,8 +193,11 @@ export const isKnownPermissionGrant = (grant: string): boolean => {
   if (!normalized) return false;
   if (normalized === FULL_ACCESS_TOKEN) return true;
   if (isKnownPermission(normalized)) return true;
-  if (!normalized.endsWith('.*')) return false;
+  // Gate 5.1 - the wildcard parse is shared. This answers a different question
+  // from the matcher (is this grant string well formed, rather than does it cover a
+  // key), but `module.*` is one syntax, not five.
   const moduleKey = normalized.slice(0, -2);
+  if (!isWildcardGrant(normalized)) return false;
   return PERMISSION_CATALOG.some((entry) => entry.module === moduleKey);
 };
 

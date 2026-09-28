@@ -6,25 +6,22 @@ import { RbacGuard } from '../auth/rbac.guard';
 import { DeleteUnloadingRulesDto } from './dto/delete-unloading-rules.dto';
 import { SaveUnloadingRuleDto } from './dto/save-unloading-rule.dto';
 import { UnloadingRuleService } from './unloading-rule.service';
+import { isPermissionGranted } from '../auth/permission-matching';
 
-const hasPermission = (rawPermissions: unknown, permission: string) => {
-  const permissions = Array.isArray(rawPermissions)
-    ? rawPermissions.filter((entry): entry is string => typeof entry === 'string')
-    : [];
-
-  if (permissions.includes('*') || permissions.includes(permission)) {
-    return true;
-  }
-
-  return permissions.some((granted) => {
-    if (!granted.endsWith('.*')) {
-      return false;
-    }
-
-    const prefix = granted.slice(0, -2);
-    return permission === prefix || permission.startsWith(`${prefix}.`);
-  });
-};
+/**
+ * Gate 5.1 - delegates to the shared matcher.
+ *
+ * The fourth copy of this logic. It is called with a role's raw permission array
+ * to decide whether a caller may see deactivated unloading rules, so a divergence
+ * from the guard's copy would reveal records to a role that cannot read them.
+ */
+const hasPermission = (rawPermissions: unknown, permission: string): boolean =>
+  isPermissionGranted(
+    Array.isArray(rawPermissions)
+      ? rawPermissions.filter((entry): entry is string => typeof entry === 'string')
+      : [],
+    [permission],
+  );
 
 @UseGuards(JwtAuthGuard, RbacGuard)
 @Controller('unloading-rules')

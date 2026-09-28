@@ -20,6 +20,7 @@ import {
   PERMISSIONS_CATALOG,
 } from './permissionsCatalog';
 import { assertStorageKeyAllowed } from './storageOwnership';
+import { isWildcardGrant } from './permissionMatcher';
 
 const IAM_CONFIG_KEY = 'feed_factory_iam_config';
 
@@ -38,10 +39,14 @@ const permissionCatalog: PermissionDefinition[] = PERMISSIONS_CATALOG.flatMap((g
 const KNOWN_PERMISSION_IDS = new Set<string>(ALL_PERMISSION_IDS);
 const KNOWN_MODULE_KEYS = new Set<string>(PERMISSIONS_CATALOG.map((group) => group.key));
 
+// Gate 5.1 - the `module.*` parse comes from the shared matcher rather than being
+// spelled out a second time. The question this answers is different from the
+// matcher's (is this grant string well formed, rather than does it cover a key),
+// but the syntax is one definition.
 const isKnownGrant = (grant: string): boolean =>
   grant === FULL_ACCESS_TOKEN ||
   KNOWN_PERMISSION_IDS.has(grant) ||
-  (grant.endsWith('.*') && KNOWN_MODULE_KEYS.has(grant.slice(0, -2)));
+  isWildcardGrant(grant, KNOWN_MODULE_KEYS);
 
 const canonicalizeGrants = (permissionIds: string[]): string[] => {
   const canonical = permissionIds.map(
