@@ -12,7 +12,7 @@ import {
 import { extname } from 'path';
 import { BulkSyncDto } from './dto/sync-items.dto';
 import { BulkImportDto } from './dto/bulk-import.dto';
-import { CreateItemDto, ListItemsQueryDto, UpdateItemDto } from './dto/item.dto';
+import { CreateItemDto, ListItemsQueryDto, ReorderItemsDto, UpdateItemDto } from './dto/item.dto';
 import { ItemService } from './item.service';
 import { DeleteItemsDto } from './dto/delete-items.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -29,6 +29,17 @@ export class ItemController {
   @Post()
   async create(@Body() dto: CreateItemDto, @Req() req: any) {
     return this.itemService.create(dto, req.user?.sub || req.user?.id, req.user?.username);
+  }
+
+  @Permissions('items.reorder')
+  @Post('reorder')
+  async reorder(@Body() dto: ReorderItemsDto, @Req() req: any) {
+    return this.itemService.reorderItems(dto.orderedPublicIds, {
+      userId: req.user?.sub || req.user?.id,
+      username: req.user?.username,
+      role: req.user?.role,
+      ipAddress: String(req.ip || req.socket?.remoteAddress || ''),
+    });
   }
 
   @Permissions('items.update')

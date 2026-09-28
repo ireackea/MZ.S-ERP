@@ -1,5 +1,40 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayUnique,
+  IsArray,
+  IsIn,
+  IsInt,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
+
+/**
+ * The catalog order, as the client currently displays it.
+ *
+ * `publicId` rather than the internal `id`, for two reasons: it is the currency
+ * every other item endpoint already speaks, and it is the one identifier an
+ * imported catalog is guaranteed to have.
+ */
+export class ReorderItemsDto {
+  @IsArray()
+  // Bounded because the endpoint writes one row per entry inside a single
+  // transaction. An unbounded array is an unbounded transaction.
+  @ArrayMaxSize(5000, {
+    message: 'the catalog order cannot exceed 5000 items',
+  })
+  // A duplicated id would assign two different ranks to the same row and leave
+  // the last write to win, which is an order nobody chose.
+  @ArrayUnique({ message: 'the catalog order contains the same item more than once' })
+  @IsString({ each: true })
+  @IsNotEmpty({ each: true })
+  orderedPublicIds!: string[];
+}
 
 export class ListItemsQueryDto {
   @Type(() => Number)

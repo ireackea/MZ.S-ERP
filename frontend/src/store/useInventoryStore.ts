@@ -11,6 +11,7 @@ import {
   restoreItems,
   deleteItemsPermanently,
   getItems as getItemsFromApi,
+  reorderItems,
   syncItems,
   type ItemDto,
   type SyncItemPayload,
@@ -166,6 +167,8 @@ type Store = {
   formulasLoadedAt: number | null;
   soft: SoftMap;
   sortMode: ItemSortMode;
+  /** True while a catalog-order save is in flight, so the button can say so. */
+  savingItemOrder: boolean;
   manualOrder: string[];
   load: () => Promise<void>;
   loadAll: () => Promise<void>;
@@ -214,9 +217,8 @@ type Store = {
   updateItems: (items: Item[], actor?: ActorInfo) => Promise<void>;
   deleteItems: (ids: string[], actor?: ActorInfo) => Promise<void>;
   setSortMode: (mode: ItemSortMode) => void;
-  lockCurrentItemOrder: () => void;
-  move: (id: string, d: 'up' | 'down') => void;
-  moveItemManually: (id: string, d: 'up' | 'down') => void;
+  saveItemOrder: (actor?: ActorInfo) => Promise<void>;
+  moveItemManually: (id: string, d: 'up' | 'down', visibleIds?: string[]) => void;
   createItem: (item: Item, actorId: string, actorName: string) => Promise<void>;
   updateItem: (item: Item, actorId: string, actorName: string) => Promise<void>;
   bulkUpdate: (ids: string[], patch: Partial<Item>, actorId: string, actorName: string) => Promise<void>;
@@ -751,6 +753,7 @@ export const useInventoryStore = create<Store>()(
       formulasLoadedAt: null,
       soft: {},
       sortMode: initialSort.mode,
+  savingItemOrder: false,
       manualOrder: initialSort.manualOrder,
 
       load: async () => {
@@ -1308,6 +1311,38 @@ export const useInventoryStore = create<Store>()(
         await get().purge(ids, actor.id, actor.name);
       },
 
+      /**
+       * Saves the catalog order.
+       *
+       * This replaces `lockCurrentItemOrder`, which set `sortMode` and
+       * `manualOrder` in memory and stopped. The button said the order was saved;
+       * it was not, and there was no endpoint to save it to. Now there is one, and
+       * a failure is reported rather than swallowed — a save that fails silently
+       * leaves the operator looking at an order that was never written.
+       */
+      saveItemOrder: async (actor = DEFAULT_ACTOR) => {
+        const currentItems = get().items;
+        if (currentItems.length === 0) return;
+
+        // Switching to the manual mode first is what the button means: "this is
+        // the order from now on". Doing it before the request keeps the screen
+        // consistent while the request is in flight.
+        const order = normOrder(currentItems, get().manualOrder);
+        set({ sortMode: 'manual_locked', manualOrder: order, items: sortItems(currentItems, 'manual_locked', order), savingItemOrder: true });
+        try {
+          const result = await reorderItems(order.map((id) => String(id)));
+          toast.success(`تم حفظ ترتيب الأصناف (${result.ranked} صنف)`);
+          set({ savingItemOrder: false });
+        } catch (error) {
+          // The order on screen is now the user's unsaved arrangement. Saying so
+          // is the honest outcome; leaving it looking saved is the bug this whole
+          // change exists to remove.
+          toast.error(getErrorMessage(error, 'تعذّر حفظ ترتيب الأصناف'));
+          set({ savingItemOrder: false });
+        }
+        void actor;
+      },
+
       setSortMode: (mode) => {
         const currentItems = get().items;
         const nextManualOrder = mode === 'manual_locked' ? currentItems.map((item) => String(item.id)) : normOrder(currentItems, get().manualOrder);
@@ -1315,27 +1350,44 @@ export const useInventoryStore = create<Store>()(
         set({ sortMode: mode, manualOrder: nextManualOrder, items: sorted });
       },
 
-      lockCurrentItemOrder: () => {
-        const nextManualOrder = get().items.map((item) => String(item.id));
-        set({ sortMode: 'manual_locked', manualOrder: nextManualOrder });
-      },
+      /**
+       * Moves an item one place within the group the user is looking at.
+       *
+       * `visibleIds` is the filtered, sorted list on screen. Without it the move
+       * swapped against the neighbouring row in the *whole* catalog, so with a
+       * category filter active the arrow appeared to do nothing: the row it
+       * swapped with was filtered out of view. The order the user sees is the
+       * order they are editing, so that is the order the swap happens in.
+       *
+       * Items outside the visible group keep their positions, and the moved item
+       * takes the slot of the visible item it displaced — a partial view never
+       * disturbs what it cannot show.
+       */
+      moveItemManually: (id, d, visibleIds?) => {
+        const currentItems = get().items;
+        const order = normOrder(currentItems, get().manualOrder);
+        const globalIndex = order.indexOf(String(id));
+        if (globalIndex < 0) return;
 
-      move: (id, d) => {
-        if (get().sortMode !== 'manual_locked') return;
-        const order = normOrder(get().items, get().manualOrder);
-        const i = order.indexOf(id);
-        const t = d === 'up' ? i - 1 : i + 1;
-        if (i < 0 || t < 0 || t >= order.length) return;
-        [order[i], order[t]] = [order[t], order[i]];
-        const sorted = sortItems(get().items, get().sortMode, order);
-        set({ manualOrder: order, items: sorted });
-      },
+        const group = (visibleIds && visibleIds.length > 1
+          ? visibleIds.map(String)
+          : order
+        ).filter((entry) => order.includes(entry));
+        const groupIndex = group.indexOf(String(id));
+        if (groupIndex < 0) return;
+        const targetIndex = d === 'up' ? groupIndex - 1 : groupIndex + 1;
+        if (targetIndex < 0 || targetIndex >= group.length) return;
 
-      moveItemManually: (id, d) => {
-        if (get().sortMode !== 'manual_locked') {
-          get().lockCurrentItemOrder();
-        }
-        get().move(id, d);
+        const targetId = group[targetIndex];
+        const targetGlobal = order.indexOf(targetId);
+        if (targetGlobal < 0) return;
+
+        [order[globalIndex], order[targetGlobal]] = [order[targetGlobal], order[globalIndex]];
+        set({
+          sortMode: 'manual_locked',
+          manualOrder: order,
+          items: sortItems(currentItems, 'manual_locked', order),
+        });
       },
 
       createItem: async (item, actorId, actorName) => {

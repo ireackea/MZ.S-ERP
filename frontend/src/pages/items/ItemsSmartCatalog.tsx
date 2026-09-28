@@ -65,6 +65,10 @@ type ItemsSmartCatalogProps = {
   onSortModeChange: (value: ItemSortMode) => void;
   availableCategories: string[];
   onLockOrder: () => void;
+  /** True while the order is being written, so the button can say so. */
+  savingItemOrder: boolean;
+  /** Gates the save button: writing the catalog order is `items.reorder`. */
+  canReorder: boolean;
   showArchived: boolean;
   onToggleArchived: () => void;
   barcodeMode: boolean;
@@ -179,6 +183,8 @@ const ItemsSmartCatalog: React.FC<ItemsSmartCatalogProps> = ({
   onSortModeChange,
   availableCategories,
   onLockOrder,
+  savingItemOrder,
+  canReorder,
   showArchived,
   onToggleArchived,
   barcodeMode,
@@ -348,6 +354,12 @@ const ItemsSmartCatalog: React.FC<ItemsSmartCatalogProps> = ({
     if (column.key === 'actions') {
       return (
         <div className="flex flex-wrap items-center gap-1">
+          {/* Gated on `canEdit` and positioned inside the visible list.
+              They were previously gated on neither, so a read-only user could
+              rearrange the catalog while the save button beside them was
+              disabled, and the position was read from the unfiltered array
+              while the row was rendered from the filtered one — with a filter
+              active the arrow appeared to do nothing. */}
           {!showArchived && <button type="button" disabled={!canMoveUp} onClick={() => onMoveItem(String(item.id), 'up')} className="rounded-lg border border-slate-300 p-1 text-slate-600 disabled:opacity-40" title="تحريك لأعلى"><ChevronUp size={14} /></button>}
           {!showArchived && <button type="button" disabled={!canMoveDown} onClick={() => onMoveItem(String(item.id), 'down')} className="rounded-lg border border-slate-300 p-1 text-slate-600 disabled:opacity-40" title="تحريك لأسفل"><ChevronDown size={14} /></button>}
           {canEdit && !showArchived && <button type="button" onClick={() => onOpenEdit(item)} className="rounded-lg border border-slate-300 p-1 text-slate-700" title="تعديل"><Edit3 size={14} /></button>}
@@ -408,7 +420,7 @@ const ItemsSmartCatalog: React.FC<ItemsSmartCatalogProps> = ({
           <select value={sortMode} onChange={(event) => onSortModeChange(event.target.value as ItemSortMode)} className="rounded-2xl border border-slate-300 px-3 py-3 text-sm">
             {SORTS.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}
           </select>
-          <button type="button" onClick={onLockOrder} disabled={!canEdit} className="inline-flex items-center gap-2 rounded-2xl border border-amber-300 px-3 py-3 text-sm font-bold text-amber-700 disabled:opacity-50"><Settings2 size={15} /> حفظ ترتيب الأصناف</button>
+          <button type="button" onClick={onLockOrder} disabled={!canReorder || savingItemOrder} className="inline-flex items-center gap-2 rounded-2xl border border-amber-300 px-3 py-3 text-sm font-bold text-amber-700 disabled:opacity-50" title={showArchived ? 'الترتيب يُحفظ من قائمة الأصناف النشطة' : undefined}><Settings2 size={15} /> {savingItemOrder ? 'جارٍ الحفظ…' : 'حفظ ترتيب الأصناف'}</button>
           <button type="button" onClick={onToggleArchived} className={`rounded-2xl border px-3 py-3 text-sm font-bold ${showArchived ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-slate-300 text-slate-700'}`}>{showArchived ? 'الأصناف النشطة' : 'المؤرشفة'}</button>
           <button type="button" onClick={onToggleBarcodeMode} className={`inline-flex items-center gap-2 rounded-2xl border px-3 py-3 text-sm font-bold ${barcodeMode ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-300 text-slate-700'}`}><ScanLine size={15} /> مسح</button>
           <button type="button" onClick={() => setShowColumnManager((value) => !value)} className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 px-3 py-3 text-sm font-bold text-slate-700"><Columns3 size={15} /> الأعمدة</button>
@@ -485,9 +497,14 @@ const ItemsSmartCatalog: React.FC<ItemsSmartCatalogProps> = ({
                   const status = getItemStatusMeta(item);
                   const progressPercent = getProgressPercent(item);
                   const isSelected = selected.has(String(item.id));
-                  const globalIndex = items.findIndex((entry) => String(entry.id) === String(item.id));
-                  const canMoveUp = !showArchived && sortMode === 'manual_locked' && globalIndex > 0;
-                  const canMoveDown = !showArchived && sortMode === 'manual_locked' && globalIndex >= 0 && globalIndex < items.length - 1;
+                  // The position that decides whether an arrow is usable has to
+                  // be the position of the row the user is looking at. Reading it
+                  // from the unfiltered `items` made the first visible row under a
+                  // filter look movable when the neighbour it would have swapped
+                  // with was filtered out of sight.
+                  const visibleIndex = smartItems.findIndex((entry) => String(entry.id) === String(item.id));
+                  const canMoveUp = canReorder && !showArchived && sortMode === 'manual_locked' && visibleIndex > 0;
+                  const canMoveDown = canReorder && !showArchived && sortMode === 'manual_locked' && visibleIndex >= 0 && visibleIndex < smartItems.length - 1;
                   const context = { item, index, status, progressPercent, isSelected, canMoveUp, canMoveDown };
 
                   return (

@@ -12,6 +12,8 @@ import { SyncItemDto } from './dto/sync-items.dto';
 import { RealtimeService } from '../realtime/realtime.service';
 import { serializeDecimal } from '../common/decimal';
 import { AuditService } from '../audit/audit.service';
+import { buildAuditRow } from '../audit/audit-row';
+import { Prisma } from '@prisma/client';
 import {
   UPLOAD_ROOT,
   assertRealImageContent,
@@ -90,6 +92,10 @@ export class ItemService {
       // read its URL back.
       imageUrl: true,
       attachments: true,
+      // The saved catalog rank. Selected because the client sorts "manual" by the
+      // order the server hands out, so withholding it here would make the saved
+      // order unreachable no matter what the column holds.
+      sortOrder: true,
     } as const;
   }
 
@@ -189,6 +195,122 @@ export class ItemService {
     return this.toApiItem(updated);
   }
 
+  /**
+   * Persists the catalog order and reports what actually changed.
+   *
+   * The "حفظ ترتيب الأصناف" button used to write a Zustand array and nothing
+   * else, so the order died on every reload. This is the column that makes the
+   * claim true, and the audit row that makes it checkable afterwards.
+   *
+   * Three decisions worth stating, because each of them is a way this could
+   * quietly lose an operator's work:
+   *
+   * 1. **An id that does not resolve is a 400, not a skip.** Silently dropping
+   *    the entries we could not find is how a "save" reports success while
+   *    quietly discarding part of the order — the client would then render an
+   *    order the database never agreed to.
+   * 2. **Items the client did not send keep their relative order and go last.**
+   *    The list endpoint caps at 1000 rows, so a catalog larger than that cannot
+   *    be described in full. Appending the remainder deterministically means a
+   *    partial save is a true prefix rather than a scramble.
+   * 3. **The audit row is written on the transaction client.** The same lesson as
+   *    the system reset: a record written on a second connection commits even when
+   *    the work it describes is rolled back, which produces a catalog that claims
+   *    an order nobody can find in the log.
+   */
+  async reorderItems(
+    orderedPublicIds: string[],
+    actor: { userId?: string; username?: string; role?: string; ipAddress?: string },
+  ) {
+    const total = await this.prisma.item.count();
+
+    return this.prisma.$transaction(async (tx) => {
+      const found = await tx.item.findMany({
+        where: { publicId: { in: orderedPublicIds } },
+        select: { publicId: true, sortOrder: true },
+      });
+
+      const resolved = new Set(found.map((row) => row.publicId));
+      const unknown = orderedPublicIds.filter((id) => !resolved.has(id));
+      if (unknown.length > 0) {
+        throw new BadRequestException({
+          code: 'ITEM_ORDER_UNKNOWN_IDS',
+          message:
+            `${unknown.length} of the ${orderedPublicIds.length} submitted ids do not exist, so the order was not saved.`,
+          detail: { unknownPublicIds: unknown.slice(0, 20), unknownCount: unknown.length },
+        });
+      }
+
+      // One statement for the ranked rows. A loop of `update` calls would be 648
+      // round trips inside a transaction that is holding a lock on the whole
+      // catalog; a single UPDATE ... FROM VALUES is one round trip and one lock.
+      const ranked = orderedPublicIds.map((publicId, index) => ({ publicId, rank: index }));
+      await tx.$executeRaw`
+        UPDATE "public"."Item" AS item
+        SET "sortOrder" = ranked.rank
+        FROM (VALUES ${Prisma.join(
+          ranked.map((row) => Prisma.sql`(${row.publicId}, ${row.rank}::int)`),
+        )}) AS ranked("publicId", rank)
+        WHERE item."publicId" = ranked."publicId"
+      `;
+
+      // Everything the client could not send, deterministically after the part
+      // it did. Ordered by the rank it already had, so a partial save preserves
+      // the existing sequence instead of re-alphabetising the tail.
+      const appended = await tx.$executeRaw`
+        WITH rest AS (
+          SELECT "id",
+                 ${BigInt(orderedPublicIds.length)}
+                   + ROW_NUMBER() OVER (ORDER BY "sortOrder" ASC NULLS LAST, "name" ASC, "id" ASC)
+                   - 1 AS rank
+          FROM "public"."Item"
+          WHERE "publicId" IS NULL OR NOT ("publicId" = ANY(${orderedPublicIds}::text[]))
+        )
+        UPDATE "public"."Item" AS item
+        SET "sortOrder" = rest.rank
+        FROM rest
+        WHERE item."id" = rest."id"
+      `;
+
+      const moved = found.filter(
+        (row, index) => row.sortOrder !== orderedPublicIds.indexOf(row.publicId),
+      ).length;
+
+      await tx.auditLog.create({
+        data: buildAuditRow({
+          actorId: actor.userId ?? 'system',
+          actorUsername: actor.username ?? 'system',
+          actorRole: actor.role ?? 'unknown',
+          action: 'ITEM_ORDER_SAVED',
+          targetResource: 'item_order',
+          entityType: 'Item',
+          entityId: 'catalog',
+          status: 'success',
+          message:
+            `catalog order saved: ${orderedPublicIds.length} ranked, ${appended} appended`,
+          metadata: {
+            ranked: orderedPublicIds.length,
+            appended,
+            moved,
+            catalogSize: total,
+            first: orderedPublicIds[0] ?? null,
+            last: orderedPublicIds[orderedPublicIds.length - 1] ?? null,
+          },
+          ipAddress: actor.ipAddress || undefined,
+        }),
+      });
+
+      this.emitItemsChanged('reordered', moved || orderedPublicIds.length);
+      return {
+        success: true,
+        ranked: orderedPublicIds.length,
+        appended,
+        moved,
+        catalogSize: total,
+      };
+    });
+  }
+
   async syncItems(items: SyncItemDto[], userId?: string, actorUsername?: string) {
     const results = [];
     const isUpdate = items.length > 0 && await this.prisma.item.findUnique({ where: { publicId: items[0].publicId } });
@@ -283,7 +405,14 @@ export class ItemService {
       this.prisma.item.findMany({
         where,
         select: this.responseSelect(),
-        orderBy: { name: 'asc' },
+        // The saved catalog order, not the alphabet.
+        //
+        // `name` is kept as the tie-break so the result is stable when two rows
+        // share a rank, and so a paginated walk cannot repeat or skip a row. This
+        // also means the first page is a *prefix* of the true order: if the caller
+        // asks for fewer items than exist, what it receives is the beginning of
+        // the catalog rather than a scrambled subset.
+        orderBy: [{ sortOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
         skip,
         take,
       }),
@@ -305,7 +434,8 @@ export class ItemService {
     const rows = await this.prisma.item.findMany({
       select: this.responseSelect(),
       where: { isArchived: false },
-      orderBy: { name: 'asc' },
+      // Same ordering contract as findAll; see the comment there.
+      orderBy: [{ sortOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
     });
 
     return rows.map((row) => this.toApiItem(row));

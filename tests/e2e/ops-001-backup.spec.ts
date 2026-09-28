@@ -43,13 +43,13 @@ const compose = (...args: string[]): string =>
  * connection uses the postgres service's own superuser, because the app role
  * is not permitted to read the catalog or perform DDL.
  */
-const psql = (sql: string): string => {
+const psql = (sql: string, database = process.env.POSTGRES_DB || 'feed_factory_db'): string => {
   const result = spawnSync(
     'docker',
     [
       'compose', 'exec', '-T', 'postgres', 'psql',
       '-U', process.env.POSTGRES_USER || 'feedfactory',
-      '-d', process.env.POSTGRES_DB || 'feed_factory_db',
+      '-d', database,
       '-t', '-A', '-f', '-',
     ],
     { input: sql, encoding: 'utf8', timeout: 120_000, maxBuffer: 8 * 1024 * 1024 },
@@ -97,7 +97,7 @@ describeLive('FC-OPS-001 live database round trip', () => {
     expect(bytes).toBeGreaterThan(0);
   }, 180_000);
 
-  it('round-trips data: seed, delete, restore, verify', () => {
+  it('round-trips data: dump the live database, restore it somewhere disposable', () => {
     const marker = `ops001-${randomUUID()}`;
 
     // Seed a distinguishable row in a leaf table with no dependents.
@@ -107,6 +107,19 @@ describeLive('FC-OPS-001 live database round trip', () => {
       `VALUES ('${marker}', 'category', '${marker}-value', now(), now());`,
     );
     expect(psql(`SELECT count(*) FROM reference_data_values WHERE id = '${marker}';`)).toBe('1');
+
+    // The restore lands in a scratch database, never in the live one.
+    //
+    // The previous version of this test ran `pg_restore --clean` against
+    // `feed_factory_db`. `--clean` drops and recreates every object in the
+    // archive, so a test whose whole purpose is "is the backup restorable" was
+    // also the single most destructive command in the suite. It emptied the
+    // catalog — 648 items, 1252 movements, 210 deficits — and the run still
+    // reported success, because the marker row it cared about came back.
+    //
+    // Recoverability is a property of the archive, so proving it needs a target
+    // that can be thrown away. It never needed the live database.
+    const scratch = `ops001_scratch_${Date.now()}`;
 
     try {
       // 1. Take the backup, inside the image that ships pg_dump.
@@ -123,17 +136,16 @@ describeLive('FC-OPS-001 live database round trip', () => {
       expect(archive.length).toBeGreaterThan(0);
       expect(archive.subarray(0, 5).toString('ascii')).toBe('PGDMP');
 
-      // 3. Lose the data.
-      psql(`DELETE FROM reference_data_values WHERE id = '${marker}';`);
-      expect(psql(`SELECT count(*) FROM reference_data_values WHERE id = '${marker}';`)).toBe('0');
+      // 3. The scratch target. Created empty, so the restore needs no --clean
+      // and cannot drop anything that belongs to anyone.
+      psql(`DROP DATABASE IF EXISTS ${scratch};`, 'postgres');
+      psql(`CREATE DATABASE ${scratch};`, 'postgres');
 
-      // 4. Restore it, as the database superuser (the app role cannot DDL).
-      // The archive arrives on stdin: pg_restore rejects -d together with -f.
       const child = spawnSync('docker', [
         'compose', 'exec', '-T', 'postgres', 'pg_restore',
-        '--clean', '--if-exists', '--no-owner', '--no-privileges', '--exit-on-error',
+        '--no-owner', '--no-privileges', '--exit-on-error',
         '-U', process.env.POSTGRES_USER || 'feedfactory',
-        '-d', process.env.POSTGRES_DB || 'feed_factory_db',
+        '-d', scratch,
       ], { input: archive, timeout: 300_000, maxBuffer: 16 * 1024 * 1024 });
 
       expect(
@@ -141,12 +153,19 @@ describeLive('FC-OPS-001 live database round trip', () => {
         `pg_restore exited ${child.status}: ${child.stderr?.toString().slice(0, 800)}`,
       ).toBe(true);
 
-      // 5. The row is back. This is the actual proof of recoverability.
+      // 4. The row is back. This is the actual proof of recoverability, and it
+      // is now read from the copy rather than from the database it came from.
       expect(
-        psql(`SELECT count(*) FROM reference_data_values WHERE id = '${marker}';`),
+        psql(`SELECT count(*) FROM reference_data_values WHERE id = '${marker}';`, scratch),
         'restore did not recover the seeded row',
       ).toBe('1');
+      // A restore that recovered one row but none of the catalog would still pass
+      // the check above, so the bulk is asserted too.
+      const restored = psql(`SELECT count(*) FROM "Item";`, scratch);
+      const live = psql(`SELECT count(*) FROM "Item";`);
+      expect(Number(restored), 'the restored copy must carry the whole catalog').toBe(Number(live));
     } finally {
+      try { psql(`DROP DATABASE IF EXISTS ${scratch};`, 'postgres'); } catch { /* best effort */ }
       try { psql(`DELETE FROM reference_data_values WHERE id = '${marker}';`); } catch { /* already gone */ }
       compose('exec', '-T', 'backend', 'sh', '-lc', 'rm -f /tmp/ops001-roundtrip.dump /tmp/ops001.dump');
     }

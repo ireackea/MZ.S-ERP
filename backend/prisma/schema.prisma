@@ -192,6 +192,18 @@ model Item {
   updatedAt       DateTime         @updatedAt
   createdBy       String?
   updatedBy       String?
+  // The catalog order an operator saved with "حفظ ترتيب الأصناف".
+  //
+  // Nullable rather than non-null with a default, because the migration
+  // backfills existing rows and Prisma has no way to express "backfilled"; the
+  // application treats null as "sort me after everything explicitly ranked".
+  //
+  // The high default is what does that work: a row inserted by any path — the
+  // create endpoint, the Excel import, bulk sync — lands at the end of the
+  // catalog without that path knowing this column exists. A path that had to
+  // remember to write a rank would eventually forget, and a forgotten rank
+  // would scatter a new item into the middle of the catalog.
+  sortOrder       Int?
   openingBalances OpeningBalance[]
   targetFormulas  Formulation[]    @relation("FormulationTargetItem")
   formulaRows     FormulationItem[] @relation("FormulationIngredientItem")
@@ -204,6 +216,7 @@ model Item {
   @@index([code])
   @@index([barcode])
   @@index([isArchived])
+  @@index([sortOrder])
 }
 
 model Partner {

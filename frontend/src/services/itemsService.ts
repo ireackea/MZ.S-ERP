@@ -305,6 +305,33 @@ export const updateItemInApi = async (publicId: string, item: Item): Promise<Ite
   return response.data as ItemDto;
 };
 
+/**
+ * Saves the catalog order.
+ *
+ * This call is the whole point of the "حفظ ترتيب الأصناف" button, which used to
+ * exist without it: the handler set two Zustand fields and stopped, so the order
+ * died on reload and no other user or device ever saw it.
+ *
+ * `publicId` rather than the internal `id`, because that is what the list returns
+ * and what an imported catalog is guaranteed to have.
+ */
+export const reorderItems = async (orderedPublicIds: string[]): Promise<{
+  ranked: number;
+  appended: number;
+  moved: number;
+  catalogSize: number;
+}> => {
+  const response = await apiClient.post('/items/reorder', { orderedPublicIds });
+  const body = response.data as { success?: boolean; data?: Record<string, number> } | Record<string, number>;
+  const payload = (body && (body as { data?: Record<string, number> }).data) || (body as Record<string, number>);
+  return {
+    ranked: Number(payload?.ranked ?? 0),
+    appended: Number(payload?.appended ?? 0),
+    moved: Number(payload?.moved ?? 0),
+    catalogSize: Number(payload?.catalogSize ?? 0),
+  };
+};
+
 export const bulkImportFromExcel = async (items: ExcelImportRow[]): Promise<ExcelImportResult> => {
   try {
     const response = await apiClient.post('/items/import-excel', { items: toImportPayload(items) });

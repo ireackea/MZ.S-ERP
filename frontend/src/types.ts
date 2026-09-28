@@ -81,6 +81,8 @@ export interface UnloadingRule {
 export interface Item {
   id: string;
   publicId?: string;
+  /** The saved catalog rank, as the server orders the list. */
+  sortOrder?: number | null;
   code?: string;
   barcode?: string;
   name: string;

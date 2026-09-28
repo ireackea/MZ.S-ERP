@@ -32,7 +32,6 @@ const OPERATION_PRINT_TEMPLATES_KEY = 'feed_factory_operation_print_templates';
 const STOCKTAKING_PRINT_CONFIG_KEY = 'feed_factory_stocktaking_print_config';
 const STOCKTAKING_PRINT_TEMPLATES_KEY = 'feed_factory_stocktaking_print_templates';
 const OPENING_BALANCE_REPORT_CONFIG_KEY = 'feed_factory_opening_balance_report_config';
-const ITEM_SORT_SETTINGS_KEY = 'feed_factory_item_sort_settings';
 const FORMULAS_KEY = 'feed_factory_formulas';
 const STOCK_CHECKS_KEY = 'feed_factory_stock_checks';
 const USER_GRID_PREFERENCES_KEY = 'feed_factory_user_grid_preferences';
@@ -263,17 +262,6 @@ export const getOpeningBalanceReportConfig = (): ReportColumnConfig[] => {
 
 export const saveOpeningBalanceReportConfig = (config: ReportColumnConfig[]) => writeJson(OPENING_BALANCE_REPORT_CONFIG_KEY, config);
 
-export const getItemSortSettings = (): ItemSortSettings => {
-	const fallback: ItemSortSettings = { mode: 'manual_locked', manualOrder: [] };
-	const stored = readJson<ItemSortSettings>(ITEM_SORT_SETTINGS_KEY, fallback);
-
-	return {
-		mode: stored?.mode || fallback.mode,
-		manualOrder: Array.isArray(stored?.manualOrder) ? stored.manualOrder.map((entry) => String(entry)) : [],
-	};
-};
-
-export const saveItemSortSettings = (settings: ItemSortSettings) => writeJson(ITEM_SORT_SETTINGS_KEY, settings);
 
 export const getStockChecks = (): StockCheck[] => readJson<StockCheck[]>(STOCK_CHECKS_KEY, []);
 export const saveStockChecks = (checks: StockCheck[]) => writeJson(STOCK_CHECKS_KEY, checks);

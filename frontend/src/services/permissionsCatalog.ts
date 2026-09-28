@@ -50,6 +50,7 @@ export const PERMISSIONS_CATALOG: PermissionGroup[] = [
       { id: 'items.view', module: 'items', action: 'view', label: 'عرض الأصناف', description: 'قراءة قائمة الأصناف وتفاصيل الصنف.', route: 'GET /items, GET /items/:publicId' },
       { id: 'items.create', module: 'items', action: 'create', label: 'إنشاء صنف', description: 'إنشاء صنف جديد.', route: 'POST /items' },
       { id: 'items.update', module: 'items', action: 'update', label: 'تعديل صنف', description: 'تعديل بيانات صنف قائم.', route: 'PUT /items/:publicId' },
+      { id: 'items.reorder', module: 'items', action: 'reorder', label: 'حفظ ترتيب الأصناف', description: 'ترتيب قائمة الأصناف يدويًا وحفظه للجميع.', route: 'POST /items/reorder' },
       { id: 'items.sync', module: 'items', action: 'sync', label: 'مزامنة الأصناف', description: 'مزامنة صنف مع الأرشيف.', route: 'POST /items/sync', apiOnly: true },
       { id: 'items.delete', module: 'items', action: 'delete', label: 'حذف صنف', description: 'حذف صنف أو حذفًا نهائيًا (مقصور على Admin/SuperAdmin).', route: 'POST /items/delete, POST /items/delete-permanent' },
       { id: 'items.archive', module: 'items', action: 'archive', label: 'أرشفة الأصناف', description: 'أرشفة صنف مع الاحتفاظ بسجله.', route: 'POST /items/archive' },

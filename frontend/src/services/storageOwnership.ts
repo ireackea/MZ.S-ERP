@@ -74,7 +74,6 @@ export const STORAGE_INVENTORY: StorageInventoryEntry[] = [
   entry('feed_factory_stocktaking_print_config', 'localStorage', 'PRESENTATION_PREFERENCE', ['frontend/src/services/storage.ts']),
   entry('feed_factory_stocktaking_print_templates', 'localStorage', 'PRESENTATION_PREFERENCE', ['frontend/src/services/storage.ts']),
   entry('feed_factory_opening_balance_report_config', 'localStorage', 'PRESENTATION_PREFERENCE', ['frontend/src/services/storage.ts']),
-  entry('feed_factory_item_sort_settings', 'localStorage', 'PRESENTATION_PREFERENCE', ['frontend/src/services/storage.ts']),
   entry('feed_factory_user_grid_preferences', 'localStorage', 'PRESENTATION_PREFERENCE', ['frontend/src/services/storage.ts']),
   entry('feed_factory_grid_display_policies', 'localStorage', 'PRESENTATION_PREFERENCE', ['frontend/src/services/storage.ts']),
   entry('feed_factory_strict_empty_boot', 'localStorage', 'PRESENTATION_PREFERENCE', ['frontend/src/services/storage.ts']),

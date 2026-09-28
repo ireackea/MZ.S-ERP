@@ -49,8 +49,9 @@ const ItemsPageContent: React.FC = () => {
     manualOrder,
     loadInventoryCore,
     setSortMode,
-    lockCurrentItemOrder,
+    saveItemOrder,
     moveItemManually,
+    savingItemOrder,
     createItem,
     updateItem,
     bulkUpdate,
@@ -65,6 +66,11 @@ const ItemsPageContent: React.FC = () => {
   const actorName = String(session?.user?.name || session?.user?.username || 'system');
 
   const canView = hasPermission('items.view') || hasPermission('items.*') || hasPermission('transactions.view');
+  // The save-order button writes a catalog-wide setting, so it is gated on the
+  // permission that guards that endpoint. `items.sync` is an apiOnly machine
+  // permission; using it here meant a sync right silently became "you may
+  // rearrange the whole catalog".
+  const canReorder = hasPermission('items.reorder') || hasPermission('items.*');
   const canEdit = hasPermission('items.sync') || hasPermission('items.*');
   const canArchive = hasPermission('items.archive') || hasPermission('items.*');
   const canRestore = hasPermission('items.restore') || hasPermission('items.*');
@@ -618,7 +624,9 @@ const ItemsPageContent: React.FC = () => {
         sortMode={sortMode}
         onSortModeChange={setSortMode}
         availableCategories={availableCategories}
-        onLockOrder={() => { void lockCurrentItemOrder(); }}
+        onLockOrder={() => { void saveItemOrder(); }}
+        savingItemOrder={savingItemOrder}
+        canReorder={canReorder}
         showArchived={showArchived}
         onToggleArchived={toggleArchivedView}
         barcodeMode={barcodeMode}
@@ -637,7 +645,7 @@ const ItemsPageContent: React.FC = () => {
         onToggleSelection={toggleSelection}
         allSelected={allSelected}
         onSelectAll={selectAll}
-        onMoveItem={(id, direction) => { void moveItemManually(id, direction); }}
+        onMoveItem={(id, direction) => { void moveItemManually(id, direction, visibleItems.map((item) => String(item.id))); }}
         onOpenEdit={openEdit}
         onOpenUpload={openUploadModal}
         barcodeInput={barcodeInput}
