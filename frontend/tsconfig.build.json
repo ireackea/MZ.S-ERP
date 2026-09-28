@@ -1,0 +1,27 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "//": [
+    "The image builds the frontend on its own, with no backend source present.",
+    "",
+    "The root tsconfig type-checks the test files too, which is right for local",
+    "work and for CI: vitest runs them and a type error in a test is a real error.",
+    "But one of them — permissionMatcher.agreement.test.ts — deliberately imports",
+    "backend source, so `tsc` on the frontend alone cannot resolve it and the",
+    "production build failed with TS2307.",
+    "",
+    "Tests are not shipped, so they are not part of the production build. They",
+    "stay in the root config, where the test run still type-checks them."
+  ],
+  "exclude": [
+    "_ARCHIVE_",
+    "node_modules",
+    "dist",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/**/*.spec.ts",
+    "src/**/*.spec.tsx"
+  ]
+}

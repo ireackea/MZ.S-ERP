@@ -53,6 +53,7 @@ const ItemsPageContent: React.FC = () => {
     moveItemManually,
     savingItemOrder,
   orderProfiles,
+  catalogTruncation,
   applyingOrderProfile,
   loadOrderProfiles,
   createOrderProfile,
@@ -641,6 +642,7 @@ const ItemsPageContent: React.FC = () => {
         savingItemOrder={savingItemOrder}
         canReorder={canReorder}
         orderProfiles={orderProfiles}
+        catalogTruncation={catalogTruncation}
         applyingOrderProfile={applyingOrderProfile}
         onCreateOrderProfile={(name) => { void createOrderProfile(name); }}
         onApplyOrderProfile={(id) => { void applyOrderProfile(id); }}

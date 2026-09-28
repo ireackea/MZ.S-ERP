@@ -34,6 +34,14 @@ type Props = {
   activeProfileId: string | null;
   busy: boolean;
   canReorder: boolean;
+  /**
+   * Set when the loaded catalogue is only a prefix of the real one.
+   *
+   * Worth stating plainly rather than inferring from a count: the list endpoint
+   * caps at 1000 rows, and the operator has no other way to learn that items past
+   * the cap exist, let alone where they sit in the order they are saving.
+   */
+  catalogTruncation?: { truncated: boolean; total: number } | null;
   onSaveAs: (name: string) => void;
   onApply: (id: string) => void;
   onRefresh: (id: string) => void;
@@ -47,6 +55,7 @@ export const ItemOrderProfiles: React.FC<Props> = ({
   activeProfileId,
   busy,
   canReorder,
+  catalogTruncation,
   onSaveAs,
   onApply,
   onRefresh,
@@ -146,6 +155,15 @@ export const ItemOrderProfiles: React.FC<Props> = ({
           )}
         </div>
       </div>
+
+      {catalogTruncation?.truncated && (
+        <p className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">
+          تُحمَّل أول 1000 صنف فقط، والكتالوج كله {formatCount(catalogTruncation.total)} صنف.
+          الحفظ يبقى آمنًا — الأصناف غير المعروضة تُضاف في نهاية الترتيب الحالي — لكن
+          لا يمكنك تحريك ما لا تراه. ارفع الحد في الخادم أو استخدم التصفية لرؤية
+          بقية الكتالوج.
+        </p>
+      )}
 
       {profiles.length === 0 ? (
         <p className="mt-3 text-xs text-slate-500">

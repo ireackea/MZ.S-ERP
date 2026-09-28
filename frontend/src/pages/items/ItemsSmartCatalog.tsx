@@ -73,6 +73,8 @@ type ItemsSmartCatalogProps = {
   canReorder: boolean;
   /** The named, saved orders. Null until loaded, which is not the same as empty. */
   orderProfiles: OrderProfileList | null;
+  /** Set when only a prefix of the catalogue is loaded; the panel explains it. */
+  catalogTruncation: { truncated: boolean; total: number } | null;
   applyingOrderProfile: boolean;
   onCreateOrderProfile: (name: string) => void;
   onApplyOrderProfile: (id: string) => void;
@@ -196,6 +198,7 @@ const ItemsSmartCatalog: React.FC<ItemsSmartCatalogProps> = ({
   savingItemOrder,
   canReorder,
   orderProfiles,
+  catalogTruncation,
   applyingOrderProfile,
   onCreateOrderProfile,
   onApplyOrderProfile,

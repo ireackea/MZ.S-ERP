@@ -90,6 +90,55 @@ test('every saved-order action is awaited before the transaction commits', () =>
   );
 });
 
+test('a truncated catalogue is announced, not discovered later', () => {
+  // The list endpoint caps at 1000 rows. Above that the store holds a prefix,
+  // which is safe to save — the server appends the unlisted rows by their existing
+  // rank — but the operator cannot see or reorder the rest.
+  //
+  // This was promised and not wired: `catalogTruncationNotice` was written,
+  // stored, and read by nothing, so the value was computed correctly and never
+  // shown. A guard that checks the function exists would have passed.
+  const store = stripComments(read('frontend/src/store/useInventoryStore.ts'));
+
+  assert.match(
+    store,
+    /catalogTruncation:\s*catalogTruncationNotice\(\)/,
+    'the truncation flag must be copied into store state, or a component reading it never re-renders',
+  );
+  assert.match(
+    store,
+    /catalogTruncation:\s*\{ truncated: boolean; total: number \} \| null/,
+    'the flag must be declared state, not a module value nobody subscribes to',
+  );
+
+  const component = stripComments(read('frontend/src/pages/items/ItemOrderProfiles.tsx'));
+  assert.match(
+    component,
+    /catalogTruncation/,
+    'the panel must receive the flag',
+  );
+  assert.match(
+    component,
+    /catalogTruncation\?\.truncated/,
+    'the panel must render a notice when the loaded catalogue is a prefix',
+  );
+  // A notice has to say what it means, not merely that a number is wrong.
+  assert.match(
+    component,
+    /1000/,
+    'the notice must state the cap, so the operator knows it is a limit and not a count',
+  );
+
+  // And the page has to pass it down; a component that declares the prop and
+  // never receives it renders nothing.
+  const page = stripComments(read('frontend/src/pages/items/ItemsPageContent.tsx'));
+  assert.match(
+    page,
+    /catalogTruncation=\{catalogTruncation\}/,
+    'the page must pass the truncation flag to the panel',
+  );
+});
+
 test('the saved orders reach the interface, and drift is shown', () => {
   const component = read('frontend/src/pages/items/ItemOrderProfiles.tsx');
 

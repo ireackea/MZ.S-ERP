@@ -185,6 +185,15 @@ type Store = {
    * arrangements are gone.
    */
   orderProfiles: OrderProfileList | null;
+  /**
+   * Set when the loaded catalogue is a prefix of the real one.
+   *
+   * The list endpoint caps at 1000 rows. Above that the store holds a prefix,
+   * which is safe to save — the server appends the unlisted rows by their existing
+   * rank — but the operator cannot see or reorder the rest, and that has to be
+   * said rather than discovered later.
+   */
+  catalogTruncation: { truncated: boolean; total: number } | null;
   /** True while a saved-order action is in flight, so the buttons can say so. */
   applyingOrderProfile: boolean;
   manualOrder: string[];
@@ -806,6 +815,7 @@ export const useInventoryStore = create<Store>()(
       sortMode: initialSort.mode,
   savingItemOrder: false,
   orderProfiles: null,
+  catalogTruncation: null,
   applyingOrderProfile: false,
       manualOrder: initialSort.manualOrder,
 
@@ -868,6 +878,10 @@ export const useInventoryStore = create<Store>()(
             syncing: false,
             inventoryCoreLoadedAt: loadedAt,
             lastLoadedAt: loadedAt,
+            // Mirrored into store state rather than left in a module variable: a
+            // component reading a module getter does not re-render when it changes,
+            // so the notice would be computed correctly and never displayed.
+            catalogTruncation: catalogTruncationNotice(),
           });
         } catch (error: unknown) {
           set({ syncing: false, error: getErrorMessage(error, 'تعذر تحميل بيانات الأصناف من الخادم.') });
