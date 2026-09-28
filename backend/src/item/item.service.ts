@@ -122,6 +122,26 @@ export class ItemService {
     );
   }
 
+  /**
+   * The rank a newly inserted row should take: one past the highest rank in use.
+   *
+   * Three things depend on this being the *next* rank and not the column default.
+   * A row left at the default shares its rank with every other row inserted by a
+   * path that did not set one, and the read path breaks that tie by id — so which
+   * of two imported rows comes first is decided by the order the database happened
+   * to return them in. An operator who arranged 500 items in a spreadsheet and
+   * then watched them come back alphabetically was watching exactly that. It is
+   * also why a new item jumped to its alphabetical position after the first
+   * refresh: it was sharing a rank with the rest of its import.
+   *
+   * `coalesce(max, -1)` so the first item in an empty catalog gets rank 0 rather
+   * than the default.
+   */
+  private async nextSortOrder(client: PrismaService | Prisma.TransactionClient = this.prisma): Promise<number> {
+    const aggregate = await client.item.aggregate({ _max: { sortOrder: true } });
+    return (aggregate._max.sortOrder ?? -1) + 1;
+  }
+
   async create(dto: CreateItemDto, userId?: string, actorUsername?: string) {
     const publicId = dto.publicId.trim();
     if (!publicId) throw new BadRequestException('publicId is required');
@@ -132,6 +152,8 @@ export class ItemService {
     const created = await this.prisma.item.create({
       data: {
         publicId,
+        // A new item joins the end of the catalog, in the order it was added.
+        sortOrder: await this.nextSortOrder(),
         code: dto.code?.trim() || null,
         codeGenerated: dto.code?.trim() ? false : undefined,
         barcode: dto.barcode?.trim() || null,
@@ -222,6 +244,20 @@ export class ItemService {
     orderedPublicIds: string[],
     actor: { userId?: string; username?: string; role?: string; ipAddress?: string },
   ) {
+    // Refuse an empty order before any SQL.
+    //
+    // An empty array reaches `Prisma.join`, which throws on zero elements, and
+    // the caller got a 500 for a request that was simply wrong. The DTO's
+    // `ArrayMaxSize` has no lower bound, so an empty list is valid input as far as
+    // validation is concerned, which makes this the only place that can catch it.
+    if (!Array.isArray(orderedPublicIds) || orderedPublicIds.length === 0) {
+      throw new BadRequestException({
+        code: 'ITEM_ORDER_EMPTY',
+        message: 'ترتيب فارغ لا يمكن حفظه: أرسل صنفاً واحداً على الأقل.',
+        detail: { received: Array.isArray(orderedPublicIds) ? 0 : 'not-an-array' },
+      });
+    }
+
     const total = await this.prisma.item.count();
 
     return this.prisma.$transaction(async (tx) => {
@@ -315,15 +351,33 @@ export class ItemService {
     const results = [];
     const isUpdate = items.length > 0 && await this.prisma.item.findUnique({ where: { publicId: items[0].publicId } });
 
+    // One rank per created row, ascending, so a batch of manual adds keeps the
+    // order they were entered in. Read once rather than per item, because the
+    // alternative is an aggregate per row inside the loop.
+    let nextRank = await this.nextSortOrder();
+
     for (const item of items) {
       const normalizedCode =
         item.code == null || String(item.code).trim() === ''
           ? null
           : String(item.code).trim();
 
+      // Whether this row will be created or updated decides whether it consumes
+      // a rank. The upsert's return value does not say which branch ran, and
+      // advancing unconditionally would leave a hole in the sequence for every
+      // updated item — holes are what make "the ranks are dense" stop being true
+      // and let two rows end up tied later.
+      const existing = await this.prisma.item.findUnique({
+        where: { publicId: item.publicId },
+        select: { id: true },
+      });
+
       const result = await this.prisma.item.upsert({
         where: { publicId: item.publicId },
         update: {
+          // `sortOrder` is deliberately absent. An update is a content change,
+          // not a request to move the item, and overwriting the rank here is how
+          // a saved catalog order gets silently reshuffled by an unrelated edit.
           barcode: item.barcode,
           name: item.name,
           unit: item.unit,
@@ -343,6 +397,7 @@ export class ItemService {
         },
         create: {
           publicId: item.publicId,
+          sortOrder: nextRank,
           code: normalizedCode,
           codeGenerated: normalizedCode ? false : undefined,
           barcode: item.barcode,
@@ -357,6 +412,8 @@ export class ItemService {
           createdBy: userId || undefined,
         },
       });
+      // Only a created row consumed a rank. An update left the item where it was.
+      if (!existing) nextRank += 1;
       results.push(result);
     }
 
@@ -407,12 +464,17 @@ export class ItemService {
         select: this.responseSelect(),
         // The saved catalog order, not the alphabet.
         //
-        // `name` is kept as the tie-break so the result is stable when two rows
-        // share a rank, and so a paginated walk cannot repeat or skip a row. This
-        // also means the first page is a *prefix* of the true order: if the caller
-        // asks for fewer items than exist, what it receives is the beginning of
-        // the catalog rather than a scrambled subset.
-        orderBy: [{ sortOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
+        // The tie-break is `id`, not `name`, and that is the difference between
+        // "the operator's order survived" and "the import worked". Rows are only
+        // ever given an equal rank by a bug, and when that happened the tie was
+        // broken alphabetically — so a spreadsheet arranged by hand came back
+        // A-Z while the import reported success. Breaking ties by insertion order
+        // degrades to the order the rows were actually added in, which is the
+        // only fallback an operator can still make sense of.
+        //
+        // It also keeps a paginated walk from repeating or skipping a row, and
+        // means the first page is a *prefix* of the true order.
+        orderBy: [{ sortOrder: { sort: 'asc', nulls: 'last' } }, { id: 'asc' }],
         skip,
         take,
       }),
@@ -428,17 +490,6 @@ export class ItemService {
       limit: take,
       totalPages: Math.ceil(total / take),
     };
-  }
-
-  async getAll() {
-    const rows = await this.prisma.item.findMany({
-      select: this.responseSelect(),
-      where: { isArchived: false },
-      // Same ordering contract as findAll; see the comment there.
-      orderBy: [{ sortOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
-    });
-
-    return rows.map((row) => this.toApiItem(row));
   }
 
   async archiveItems(publicIds: string[], userId: string, actorUsername: string) {
@@ -812,9 +863,28 @@ export class ItemService {
       });
     }
 
-    const createImportRow = (row: (typeof validRows)[number]) => this.prisma.item.create({
+    // The rank the first imported row takes, computed once before the insert loop.
+    //
+    // This is the whole reason the "حفظ ترتيب الأصناف" button was built, and it
+    // did not work: `createImportRow` wrote no `sortOrder` at all, so every
+    // imported row took the column default of 1000000, and the read path broke
+    // that tie by name. An operator who arranged 500 rows in a spreadsheet got
+    // them back A-Z, and the import reported success.
+    //
+    // `validRows` is already in file order — the loop that fills it appends, and
+    // nothing sorts it. The position in that array is the file order, which is
+    // not the same as `rowNumber`: `rowNumber` is the sheet row and drifts when
+    // the sheet has blank lines, while the index is dense and always correct.
+    const baseImportRank = await this.nextSortOrder();
+
+    // The rank is passed in rather than captured from a counter, because these
+    // creates are handed to `$transaction` as a list of promises. A closure
+    // mutating a shared counter would advance it for rows whose transaction then
+    // rolled back, and the next import would start past a gap.
+    const createImportRow = (row: (typeof validRows)[number], rank: number) => this.prisma.item.create({
       data: {
         publicId: `item-${randomUUID()}`,
+        sortOrder: rank,
         code: row.code,
         codeGenerated: row.code ? false : undefined,
         barcode: row.barcode,
@@ -832,15 +902,22 @@ export class ItemService {
 
     for (let offset = 0; offset < validRows.length; offset += BULK_IMPORT_BATCH_SIZE) {
       const batch = validRows.slice(offset, offset + BULK_IMPORT_BATCH_SIZE);
+      // `offset + index`, not a running counter: if a batch fails and its rows are
+      // retried one by one, the retried rows keep the ranks their position in the
+      // file earned them, and a row that never lands leaves a gap rather than
+      // pulling every later row forward.
+      const rankOf = (index: number) => baseImportRank + offset + index;
       try {
-        const createdItems = await this.prisma.$transaction(batch.map((row) => createImportRow(row)));
+        const createdItems = await this.prisma.$transaction(
+          batch.map((row, index) => createImportRow(row, rankOf(index))),
+        );
         createdItems.forEach((created, index) => {
           results.push({ row: batch[index].rowNumber, publicId: String(created.publicId), name: created.name, status: 'created' });
         });
       } catch (batchError: any) {
-        for (const row of batch) {
+        for (const [index, row] of batch.entries()) {
           try {
-            const created = await createImportRow(row);
+            const created = await createImportRow(row, rankOf(index));
             results.push({ row: row.rowNumber, publicId: String(created.publicId), name: created.name, status: 'created' });
           } catch (error: any) {
             const message = error?.code === 'P2002'

@@ -119,7 +119,12 @@ const Reports: React.FC = () => {
 
     const loadItems = async () => {
       try {
-        const response = await apiClient.get('/items');
+        // The limit is explicit because omitting it took the server default of
+        // 100, so this picker could only ever offer the first hundred items in
+        // saved order and the rest of the catalog was unreachable from it. 1000
+        // is the documented maximum the list endpoint accepts, and matches what
+        // the inventory store asks for.
+        const response = await apiClient.get('/items', { params: { limit: 1000 } });
         const payload = Array.isArray(response.data)
           ? response.data
           : Array.isArray(response.data?.data)

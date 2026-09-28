@@ -15,6 +15,8 @@ export interface ItemDto {
   name: string;
   unit?: string;
   category?: string;
+  /** The saved catalog rank, as the server orders the list. */
+  sortOrder?: number | null;
   minLimit?: number;
   maxLimit?: number;
   orderLimit?: number;

@@ -27,7 +27,10 @@ export class FormulationService {
     const rows = await this.prisma.formulation.findMany({
       include: {
         items: {
-          orderBy: [{ item: { name: 'asc' } }, { createdAt: 'asc' }],
+          // Ingredients follow the saved catalog order, not the item name.
+          // The client passes this array through unsorted, so ordering by name
+          // here made the ingredient list permanently alphabetical.
+          orderBy: [{ item: { sortOrder: 'asc' } }, { id: 'asc' }, { createdAt: 'asc' }],
         },
       },
       orderBy: [{ name: 'asc' }, { createdAt: 'desc' }],
@@ -59,7 +62,10 @@ export class FormulationService {
       },
       include: {
         items: {
-          orderBy: [{ item: { name: 'asc' } }, { createdAt: 'asc' }],
+          // Ingredients follow the saved catalog order, not the item name.
+          // The client passes this array through unsorted, so ordering by name
+          // here made the ingredient list permanently alphabetical.
+          orderBy: [{ item: { sortOrder: 'asc' } }, { id: 'asc' }, { createdAt: 'asc' }],
         },
       },
     });
@@ -111,9 +117,13 @@ export class FormulationService {
           },
         },
         include: {
-          items: {
-            orderBy: [{ item: { name: 'asc' } }, { createdAt: 'asc' }],
-          },
+      items: {
+        // Ingredients follow the saved catalog order, not the item name. The
+        // client passes this array straight through, so ordering it by name here
+        // meant the ingredient list was permanently alphabetical no matter what
+        // order the operator had arranged.
+        orderBy: [{ item: { sortOrder: 'asc' } }, { id: 'asc' }, { createdAt: 'asc' }],
+      },
         },
       });
     });

@@ -56,10 +56,13 @@ export class StocktakingService {
     return {
       entries: {
         include: {
-          item: { select: { publicId: true, name: true, unit: true } },
+          // `sortOrder` is selected so entries follow the saved catalog order.
+          // Ordered by item name, this list ignored any order the operator had
+          // arranged — by hand, or by the order of the spreadsheet they imported.
+          item: { select: { publicId: true, name: true, unit: true, sortOrder: true } },
           counts: { orderBy: { countedAt: 'desc' as const } },
         },
-        orderBy: { item: { name: 'asc' as const } },
+        orderBy: { item: { sortOrder: 'asc' as const, id: 'asc' as const } },
       },
     };
   }

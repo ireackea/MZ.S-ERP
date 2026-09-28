@@ -64,6 +64,45 @@ test('no e2e spec combines --clean with the application database', () => {
   );
 });
 
+test('the restore path cannot leave the schema behind the code', () => {
+  // The second half of the incident, and the quieter half.
+  //
+  // `pg_restore` restores a schema as well as data, and it restores the
+  // `_prisma_migrations` table with it. So restoring an archive taken before a
+  // migration ships brings back the old schema *and* a table that says the
+  // migration ran. `migrate deploy` then reports everything applied and changes
+  // nothing, and the application starts against columns that do not exist —
+  // every request touching them fails, with no migration error to explain it.
+  //
+  // That happened here: `Item.sortOrder` had been added, the restore rolled the
+  // table back to before it, the migrations table claimed it was applied, and
+  // every reorder returned a 500 until the column was re-created by hand.
+  //
+  // The guard is on the backup service, because that is the path an operator
+  // uses. It cannot be a database constraint — an archive is a file — so what it
+  // can do is refuse to apply an archive whose schema is behind the running
+  // image, and say so.
+  const service = readFileSync(
+    join(repoRoot, 'backend/src/backup/backup.service.ts'),
+    'utf8',
+  );
+
+  assert.match(
+    service,
+    /schema|Schema/,
+    'the restore path must reason about the archive schema, not only its data',
+  );
+  assert.ok(
+    /_prisma_migrations|schemaVersion|migration/.test(service),
+    'the restore path must compare the archive against the migrations the image expects, ' +
+      'or it cannot tell that it is restoring an older schema',
+  );
+  assert.ok(
+    /ConflictException|ServiceUnavailableException|BadRequestException/.test(service),
+    'a restore that would roll the schema back must be refused with a named error, not applied silently',
+  );
+});
+
 test('a spec that restores targets a database it created for the purpose', () => {
   // Recoverability is a property of the archive. Proving it needs a target that
   // can be thrown away; it never needed the live database, and using it there

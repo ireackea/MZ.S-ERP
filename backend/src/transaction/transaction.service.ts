@@ -1478,8 +1478,10 @@ export class TransactionService {
     }
 
     const items = await this.prisma.item.findMany({
-      select: { id: true, publicId: true, name: true, currentStock: true },
-      orderBy: { name: 'asc' },
+      select: { id: true, publicId: true, name: true, currentStock: true, sortOrder: true },
+      // The saved catalog order, not the alphabet. Same contract as findAll in
+      // ItemService, and the comment there explains why the tie-break is id.
+      orderBy: [{ sortOrder: { sort: 'asc', nulls: 'last' } }, { id: 'asc' }],
     });
     // DEF-001 — the balance column is clamped at zero, so the ledger derived
     // from the movements is lower by exactly the outstanding deficit. Folding the
@@ -1551,13 +1553,14 @@ export class TransactionService {
     const { start, end } = this.timeService.getFinancialYearRange(year);
     try {
       const [items, openingRows, transactionRows] = await Promise.all([
-      this.prisma.item.findMany({
+        this.prisma.item.findMany({
         select: {
           id: true,
           publicId: true,
           name: true,
         },
-        orderBy: { name: 'asc' },
+        // The saved catalog order, matching the reconciliation query above.
+        orderBy: [{ sortOrder: { sort: 'asc', nulls: 'last' } }, { id: 'asc' }],
       }),
       this.prisma.openingBalance.findMany({
         where: { financialYear: year },

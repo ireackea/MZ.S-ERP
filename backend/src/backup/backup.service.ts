@@ -26,6 +26,7 @@ import {
 import type { Prisma } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 import { dumpPostgres, isPostgresUrl, restorePostgres } from './pg-dump';
+import { archiveIsRestorable, archiveMigrationNames } from './schema-drift';
 import { DatabaseInfrastructureService } from '../database/database-infrastructure.service';
 import { PrismaService } from '../prisma.service';
 
@@ -218,6 +219,20 @@ type BackupManifest = {
   appVersion: string;
   /** Prisma schema version, so a restore can detect an incompatible dump. */
   schemaVersion: string;
+  /**
+   * FC-OPS-002 — the migration names applied when this backup was taken.
+   *
+   * `schemaVersion` is a count, and a count cannot be compared meaningfully: an
+   * image that adds one migration and drops another leaves the total unchanged,
+   * so the count agrees while the schema does not. The names are what the restore
+   * guard reads, so that restoring an archive that predates a migration is
+   * refused rather than applied.
+   *
+   * Optional, because archives taken before this field existed are still
+   * readable — and a restore of one is refused, since an unknown schema is not a
+   * schema anyone can vouch for.
+   */
+  migrations?: string[];
   createdAt: string;
   /** Every table name Prisma knows about, whether or not it was dumped. */
   expectedModels: string[];
@@ -705,6 +720,9 @@ export class BackupService implements OnModuleDestroy {
     return {
       appVersion: process.env.APP_VERSION || '0.0.0',
       schemaVersion: this.readSchemaVersion(),
+      // FC-OPS-002 — recorded so a later restore can tell that this archive
+      // predates a migration the running image expects.
+      migrations: this.readMigrationNames(),
       createdAt: new Date().toISOString(),
       expectedModels,
       includedModels: [...captured].sort(),
@@ -729,14 +747,29 @@ export class BackupService implements OnModuleDestroy {
     };
   }
 
-  /** FC-OPS-001 — the applied migration count, used to detect an incompatible restore. */
+  /**
+   * FC-OPS-001 — the migrations this image carries.
+   *
+   * The names, not a count. A count cannot tell a restore from being refused: if
+   * an image adds a migration and another removes one, the total is unchanged, so
+   * comparing counts waves through a restore that is missing the new migration and
+   * carries a removed one. The count is still reported, because it is cheap and
+   * useful in a manifest, but the guard reads the names.
+   */
   private readSchemaVersion(): string {
+    return String(this.readMigrationNames().length);
+  }
+
+  private readMigrationNames(): string[] {
     try {
       const migrationsDir = path.resolve(process.cwd(), 'prisma', 'migrations');
-      if (!fs.existsSync(migrationsDir)) return 'unknown';
-      return String(fs.readdirSync(migrationsDir).filter((name) => fs.statSync(path.join(migrationsDir, name)).isDirectory()).length);
+      if (!fs.existsSync(migrationsDir)) return [];
+      return fs
+        .readdirSync(migrationsDir)
+        .filter((name) => fs.statSync(path.join(migrationsDir, name)).isDirectory())
+        .sort();
     } catch {
-      return 'unknown';
+      return [];
     }
   }
 
@@ -1261,6 +1294,50 @@ export class BackupService implements OnModuleDestroy {
   }
 
   /**
+   * FC-OPS-002 — refuse an archive whose schema is behind the running image.
+   *
+   * The archive records the migrations that had been applied when it was taken,
+   * because they live in the same dump. So a restore from before a migration
+   * silently rolls the application back: the column disappears, the database
+   * keeps claiming the migration ran, and `migrate deploy` reports success while
+   * changing nothing. Every request that touches the missing column then fails,
+   * and the logs show a query error with no migration error anywhere near it.
+   *
+   * The comparison is against the migrations this image has, read from disk
+   * rather than from the database — the whole point is that the database is about
+   * to be overwritten, so asking it is too late.
+   *
+   * Only one direction is refused. An archive from the *future* relative to this
+   * image means the image is stale, which is an operational mistake worth making
+   * loudly, but it is not data loss, so it is reported rather than blocked.
+   */
+  private async assertArchiveSchemaIsCurrent(
+    manifest: unknown,
+    entry: BackupManifestEntry,
+  ): Promise<void> {
+    const verdict = archiveIsRestorable(
+      archiveMigrationNames(manifest),
+      this.readMigrationNames(),
+    );
+    if (verdict.restorable) return;
+
+    throw new ConflictException({
+      code: 'BACKUP_SCHEMA_BEHIND_IMAGE',
+      message:
+        `النسخة الاحتياطية "${entry.fileName}" مأخوذة قبل ${verdict.missing.length} ترحيلاً ` +
+        'تطبّقها النسخة الحالية من البرنامج، واستعادتها ستُرجع قاعدة البيانات إلى مخطط أقدم. ' +
+        'شغّل الترحيلات أولًا، أو استعد نسخة أحدث.',
+      detail: {
+        backupId: entry.id,
+        fileName: entry.fileName,
+        missingMigrations: verdict.missing.slice(0, 20),
+        missingCount: verdict.missing.length,
+      },
+    });
+  }
+
+
+  /**
    * FC-OPS-001 — per-section checksum verification. Any mismatch means the
    * payload was altered after the backup was written.
    */
@@ -1474,6 +1551,25 @@ export class BackupService implements OnModuleDestroy {
     if (payload.type !== 'config') {
       this.assertManifestIsRestorable(payload.manifest, params.backupId);
       this.assertManifestChecksums(payload);
+    }
+
+    // FC-OPS-002 - an archive carries a schema as well as data, and restoring an
+    // older one rolls the application back to a schema the running image does
+    // not expect.
+    //
+    // The quiet part is that `pg_restore` also restores `_prisma_migrations`, so
+    // the database goes on claiming the newer migrations ran. `migrate deploy`
+    // then reports everything applied and changes nothing, and the next request
+    // touching a column that is no longer there fails. That happened here:
+    // restoring an archive from before `Item.sortOrder` left the table without
+    // the column, the migrations table still listing the migration as applied,
+    // and every item-reorder request returning a 500 with no migration error to
+    // point at. The data came back; the schema did not, and nothing said so.
+    //
+    // Checked before anything destructive, because by the time a restore has run
+    // the only way back is another restore.
+    if (payload.type !== 'config') {
+      await this.assertArchiveSchemaIsCurrent(payload.manifest, target);
     }
 
     let restoredConfigFiles = 0;

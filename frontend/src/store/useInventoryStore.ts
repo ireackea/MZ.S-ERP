@@ -290,6 +290,10 @@ const dto = (r: ItemDto): Item => ({
   id: String(r.publicId || r.id),
   publicId: r.publicId ? String(r.publicId) : undefined,
   name: r.name,
+  // The saved catalog rank. The order also survives as array position, but
+  // without this the client cannot answer "where is this item?", which is the
+  // question an operator asks when an item they placed is not where they left it.
+  sortOrder: typeof r.sortOrder === 'number' ? r.sortOrder : undefined,
   code: r.code || undefined,
   barcode: r.barcode || undefined,
   category: r.category || 'تصنيف عام',
@@ -1343,9 +1347,24 @@ export const useInventoryStore = create<Store>()(
         void actor;
       },
 
+      /**
+       * Switching the view never rewrites the saved order.
+       *
+       * The previous version rebuilt `manualOrder` from the current on-screen
+       * array whenever the mode became `manual_locked`. If the operator was
+       * looking at "sort by name", that array was alphabetical, so coming back to
+       * manual replaced the saved order with the alphabet in memory — and the
+       * next press of the save button wrote it to the database. An order the
+       * operator had arranged, including one that came from a spreadsheet import,
+       * was destroyed by looking at the list a different way.
+       *
+       * Manual mode therefore reads `manualOrder` and only ever re-derives it from
+       * the server, which is where the truth lives. Reordering is a separate
+       * action with its own entry point.
+       */
       setSortMode: (mode) => {
         const currentItems = get().items;
-        const nextManualOrder = mode === 'manual_locked' ? currentItems.map((item) => String(item.id)) : normOrder(currentItems, get().manualOrder);
+        const nextManualOrder = normOrder(currentItems, get().manualOrder);
         const sorted = sortItems(currentItems, mode, nextManualOrder);
         set({ sortMode: mode, manualOrder: nextManualOrder, items: sorted });
       },

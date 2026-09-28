@@ -85,14 +85,20 @@ export class OpeningBalanceService {
       this.prisma.item.findMany({
         select: {
           id: true,
-          name: true,
-          publicId: true,
-          code: true,
-          unit: true,
-          category: true,
-        },
-        orderBy: { name: 'asc' },
-      }),
+      name: true,
+      publicId: true,
+      code: true,
+      unit: true,
+      category: true,
+      // Selected so the response can follow the saved catalog order, like every
+      // other section. The client re-sorts today, which hid the gap; an API
+      // that returns the alphabet under a saved order is a contract that lies to
+      // the next caller.
+      sortOrder: true,
+    },
+    // The saved catalog order, not the alphabet. See ItemService.findAll.
+    orderBy: [{ sortOrder: { sort: 'asc', nulls: 'last' } }, { id: 'asc' }],
+  }),
       this.prisma.openingBalance.findMany({
         where: { financialYear: year },
         include: {
