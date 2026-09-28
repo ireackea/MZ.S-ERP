@@ -207,6 +207,9 @@ model Item {
   openingBalances OpeningBalance[]
   targetFormulas  Formulation[]    @relation("FormulationTargetItem")
   formulaRows     FormulationItem[] @relation("FormulationIngredientItem")
+  // The saved, named orders this item appears in. The relation exists so an item
+  // deleted from the catalogue leaves no orphan rank behind in a saved order.
+  orderEntries    ItemOrderEntry[]
   transactions    Transaction[]
   orderItems      OrderItem[]
   stocktakingEntries StocktakingEntry[]
@@ -217,6 +220,49 @@ model Item {
   @@index([barcode])
   @@index([isArchived])
   @@index([sortOrder])
+}
+
+/// A saved catalogue order, under a name the operator chose.
+///
+/// The button "حفظ ترتيب الأصناف" existed for one reason: a catalogue arranged by
+/// hand, or imported from a spreadsheet, has to stay arranged. One column on Item
+/// can hold that order, but it can hold only one — so the moment somebody wanted
+/// a second arrangement, the first had to be overwritten, and there was no way to
+/// get it back.
+model ItemOrderProfile {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  /// Exactly one profile is active, enforced by a partial unique index rather
+  /// than by application code: two active profiles would mean the catalogue has
+  /// two orders and no way to say which one a screen is showing.
+  isActive  Boolean  @default(false)
+  /// How many items were in this order when it was last written. Kept so the
+  /// interface can say "3 items are not in this order yet" without a join, and
+  /// so a profile that has fallen behind the catalogue is visible rather than
+  /// quietly applying an order that no longer covers everything.
+  itemCount Int      @default(0)
+  note      String?
+  createdBy String?
+  updatedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entries ItemOrderEntry[]
+
+  @@index([isActive])
+}
+
+/// One item's position inside a saved order.
+model ItemOrderEntry {
+  profileId String
+  itemId    Int
+  rank      Int
+
+  profile ItemOrderProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  item    Item             @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@id([profileId, itemId])
+  @@index([profileId, rank])
 }
 
 model Partner {

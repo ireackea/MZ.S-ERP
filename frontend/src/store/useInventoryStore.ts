@@ -12,6 +12,13 @@ import {
   deleteItemsPermanently,
   getItems as getItemsFromApi,
   reorderItems,
+  applyOrderProfile as applyOrderProfileApi,
+  createOrderProfile as createOrderProfileApi,
+  deleteOrderProfile as deleteOrderProfileApi,
+  fetchOrderProfiles,
+  refreshOrderProfile as refreshOrderProfileApi,
+  renameOrderProfile as renameOrderProfileApi,
+  type OrderProfileList,
   syncItems,
   type ItemDto,
   type SyncItemPayload,
@@ -169,6 +176,17 @@ type Store = {
   sortMode: ItemSortMode;
   /** True while a catalog-order save is in flight, so the button can say so. */
   savingItemOrder: boolean;
+  /**
+   * The named, saved orders, and which one is active.
+   *
+   * `orderProfiles` is null until loaded rather than an empty list, because the
+   * two mean different things: "there are no saved orders" and "we have not asked
+   * yet". Showing an empty list for the second would tell the operator their
+   * arrangements are gone.
+   */
+  orderProfiles: OrderProfileList | null;
+  /** True while a saved-order action is in flight, so the buttons can say so. */
+  applyingOrderProfile: boolean;
   manualOrder: string[];
   load: () => Promise<void>;
   loadAll: () => Promise<void>;
@@ -218,6 +236,12 @@ type Store = {
   deleteItems: (ids: string[], actor?: ActorInfo) => Promise<void>;
   setSortMode: (mode: ItemSortMode) => void;
   saveItemOrder: (actor?: ActorInfo) => Promise<void>;
+  loadOrderProfiles: () => Promise<void>;
+  createOrderProfile: (name: string, note?: string) => Promise<void>;
+  applyOrderProfile: (profileId: string) => Promise<void>;
+  refreshOrderProfile: (profileId: string) => Promise<void>;
+  renameOrderProfile: (profileId: string, name: string) => Promise<void>;
+  deleteOrderProfile: (profileId: string) => Promise<void>;
   moveItemManually: (id: string, d: 'up' | 'down', visibleIds?: string[]) => void;
   createItem: (item: Item, actorId: string, actorName: string) => Promise<void>;
   updateItem: (item: Item, actorId: string, actorName: string) => Promise<void>;
@@ -519,10 +543,33 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
 const currentFinancialYear = () => getFinancialYearFromDate();
 
 const syncItemsFromServer = async () => {
-  // Phase 4: Load all items with pagination (load first 1000 items by default)
+  // The list endpoint caps at 1000 rows, and the store asks for all of them.
+  //
+  // Above that cap the store holds a *prefix* of the catalogue. A partial save is
+  // still safe — the server appends the unlisted rows by their existing rank — but
+  // the operator cannot see or reorder the ones past the cap, and nothing said so.
+  // `onCatalogTruncated` is how that becomes visible instead of silent.
   const result = await getItemsFromApi({ page: 1, limit: 1000, isArchived: false });
+  onCatalogTruncated(Number(result.total) > result.data.length, Number(result.total));
   return result.data.map(dto);
 };
+
+/**
+ * Set when the loaded catalogue is a prefix of the real one.
+ *
+ * A module-level flag rather than store state, because this is discovered inside
+ * a pure mapping helper that runs before the store exists, and because it is a
+ * property of the last fetch rather than something a screen sets. It is read by
+ * the page to raise a notice, and cleared on every load so a smaller catalogue
+ * stops being reported.
+ */
+let catalogTruncation: { truncated: boolean; total: number } = { truncated: false, total: 0 };
+
+const onCatalogTruncated = (truncated: boolean, total: number) => {
+  catalogTruncation = { truncated, total };
+};
+
+export const catalogTruncationNotice = () => catalogTruncation;
 
 const syncTransactionsFromServer = async () => {
   return getTransactionsFromApi();
@@ -758,6 +805,8 @@ export const useInventoryStore = create<Store>()(
       soft: {},
       sortMode: initialSort.mode,
   savingItemOrder: false,
+  orderProfiles: null,
+  applyingOrderProfile: false,
       manualOrder: initialSort.manualOrder,
 
       load: async () => {
@@ -1362,6 +1411,96 @@ export const useInventoryStore = create<Store>()(
        * the server, which is where the truth lives. Reordering is a separate
        * action with its own entry point.
        */
+      // ── named, saved orders ────────────────────────────────────────────────
+      //
+      // The distinction these preserve: moving things on screen changes what the
+      // catalogue looks like, and saves nothing. Only an explicit act here keeps
+      // an arrangement. Each action reloads the list afterwards, because the
+      // drift figures it returns are the only way the interface can say whether
+      // what is on screen is what is saved — and a stale figure is worse than
+      // none, because it says "saved" about an arrangement that is not.
+
+      loadOrderProfiles: async () => {
+        try {
+          set({ orderProfiles: await fetchOrderProfiles() });
+        } catch (error) {
+          toast.error(getErrorMessage(error, 'تعذّر تحميل الترتيبات المحفوظة'));
+        }
+      },
+
+      createOrderProfile: async (name, note) => {
+        const trimmed = String(name || '').trim();
+        if (!trimmed) {
+          toast.error('اكتب اسمًا للترتيب قبل الحفظ.');
+          return;
+        }
+        set({ applyingOrderProfile: true });
+        try {
+          const saved = await createOrderProfileApi(trimmed, note);
+          toast.success(`تم حفظ الترتيب باسم "${saved.name}"`);
+          await get().loadOrderProfiles();
+          // The saved order is the one on screen, and it is the active one, so
+          // the working order and the catalogue agree with no reload.
+          await get().loadInventoryCore({ force: true, staleMs: 0 } as any);
+        } catch (error) {
+          toast.error(getErrorMessage(error, 'تعذّر حفظ الترتيب'));
+        } finally {
+          set({ applyingOrderProfile: false });
+        }
+      },
+
+      applyOrderProfile: async (profileId) => {
+        set({ applyingOrderProfile: true });
+        try {
+          const applied = await applyOrderProfileApi(profileId);
+          toast.success(`تم تفعيل الترتيب "${applied.name}"`);
+          await get().loadOrderProfiles();
+          await get().loadInventoryCore({ force: true, staleMs: 0 } as any);
+        } catch (error) {
+          toast.error(getErrorMessage(error, 'تعذّر تفعيل الترتيب'));
+        } finally {
+          set({ applyingOrderProfile: false });
+        }
+      },
+
+      refreshOrderProfile: async (profileId) => {
+        set({ applyingOrderProfile: true });
+        try {
+          const written = await refreshOrderProfileApi(profileId);
+          toast.success(`تم تحديث الترتيب "${written.name}" وحفظ ما أضفته`);
+          await get().loadOrderProfiles();
+        } catch (error) {
+          toast.error(getErrorMessage(error, 'تعذّر تحديث الترتيب'));
+        } finally {
+          set({ applyingOrderProfile: false });
+        }
+      },
+
+      renameOrderProfile: async (profileId, name) => {
+        const trimmed = String(name || '').trim();
+        if (!trimmed) {
+          toast.error('الاسم لا يمكن أن يكون فارغًا.');
+          return;
+        }
+        try {
+          await renameOrderProfileApi(profileId, trimmed);
+          toast.success('تم تغيير الاسم');
+          await get().loadOrderProfiles();
+        } catch (error) {
+          toast.error(getErrorMessage(error, 'تعذّر تغيير الاسم'));
+        }
+      },
+
+      deleteOrderProfile: async (profileId) => {
+        try {
+          await deleteOrderProfileApi(profileId);
+          toast.success('تم حذف الترتيب المحفوظ');
+          await get().loadOrderProfiles();
+        } catch (error) {
+          toast.error(getErrorMessage(error, 'تعذّر حذف الترتيب'));
+        }
+      },
+
       setSortMode: (mode) => {
         const currentItems = get().items;
         const nextManualOrder = normOrder(currentItems, get().manualOrder);

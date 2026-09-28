@@ -43,6 +43,7 @@
     "test:e2e:inventory": "npm exec vitest -- --run tests/e2e/inventory-boundary.spec.ts",
     "test:e2e:stock-adjustment": "npm exec vitest -- --run tests/e2e/stock-adjustment.spec.ts",
     "test:e2e:data-003": "npm exec vitest -- --run tests/e2e/data-003-domains.spec.ts",
+    "test:e2e:items-order-profile": "npm exec vitest -- --run tests/e2e/items-order-profile.spec.ts",
     "test:e2e:items-order-import": "npm exec vitest -- --run tests/e2e/items-order-import.spec.ts",
     "test:e2e:items-order": "npm exec vitest -- --run tests/e2e/items-order.spec.ts",
     "test:e2e:items-api": "npm exec vitest -- --run tests/e2e/items-api.spec.ts",

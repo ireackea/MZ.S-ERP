@@ -27,6 +27,8 @@ import {
   X,
 } from 'lucide-react';
 import UniversalColumnManager from '../../components/UniversalColumnManager';
+import { ItemOrderProfiles } from './ItemOrderProfiles';
+import type { OrderProfileList } from '@services/itemsService';
 import { useInventoryStore } from '../../store/useInventoryStore';
 import { assertStorageKeyAllowed } from '../../services/storageOwnership';
 import type { GridColumnPreference, Item, ItemSortMode } from '../../types';
@@ -69,6 +71,14 @@ type ItemsSmartCatalogProps = {
   savingItemOrder: boolean;
   /** Gates the save button: writing the catalog order is `items.reorder`. */
   canReorder: boolean;
+  /** The named, saved orders. Null until loaded, which is not the same as empty. */
+  orderProfiles: OrderProfileList | null;
+  applyingOrderProfile: boolean;
+  onCreateOrderProfile: (name: string) => void;
+  onApplyOrderProfile: (id: string) => void;
+  onRefreshOrderProfile: (id: string) => void;
+  onRenameOrderProfile: (id: string, name: string) => void;
+  onDeleteOrderProfile: (id: string) => void;
   showArchived: boolean;
   onToggleArchived: () => void;
   barcodeMode: boolean;
@@ -185,6 +195,13 @@ const ItemsSmartCatalog: React.FC<ItemsSmartCatalogProps> = ({
   onLockOrder,
   savingItemOrder,
   canReorder,
+  orderProfiles,
+  applyingOrderProfile,
+  onCreateOrderProfile,
+  onApplyOrderProfile,
+  onRefreshOrderProfile,
+  onRenameOrderProfile,
+  onDeleteOrderProfile,
   showArchived,
   onToggleArchived,
   barcodeMode,
@@ -404,6 +421,19 @@ const ItemsSmartCatalog: React.FC<ItemsSmartCatalogProps> = ({
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className="text-sm text-slate-500">نواقص حرجة</div><div className="mt-2 text-sm font-bold text-slate-800">{insights.missingCode} بلا كود - {insights.missingBarcode} بلا باركود - {insights.missingPackageWeight} بلا وزن</div></div>
       </div>
 
+      <ItemOrderProfiles
+        profiles={orderProfiles?.profiles ?? null}
+        catalogSize={orderProfiles?.catalogSize ?? 0}
+        activeProfileId={orderProfiles?.activeProfileId ?? null}
+        busy={applyingOrderProfile}
+        canReorder={canReorder}
+        onSaveAs={(name) => onCreateOrderProfile(name)}
+        onApply={(id) => onApplyOrderProfile(id)}
+        onRefresh={(id) => onRefreshOrderProfile(id)}
+        onRename={(id, name) => onRenameOrderProfile(id, name)}
+        onDelete={(id) => onDeleteOrderProfile(id)}
+      />
+
       <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap gap-2">
           <div className="relative min-w-[260px] flex-1">
@@ -417,10 +447,19 @@ const ItemsSmartCatalog: React.FC<ItemsSmartCatalogProps> = ({
           <select value={statusFilter} onChange={(event) => onStatusFilterChange(event.target.value as StatusFilter)} className="rounded-2xl border border-slate-300 px-3 py-3 text-sm">
             {STATUS_FILTERS.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}
           </select>
-          <select value={sortMode} onChange={(event) => onSortModeChange(event.target.value as ItemSortMode)} className="rounded-2xl border border-slate-300 px-3 py-3 text-sm">
-            {SORTS.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}
-          </select>
-          <button type="button" onClick={onLockOrder} disabled={!canReorder || savingItemOrder} className="inline-flex items-center gap-2 rounded-2xl border border-amber-300 px-3 py-3 text-sm font-bold text-amber-700 disabled:opacity-50" title={showArchived ? 'الترتيب يُحفظ من قائمة الأصناف النشطة' : undefined}><Settings2 size={15} /> {savingItemOrder ? 'جارٍ الحفظ…' : 'حفظ ترتيب الأصناف'}</button>
+          {/* A preview, not a saved order. Choosing one of these changes what is on
+              screen and saves nothing; the panel above is where it is given a name.
+              The old wording made it look like picking a sort had already been
+              saved, which is the confusion this note removes. */}
+          <label className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 px-3 py-3 text-sm">
+            <span className="text-xs font-bold text-slate-500">معاينة الترتيب</span>
+            <select value={sortMode} onChange={(event) => onSortModeChange(event.target.value as ItemSortMode)} className="rounded-xl border border-slate-300 px-2 py-1 text-sm">
+              {SORTS.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}
+            </select>
+          </label>
+          <button type="button" onClick={onLockOrder} disabled={!canReorder || savingItemOrder} className="inline-flex items-center gap-2 rounded-2xl border border-amber-300 px-3 py-3 text-sm font-bold text-amber-700 disabled:opacity-50" title={showArchived ? 'الترتيب يُحفظ من قائمة الأصناف النشطة' : 'يحفظ الترتيب المعروض الآن للجميع، بلا اسم'}>
+            <Settings2 size={15} /> {savingItemOrder ? 'جارٍ الحفظ…' : 'حفظ الترتيب الحالي'}
+          </button>
           <button type="button" onClick={onToggleArchived} className={`rounded-2xl border px-3 py-3 text-sm font-bold ${showArchived ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-slate-300 text-slate-700'}`}>{showArchived ? 'الأصناف النشطة' : 'المؤرشفة'}</button>
           <button type="button" onClick={onToggleBarcodeMode} className={`inline-flex items-center gap-2 rounded-2xl border px-3 py-3 text-sm font-bold ${barcodeMode ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-300 text-slate-700'}`}><ScanLine size={15} /> مسح</button>
           <button type="button" onClick={() => setShowColumnManager((value) => !value)} className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 px-3 py-3 text-sm font-bold text-slate-700"><Columns3 size={15} /> الأعمدة</button>

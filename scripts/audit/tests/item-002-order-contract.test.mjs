@@ -30,10 +30,19 @@ test('the save-order button reaches the reorder endpoint', () => {
   const store = stripComments(read('frontend/src/store/useInventoryStore.ts'));
   const service = stripComments(read('frontend/src/services/itemsService.ts'));
 
+  // Matched on the capability, not on the wording. The label was reworded to
+  // "حفظ الترتيب الحالي" once named orders existed, and a guard that fails on a
+  // reword is a guard that gets deleted rather than updated — which is how a real
+  // regression would slip through the next time someone shortens a button.
   assert.match(
     catalog,
-    /حفظ ترتيب الأصناف/,
-    'the button this file is named after must still exist, or this guard is describing a fiction',
+    /onLockOrder/,
+    'the items catalog must still offer a control that writes the catalog order',
+  );
+  assert.match(
+    catalog,
+    /canReorder/,
+    'that control must be gated on the permission that guards the endpoint',
   );
   assert.match(catalog, /onLockOrder|onSaveOrder/, 'the button must call a save handler');
 

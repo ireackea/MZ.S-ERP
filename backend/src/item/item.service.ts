@@ -293,6 +293,17 @@ export class ItemService {
       // Everything the client could not send, deterministically after the part
       // it did. Ordered by the rank it already had, so a partial save preserves
       // the existing sequence instead of re-alphabetising the tail.
+      // The exclusion list is an explicit `IN (...)`, not `= ANY(${array}::text[])`.
+      //
+      // Prisma binds a JavaScript array parameter as a single value, so the
+      // `::text[]` cast applies to that value rather than to the elements. It
+      // happened to work for text here, which is exactly why it is worth removing:
+      // the identical statement over an integer column fails with
+      // `operator does not exist: integer = text`, and the shape that reads
+      // correctly is the one that casts each element.
+      const listed = Prisma.join(
+        orderedPublicIds.map((publicId) => Prisma.sql`${publicId}::text`),
+      );
       const appended = await tx.$executeRaw`
         WITH rest AS (
           SELECT "id",
@@ -300,7 +311,7 @@ export class ItemService {
                    + ROW_NUMBER() OVER (ORDER BY "sortOrder" ASC NULLS LAST, "name" ASC, "id" ASC)
                    - 1 AS rank
           FROM "public"."Item"
-          WHERE "publicId" IS NULL OR NOT ("publicId" = ANY(${orderedPublicIds}::text[]))
+          WHERE "publicId" IS NULL OR NOT ("publicId" IN (${listed}))
         )
         UPDATE "public"."Item" AS item
         SET "sortOrder" = rest.rank

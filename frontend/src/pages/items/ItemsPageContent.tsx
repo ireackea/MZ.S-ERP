@@ -52,6 +52,14 @@ const ItemsPageContent: React.FC = () => {
     saveItemOrder,
     moveItemManually,
     savingItemOrder,
+  orderProfiles,
+  applyingOrderProfile,
+  loadOrderProfiles,
+  createOrderProfile,
+  applyOrderProfile,
+  refreshOrderProfile,
+  renameOrderProfile,
+  deleteOrderProfile,
     createItem,
     updateItem,
     bulkUpdate,
@@ -110,7 +118,12 @@ const ItemsPageContent: React.FC = () => {
 
   useEffect(() => {
     void loadInventoryCore({ staleMs: 30_000 }).catch(() => undefined);
-  }, [loadInventoryCore]);
+    // The named orders are loaded with the catalogue rather than on demand, so
+    // the panel is populated the first time the page is shown. Loading it lazily
+    // on expand would mean the operator opens a panel that is empty while a
+    // request is in flight, and reads that as "you have no saved orders".
+    void loadOrderProfiles();
+    }, [loadInventoryCore, loadOrderProfiles]);
 
   useEffect(() => {
     if (!barcodeMode) return;
@@ -627,6 +640,13 @@ const ItemsPageContent: React.FC = () => {
         onLockOrder={() => { void saveItemOrder(); }}
         savingItemOrder={savingItemOrder}
         canReorder={canReorder}
+        orderProfiles={orderProfiles}
+        applyingOrderProfile={applyingOrderProfile}
+        onCreateOrderProfile={(name) => { void createOrderProfile(name); }}
+        onApplyOrderProfile={(id) => { void applyOrderProfile(id); }}
+        onRefreshOrderProfile={(id) => { void refreshOrderProfile(id); }}
+        onRenameOrderProfile={(id, name) => { void renameOrderProfile(id, name); }}
+        onDeleteOrderProfile={(id) => { void deleteOrderProfile(id); }}
         showArchived={showArchived}
         onToggleArchived={toggleArchivedView}
         barcodeMode={barcodeMode}

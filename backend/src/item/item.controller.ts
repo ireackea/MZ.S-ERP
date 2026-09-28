@@ -1,6 +1,21 @@
 // ENTERPRISE FIX: Phase 5 Bulk Import + Barcode + Attachments + Audit Viewer - Archive Only - 2026-03-27
 // ENTERPRISE FIX: Phase 4 Audit Logging + Soft Delete Backend + Pagination - Archive Only - 2026-03-27
-import { Body, Controller, Post, UseGuards, Get, Query, Req, Res, UseInterceptors, UploadedFile, Put, Param } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Post,
+  UseGuards,
+  Get,
+  Query,
+  Req,
+  Res,
+  UseInterceptors,
+  UploadedFile,
+  Put,
+  Param,
+  Patch,
+  Delete,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import {
@@ -13,7 +28,12 @@ import { extname } from 'path';
 import { BulkSyncDto } from './dto/sync-items.dto';
 import { BulkImportDto } from './dto/bulk-import.dto';
 import { CreateItemDto, ListItemsQueryDto, ReorderItemsDto, UpdateItemDto } from './dto/item.dto';
+import {
+  CreateOrderProfileDto,
+  RenameOrderProfileDto,
+} from './dto/order-profile.dto';
 import { ItemService } from './item.service';
+import { ItemOrderProfileService } from './item-order-profile.service';
 import { DeleteItemsDto } from './dto/delete-items.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Permissions } from '../auth/decorators/permissions.decorator';
@@ -23,7 +43,26 @@ import { RbacGuard } from '../auth/rbac.guard';
 @UseGuards(JwtAuthGuard, RbacGuard)
 @Controller('items')
 export class ItemController {
-  constructor(private readonly itemService: ItemService) {}
+  constructor(
+    private readonly itemService: ItemService,
+    private readonly itemOrderProfileService: ItemOrderProfileService,
+  ) {}
+
+  /**
+   * Who is acting, for the audit row.
+   *
+   * Collected in one place because the reorder and the named orders both need it,
+   * and a second copy of `req.user?.sub || req.user?.id` is how an audit row ends
+   * up attributed to "system" on one path and to a person on another.
+   */
+  private orderActor(req: any) {
+    return {
+      userId: req.user?.sub || req.user?.id,
+      username: req.user?.username,
+      role: req.user?.role,
+      ipAddress: String(req.ip || req.socket?.remoteAddress || ''),
+    };
+  }
 
   @Permissions('items.create')
   @Post()
@@ -34,12 +73,53 @@ export class ItemController {
   @Permissions('items.reorder')
   @Post('reorder')
   async reorder(@Body() dto: ReorderItemsDto, @Req() req: any) {
-    return this.itemService.reorderItems(dto.orderedPublicIds, {
-      userId: req.user?.sub || req.user?.id,
-      username: req.user?.username,
-      role: req.user?.role,
-      ipAddress: String(req.ip || req.socket?.remoteAddress || ''),
-    });
+    return this.itemService.reorderItems(dto.orderedPublicIds, this.orderActor(req));
+  }
+
+  // ── named, saved orders ───────────────────────────────────────────────────
+  //
+  // A saved order is a distinct thing from a reorder. Reordering rewrites the
+  // working order; these name it, apply a different one, or write the working
+  // order into a named one. All of them are behind `items.reorder`, since each
+  // changes the arrangement the whole catalogue is displayed in.
+
+  @Permissions('items.view')
+  @Get('order-profiles')
+  async listOrderProfiles(@Req() req: any) {
+    return this.itemOrderProfileService.list(this.orderActor(req));
+  }
+
+  @Permissions('items.reorder')
+  @Post('order-profiles')
+  async createOrderProfile(@Body() dto: CreateOrderProfileDto, @Req() req: any) {
+    return this.itemOrderProfileService.create(
+      { name: dto.name, note: dto.note ?? null },
+      this.orderActor(req),
+    );
+  }
+
+  @Permissions('items.reorder')
+  @Post('order-profiles/:id/apply')
+  async applyOrderProfile(@Param('id') id: string, @Req() req: any) {
+    return this.itemOrderProfileService.apply(id, this.orderActor(req));
+  }
+
+  @Permissions('items.reorder')
+  @Post('order-profiles/:id/refresh')
+  async refreshOrderProfile(@Param('id') id: string, @Req() req: any) {
+    return this.itemOrderProfileService.refresh(id, this.orderActor(req));
+  }
+
+  @Permissions('items.reorder')
+  @Patch('order-profiles/:id')
+  async renameOrderProfile(@Param('id') id: string, @Body() dto: RenameOrderProfileDto, @Req() req: any) {
+    return this.itemOrderProfileService.rename(id, dto.name, this.orderActor(req));
+  }
+
+  @Permissions('items.reorder')
+  @Delete('order-profiles/:id')
+  async deleteOrderProfile(@Param('id') id: string, @Req() req: any) {
+    return this.itemOrderProfileService.remove(id, this.orderActor(req));
   }
 
   @Permissions('items.update')

@@ -334,6 +334,83 @@ export const reorderItems = async (orderedPublicIds: string[]): Promise<{
   };
 };
 
+/**
+ * Named, saved catalogue orders.
+ *
+ * A saved order is a distinct thing from a reorder: a reorder rewrites the working
+ * order, these name it, apply a different one, or write the working order into a
+ * named one. Every one of them is behind `items.reorder`, and each one is an
+ * explicit act — moving things on screen saves nothing, which is the point.
+ */
+export type OrderProfileDrift = { unlisted: number; moved: number };
+
+export type OrderProfile = {
+  id: string;
+  name: string;
+  isActive: boolean;
+  itemCount: number;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+  drift: OrderProfileDrift;
+};
+
+export type OrderProfileList = {
+  activeProfileId: string | null;
+  catalogSize: number;
+  profiles: OrderProfile[];
+};
+
+const unwrap = (body: any) => body?.data ?? body;
+
+export const fetchOrderProfiles = async (): Promise<OrderProfileList> => {
+  const response = await apiClient.get('/items/order-profiles');
+  return unwrap(response.data) as OrderProfileList;
+};
+
+/** Saves the working order under a name and makes it the active one. */
+export const createOrderProfile = async (
+  name: string,
+  note?: string,
+): Promise<{ id: string; name: string; itemCount: number; isActive: true }> => {
+  const response = await apiClient.post('/items/order-profiles', {
+    name: String(name || '').trim(),
+    ...(note ? { note } : {}),
+  });
+  return unwrap(response.data);
+};
+
+/** Makes a saved order the live one. */
+export const applyOrderProfile = async (
+  profileId: string,
+): Promise<{ id: string; name: string; ranked: number; appended: number }> => {
+  const response = await apiClient.post(`/items/order-profiles/${encodeURIComponent(profileId)}/apply`);
+  return unwrap(response.data);
+};
+
+/** Writes the working order into a saved order — the button that makes a rearrangement stick. */
+export const refreshOrderProfile = async (
+  profileId: string,
+): Promise<{ id: string; name: string; itemCount: number }> => {
+  const response = await apiClient.post(`/items/order-profiles/${encodeURIComponent(profileId)}/refresh`);
+  return unwrap(response.data);
+};
+
+export const renameOrderProfile = async (
+  profileId: string,
+  name: string,
+): Promise<{ id: string; name: string }> => {
+  const response = await apiClient.patch(`/items/order-profiles/${encodeURIComponent(profileId)}`, {
+    name: String(name || '').trim(),
+  });
+  return unwrap(response.data);
+};
+
+export const deleteOrderProfile = async (profileId: string): Promise<{ id: string; deleted: true }> => {
+  const response = await apiClient.delete(`/items/order-profiles/${encodeURIComponent(profileId)}`);
+  return unwrap(response.data);
+};
+
 export const bulkImportFromExcel = async (items: ExcelImportRow[]): Promise<ExcelImportResult> => {
   try {
     const response = await apiClient.post('/items/import-excel', { items: toImportPayload(items) });
