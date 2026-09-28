@@ -4,6 +4,7 @@ import { Save, ShieldAlert } from 'lucide-react';
 import { usePermissions } from '@hooks/usePermissions';
 import { toast } from '@services/toastService';
 import type { ReportColumnConfig } from '../../../types';
+import { OPENING_BALANCE_COLUMNS, STOCK_CARD_COLUMNS, mergeColumns } from '@services/reportColumns';
 
 interface PrintingTemplatesProps {
   reportConfig: ReportColumnConfig[];
@@ -19,17 +20,36 @@ const PrintingTemplates: React.FC<PrintingTemplatesProps> = ({
   onUpdateOpeningBalanceReportConfig,
   }) => {
   const { hasPermission } = usePermissions();
-  const [localReports, setLocalReports] = useState<ReportColumnConfig[]>(reportConfig);
-  const [localOpening, setLocalOpening] = useState<ReportColumnConfig[]>(openingBalanceReportConfig);
+  /**
+   * Gate 3.5 - both lists are seeded from the shared catalogue.
+   *
+   * They used to be seeded from the store, which holds `[]`, so both rendered zero
+   * rows: there were no checkboxes to tick, and the Save button reported success
+   * while writing an empty list back. `getReportConfig()` in storage.ts existed to
+   * hydrate it and had no call sites.
+   *
+   * `mergeColumns` folds any stored selection onto the catalogue, so a column added
+   * to a report later appears with its default instead of vanishing from the list,
+   * and a key from an older release cannot linger as a row the report never renders.
+   */
+  const [localReports, setLocalReports] = useState<ReportColumnConfig[]>(() =>
+    mergeColumns(STOCK_CARD_COLUMNS, reportConfig),
+  );
+  const [localOpening, setLocalOpening] = useState<ReportColumnConfig[]>(() =>
+    mergeColumns(OPENING_BALANCE_COLUMNS, openingBalanceReportConfig),
+  );
 
-  useEffect(() => setLocalReports(reportConfig), [reportConfig]);
-  useEffect(() => setLocalOpening(openingBalanceReportConfig), [openingBalanceReportConfig]);
+  useEffect(() => setLocalReports(mergeColumns(STOCK_CARD_COLUMNS, reportConfig)), [reportConfig]);
+  useEffect(
+    () => setLocalOpening(mergeColumns(OPENING_BALANCE_COLUMNS, openingBalanceReportConfig)),
+    [openingBalanceReportConfig],
+  );
 
-  if (!hasPermission('settings.view.general')) {
+  if (!hasPermission('settings.update.system')) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
-        <div className="mb-2 flex items-center gap-2 font-bold"><ShieldAlert size={18} />لا تملك صلاحية عرض قوالب الطباعة</div>
-        <div>تحتاج إلى الصلاحية <code>settings.view.general</code>.</div>
+        <div className="mb-2 flex items-center gap-2 font-bold"><ShieldAlert size={18} />لا تملك صلاحية تعديل قوالب الطباعة</div>
+        <div>تحتاج إلى الصلاحية <code>settings.update.system</code>.</div>
       </div>
     );
   }

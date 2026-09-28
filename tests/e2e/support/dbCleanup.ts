@@ -167,11 +167,21 @@ export const cleanupFixtures = (userIds: string[] = [], roleIds: string[] = []):
 
   // Verify rather than trust. A cleanup helper that silently does nothing is how
   // a database accumulates roles nobody can account for.
+  // Cast to int: there is no `+` operator for bigint, and the query erroring is
+  // indistinguishable from the check having run.
   const remaining = sqlScalar(
-    `SELECT count(*) FROM users WHERE id IN (${users || "''"})`
-    + (roles ? ` + (SELECT count(*) FROM roles WHERE id IN (${roles}))` : '')
+    `SELECT (SELECT count(*) FROM users WHERE id IN (${users || "''"}))::int`
+    + (roles ? ` + (SELECT count(*) FROM roles WHERE id IN (${roles}))::int` : '')
     + ';',
   );
+  if (remaining === null) {
+    // The verification itself could not run. Saying nothing is the honest option:
+    // claiming a leak that may not exist, or claiming a clean teardown that was
+    // never confirmed, are both worse than admitting the check did not run.
+    console.warn('[dbCleanup] teardown verification could not run; cleanliness is unconfirmed.');
+    return false;
+  }
+
   if (remaining !== 0) {
     // Surfaced rather than thrown: a teardown failure must not mask the real
     // assertion result, but it must not be invisible either.

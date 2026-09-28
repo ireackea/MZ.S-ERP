@@ -97,6 +97,25 @@ export class UsersController {
     return this.usersService.inviteUser(dto, this.resolveActor(req));
   }
 
+  /**
+   * ا-٦ — the read path the invitation flow never had.
+   *
+   * Declared beside the other invite routes rather than with the `:id` routes,
+   * and there is no `@Get(':id')` in this controller today, so nothing can
+   * swallow `invitations` as an id. Declared here anyway: the moment a
+   * `@Get(':id')` is added below, order becomes load-bearing and this should
+   * not be the reason a list endpoint 404s.
+   *
+   * `users.view`, not `users.create`: reading a queue of outstanding
+   * invitations is inspection, and the tokens are not in the response, so it
+   * grants no ability to mint an account.
+   */
+  @Permissions('users.view')
+  @Get('invitations')
+  async listInvitations(@Query('status') status?: string) {
+    return this.usersService.listInvitations(status);
+  }
+
   @Public()
   @Post('invite/verify')
   async verifyInvitation(@Body() dto: { token: string }) {

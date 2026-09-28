@@ -13,38 +13,10 @@ import {
 } from '@services/openingBalanceService';
 import { exportRowsToExcel, readFirstWorksheetRows } from '../utils/excelWorkbook';
 import type { ReportColumnConfig } from '../types';
+import { OPENING_BALANCE_COLUMNS, mergeColumns } from '../services/reportColumns';
 import { useInventoryStore, type OpeningBalanceStoreRow } from '../store/useInventoryStore';
 
 const currentYear = new Date().getFullYear();
-const DEFAULT_COLUMNS: ReportColumnConfig[] = [
-  { key: 'item', label: 'الصنف', isVisible: true },
-  { key: 'quantity', label: 'الكمية', isVisible: true },
-  { key: 'unitCost', label: 'تكلفة الوحدة', isVisible: true },
-  { key: 'unit', label: 'وحدة القياس', isVisible: true },
-  { key: 'category', label: 'الفئة', isVisible: true },
-  { key: 'code', label: 'كود الصنف', isVisible: true },
-];
-
-const mergeColumns = (
-  base: ReportColumnConfig[],
-  incoming?: ReportColumnConfig[]
-): ReportColumnConfig[] => {
-  if (!incoming || incoming.length === 0) return base;
-  const allowed = new Set(base.map((column) => column.key));
-
-  // لماذا: نُزيل التكرارات من incoming أولاً بـ Map لضمان مفتاح واحد لكل عمود.
-  // إذا احتوت البيانات المخزّنة على مفاتيح مكررة (من حفظ سابق معطوب) يُصحَّح
-  // الوضع تلقائياً عند أول تحميل، مما يمنع duplicate key warnings في React.
-  const deduped = [...new Map(
-    incoming
-      .filter((column) => allowed.has(column.key))
-      .map((column) => [column.key, column])
-  ).values()];
-
-  const missing = base.filter((column) => !deduped.find((entry) => entry.key === column.key));
-  return [...deduped, ...missing];
-};
-
 interface OpeningBalancePageProps {
   columnConfig: ReportColumnConfig[];
   onUpdateColumnConfig: (config: ReportColumnConfig[]) => void;
@@ -69,7 +41,7 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
   const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [localColumnConfig, setLocalColumnConfig] = useState<ReportColumnConfig[]>(
-    mergeColumns(DEFAULT_COLUMNS, columnConfig)
+    mergeColumns(OPENING_BALANCE_COLUMNS, columnConfig)
   );
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -202,7 +174,7 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
   }, [openingBalanceRows, normalizedInventoryItems, year]);
 
   useEffect(() => {
-    setLocalColumnConfig(mergeColumns(DEFAULT_COLUMNS, columnConfig));
+    setLocalColumnConfig(mergeColumns(OPENING_BALANCE_COLUMNS, columnConfig));
   }, [columnConfig]);
 
   // لماذا: نرصد انتقال openingBalancesLoading من true → false لنعرف متى وصلت
@@ -404,14 +376,14 @@ const OpeningBalancePage: React.FC<OpeningBalancePageProps> = ({
   };
 
   const saveColumns = () => {
-    const merged = mergeColumns(DEFAULT_COLUMNS, localColumnConfig);
+    const merged = mergeColumns(OPENING_BALANCE_COLUMNS, localColumnConfig);
     onUpdateColumnConfig(merged);
     showToast('تم حفظ إعدادات الأعمدة', 'success');
   };
 
   const resetColumns = () => {
-    setLocalColumnConfig(DEFAULT_COLUMNS);
-    onUpdateColumnConfig(DEFAULT_COLUMNS);
+    setLocalColumnConfig(OPENING_BALANCE_COLUMNS);
+    onUpdateColumnConfig(OPENING_BALANCE_COLUMNS);
     showToast('تمت إعادة الأعمدة للوضع الافتراضي', 'success');
   };
 

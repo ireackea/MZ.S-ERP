@@ -272,12 +272,36 @@ export const mutationQueueService = {
     return summarize(await this.getQueue(ownerUserId));
   },
 
-  async retryTask(id: string) {
+  /**
+   * Gate 5.2 - scoped to the owner.
+   *
+   * This looked the task up across every owner with no `ownerUserId` check, so a
+   * call would flip another account's blocked or dead-lettered task back to
+   * pending, and `sync()` would then replay it under the *current* session — that
+   * account's mutation, executed with this session's authority. It has no call
+   * site today, so it was dead code rather than a live hole, but it is one call
+   * away from being one.
+   *
+   * `ownerUserId` now defaults to the session owner and a task belonging to
+   * someone else is not found. The blocked-status rule from Gate 4.7 applies here
+   * too: a refused mutation is not retried by asking nicely.
+   */
+  async retryTask(id: string, ownerUserId = getOwnerId()) {
     this.init();
-    if (!this.dbPromise) return;
+    if (!this.dbPromise || !id || !ownerUserId) return false;
     const db = await this.dbPromise;
-    const task = (await readAll(db)).find((entry) => entry.id === id);
-    if (!task) return;
+    const queue = await readAll(db);
+
+    const task = queue.find(
+      (entry) => entry.id === id && entry.ownerUserId === ownerUserId,
+    );
+    if (!task) return false;
+    if (task.status === 'blocked') {
+      // The server refused this. Retrying it cannot succeed, and quietly
+      // re-queuing it is what produced the 401/403 loop Gate 4.7 removed.
+      return false;
+    }
+
     await writeTask(db, {
       ...task,
       status: 'pending',
@@ -286,6 +310,7 @@ export const mutationQueueService = {
       nextRetryAt: undefined,
       lastError: undefined,
     });
+    return true;
   },
 
   /**

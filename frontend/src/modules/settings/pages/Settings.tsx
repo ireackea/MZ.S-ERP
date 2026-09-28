@@ -133,7 +133,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
         <div className="text-base font-black">ليس لديك أي صلاحية للوصول إلى قسم الإعدادات.</div>
         <div className="mt-2 text-sm">لا توجد أي تبويبات إعدادات مفعّلة لحسابك الحالي.</div>
         <div className="mt-3 text-xs leading-6">
-          <div>الصلاحيات النموذجية للوصول: <code>settings.view.general</code> أو <code>settings.view.users</code> أو <code>settings.view.backup</code>.</div>
+          <div>الصلاحيات النموذجية للوصول: <code>settings.view.general</code> أو <code>users.view</code> أو <code>backup.view</code>.</div>
           <div>عدد الصلاحيات الممنوحة حاليًا: <strong>{permissions.length}</strong></div>
           {grantedPermissionsPreview.length > 0 ? (
             <div className="mt-1 break-all">{grantedPermissionsPreview.join(' | ')}</div>
@@ -151,25 +151,58 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
         <h1 className="text-3xl font-black text-slate-900">الإعدادات العالمية</h1>
         <p className="mt-2 text-sm text-slate-500">لوحة إعدادات موحدة تغطي التهيئة العامة، الأقسام ووحدات القياس، قواعد التفريغ، الصلاحيات، النسخ الاحتياطية، التدقيق، والطباعة.</p>
       </div>
-      <div className="flex flex-wrap gap-2 rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
+      <div
+        role="tablist"
+        aria-label="أقسام الإعدادات"
+        className="flex flex-wrap gap-2 rounded-3xl border border-slate-200 bg-white p-3 shadow-sm"
+      >
         {visibleTabs.map((tab) => {
           const Icon = tab.icon;
           const active = tab.key === resolvedActiveTab;
           return (
             <button
               key={tab.key}
+              type="button"
+              role="tab"
+              id={`settings-tab-${tab.key}`}
+              aria-selected={active}
+              aria-controls={`settings-panel-${tab.key}`}
+              // Roving tabindex: the strip is one stop in the tab order, and the
+              // arrow keys move within it. Without this, ten buttons are ten tab
+              // stops for something that is conceptually one control.
+              tabIndex={active ? 0 : -1}
+              onKeyDown={(event) => {
+                if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+                event.preventDefault();
+                const index = visibleTabs.findIndex((entry) => entry.key === tab.key);
+                const nextIndex =
+                  event.key === 'ArrowRight'
+                    ? (index + 1) % visibleTabs.length
+                    : (index - 1 + visibleTabs.length) % visibleTabs.length;
+                const next = visibleTabs[nextIndex];
+                if (!next) return;
+                setActiveTab(next.key);
+                document.getElementById(`settings-tab-${next.key}`)?.focus();
+              }}
               onClick={() => setActiveTab(tab.key)}
               className={`inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold transition ${active ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
             >
-              <Icon size={16} />
+              <Icon size={16} aria-hidden="true" />
               {tab.label}
             </button>
           );
         })}
       </div>
-      <Suspense fallback={<div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">جاري تحميل تبويب الإعدادات...</div>}>
+      <div
+        role="tabpanel"
+        id={`settings-panel-${resolvedActiveTab}`}
+        aria-labelledby={`settings-tab-${resolvedActiveTab}`}
+        tabIndex={0}
+      >
+        <Suspense fallback={<div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">جاري تحميل تبويب الإعدادات...</div>}>
         {renderTab()}
       </Suspense>
+      </div>
     </div>
   );
 };
