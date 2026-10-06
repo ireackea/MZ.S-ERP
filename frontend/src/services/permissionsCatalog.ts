@@ -56,7 +56,12 @@ export const PERMISSIONS_CATALOG: PermissionGroup[] = [
       { id: 'items.archive', module: 'items', action: 'archive', label: 'أرشفة الأصناف', description: 'أرشفة صنف مع الاحتفاظ بسجله.', route: 'POST /items/archive' },
       { id: 'items.restore', module: 'items', action: 'restore', label: 'استعادة الأصناف المؤرشفة', description: 'إرجاع صنف مؤرشف إلى الحالة النشطة.', route: 'POST /items/restore' },
       { id: 'items.generate_codes', module: 'items', action: 'generate_codes', label: 'توليد باركود/أكواد', description: 'توليد أكواد الصنف.', route: 'POST /items/generate-codes', apiOnly: true },
-      { id: 'items.import', module: 'items', action: 'import', label: 'استيراد الأصناف (Excel/CSV)', description: 'استيراد أصناف من ملف Excel.', route: 'POST /items/import-excel', apiOnly: true },
+      { id: 'items.import', module: 'items', action: 'import', label: 'استيراد الأصناف (Excel/CSV)', description: 'استيراد أصناف من ملف Excel.', route: 'POST /items/import-excel, POST /items/import-excel/validate' },
+      // Mirrors the backend split: a separate id, because taking rows back out is not
+      // the same decision as putting them in. An `apiOnly` flag was removed from
+      // `items.import` in the same wave — the studio has a visible import button, and a
+      // permission marked "API only" is a permission that shows a button it forbids.
+      { id: 'items.import.revert', module: 'items', action: 'import.revert', label: 'التراجع عن دفعة استيراد', description: 'إرجاع دفعة استيراد كاملة إلى ما قبلها، ما لم تكن الأصناف قد تحرّكت.', route: 'POST /items/import-batches/:publicId/revert' },
       { id: 'items.upload', module: 'items', action: 'upload', label: 'رفع مرفقات الأصناف', description: 'رفع صور وملفات مرفقة بالصنف.', route: 'POST /items/:publicId/upload-image, POST /items/:publicId/upload-file', apiOnly: true },
     ],
   },
@@ -157,6 +162,7 @@ export const PERMISSIONS_CATALOG: PermissionGroup[] = [
       { id: 'backup.schedule', module: 'backup', action: 'schedule', label: 'إدارة جدولة النسخ', description: 'ضبط جدولة النسخ الاحتياطي.', route: 'POST /backup/schedule' },
       { id: 'backup.download', module: 'backup', action: 'download', label: 'تنزيل نسخة احتياطية', description: 'تنزيل ملف النسخة الاحتياطية.', route: 'GET /backup/download/:id' },
       { id: 'backup.delete', module: 'backup', action: 'delete', label: 'حذف نسخة احتياطية', description: 'حذف نسخة احتياطية.', route: 'DELETE /backup/:id' },
+      { id: 'backup.import', module: 'backup', action: 'import', label: 'استيراد نسخة احتياطية', description: 'إعادة ملف نسخة احتياطية من الخارج إلى القائمة ليصبح قابلاً للاستعادة.', route: 'POST /backup/import' },
     ],
   },
   {

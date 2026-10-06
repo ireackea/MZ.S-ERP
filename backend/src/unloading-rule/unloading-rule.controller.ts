@@ -38,6 +38,12 @@ export class UnloadingRuleController {
     return this.unloadingRuleService.getUsageCounts();
   }
 
+  // This route carried no gate, so the fail-closed refusal in `RbacGuard` answered
+  // it with 403 before the handler ran — and the permission filtering the handler
+  // does below never got the chance to apply. It is `@AllowAuthenticated()` because
+  // that filtering is the design: any signed-in user reads the active rules, and only
+  // `settings.view.general` / `settings.update.system` also see the retired ones.
+  @AllowAuthenticated()
   @Get()
   async findAll(@Req() req: any) {
     const permissions = req.user?.permissions;

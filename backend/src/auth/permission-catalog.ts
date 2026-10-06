@@ -69,7 +69,13 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
   { id: 'items.archive', module: 'items', action: 'archive', label: 'أرشفة الأصناف', description: 'أرشفة صنف مع الاحتفاظ بسجله.', route: 'POST /items/archive' },
   { id: 'items.restore', module: 'items', action: 'restore', label: 'استعادة الأصناف المؤرشفة', description: 'إرجاع صنف مؤرشف إلى الحالة النشطة.', route: 'POST /items/restore' },
   { id: 'items.generate_codes', module: 'items', action: 'generate_codes', label: 'توليد باركود/أكواد', description: 'توليد أكواد الصنف.', route: 'POST /items/generate-codes', apiOnly: true },
-  { id: 'items.import', module: 'items', action: 'import', label: 'استيراد الأصناف (Excel/CSV)', description: 'استيراد أصناف من ملف Excel.', route: 'POST /items/import-excel', apiOnly: true },
+  { id: 'items.import', module: 'items', action: 'import', label: 'استيراد الأصناف (Excel/CSV)', description: 'استيراد أصناف من ملف Excel.', route: 'POST /items/import-excel, POST /items/import-excel/validate' },
+  // A separate id, not part of items.import, because the two are not the same
+  // decision. Importing adds rows; reverting removes rows another person is now
+  // working from, and it is refused outright once anything has moved against them.
+  // Folding it into items.* would hand every importer the ability to undo, and
+  // `items.*` is exactly the grant Admin already holds.
+  { id: 'items.import.revert', module: 'items', action: 'import.revert', label: 'التراجع عن دفعة استيراد', description: 'إرجاع دفعة استيراد كاملة إلى ما قبلها، ما لم تكن الأصناف قد تحرّكت.', route: 'POST /items/import-batches/:publicId/revert' },
   { id: 'items.upload', module: 'items', action: 'upload', label: 'رفع مرفقات الأصناف', description: 'رفع صور وملفات مرفقة بالصنف.', route: 'POST /items/:publicId/upload-image, POST /items/:publicId/upload-file', apiOnly: true },
 
   // ── transactions ─────────────────────────────────────────────────────────
@@ -125,6 +131,7 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
   { id: 'backup.schedule', module: 'backup', action: 'schedule', label: 'إدارة جدولة النسخ', description: 'ضبط جدولة النسخ الاحتياطي.', route: 'POST /backup/schedule' },
   { id: 'backup.download', module: 'backup', action: 'download', label: 'تنزيل نسخة احتياطية', description: 'تنزيل ملف النسخة الاحتياطية.', route: 'GET /backup/download/:id' },
   { id: 'backup.delete', module: 'backup', action: 'delete', label: 'حذف نسخة احتياطية', description: 'حذف نسخة احتياطية.', route: 'DELETE /backup/:id' },
+  { id: 'backup.import', module: 'backup', action: 'import', label: 'استيراد نسخة احتياطية', description: 'إعادة ملف نسخة احتياطية من الخارج إلى القائمة ليصبح قابلاً للاستعادة.', route: 'POST /backup/import' },
 
   // ── settings ─────────────────────────────────────────────────────────────
   { id: 'settings.view.general', module: 'settings', action: 'view', label: 'عرض الإعدادات العامة', description: 'قراءة البيانات المرجعية وقواعد التفريغ.', route: 'GET /reference-data, GET /unloading-rules' },

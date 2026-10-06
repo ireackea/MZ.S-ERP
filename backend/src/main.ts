@@ -163,7 +163,16 @@ async function bootstrap() {
     routeCounts: new Map<string, number>(),
   };
 
-  expressApp.set('trust proxy', 1);
+  // FC-SEC-008 — the hop count is configuration, not a constant. It was hardcoded
+  // to 1 while the default stack publishes port 3001 straight to the host with
+  // nothing in front of it, which told Express to believe every X-Forwarded-For
+  // it received. It has to agree with extractClientIp's TRUSTED_PROXY_HOPS, or
+  // `req.ip` and the rate-limit key disagree about who the caller is.
+  const trustedProxyHops = (() => {
+    const configured = Number.parseInt(String(process.env.TRUSTED_PROXY_HOPS ?? '0').trim(), 10);
+    return Number.isFinite(configured) && configured > 0 ? Math.min(configured, 10) : 0;
+  })();
+  expressApp.set('trust proxy', trustedProxyHops);
   
   // SECURITY FIX: 2026-03-28 - Add authentication to /metrics endpoint
   const metricsAuthToken = String(process.env.METRICS_AUTH_TOKEN || '').trim();
@@ -246,8 +255,15 @@ async function bootstrap() {
     next();
   });
 
-  app.use(json({ limit: '10mb' }));
-  app.use(urlencoded({ extended: true, limit: '10mb' }));
+  // FC-ITEM-IMPORT — the body parsers are registered *after* the rate limiter
+  // below, not here. They used to run first, which meant every rejected request
+  // still cost a full body read, a JSON.parse, and class-transformer
+  // instantiation of up to 15,000 nested DTO objects before the limiter decided to
+  // answer 429. Limiting after the expensive part is not limiting. The limit is
+  // also configurable now so it can be kept in step with MAX_BULK_IMPORT_ROWS and
+  // with `client_max_body_size` in the nginx configs, which are two more places
+  // that decide whether a large import arrives at all.
+  const jsonBodyLimit = String(process.env.JSON_BODY_LIMIT || '10mb').trim();
 
   const allowedOrigins = getAllowedOrigins();
   app.enableCors({
@@ -279,7 +295,13 @@ async function bootstrap() {
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
 
+  // Deliberately after CORS: a 429 must carry the CORS headers, or the browser
+  // reports a CORS failure and the operator never learns the request was refused.
+  // Deliberately before the body parsers: see the note at jsonBodyLimit above.
   app.use(globalRateLimiter);
+
+  app.use(json({ limit: jsonBodyLimit }));
+  app.use(urlencoded({ extended: true, limit: jsonBodyLimit }));
 
   app.useGlobalPipes(
     new ValidationPipe({

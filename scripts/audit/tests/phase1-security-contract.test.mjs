@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, globSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,6 +12,78 @@ test('RBAC denies protected routes without authorization metadata', () => {
   assert.match(guard, /ALLOW_AUTHENTICATED_METADATA_KEY/);
   assert.match(guard, /Route authorization metadata is required/);
   assert.doesNotMatch(guard, /if \(!requiredPermissions\.length && !requiredRoles\.length\) return true/);
+});
+
+test('every route in a guarded controller carries a gate', () => {
+  // The guard above is fail-closed, which is why `GET /audit/logs/export` was
+  // unreachable rather than open: it was the one route in that controller with no
+  // `@Permissions`, and the failure surfaced as a 403 in an e2e test long after the
+  // controller was written. Fail-closed is the correct default; it is not a
+  // substitute for every route naming what it requires, because the symptom is a
+  // dead endpoint rather than an obvious hole.
+  //
+  // Parsed rather than grepped. A count comparison — "the file mentions
+  // @Permissions more often than @Get" — passes as soon as one route is gated and
+  // cannot tell which one is not, and the controller in question had five gated
+  // routes and one ungated.
+  const isDecorator = (line) => /^\s*@/.test(line);
+  const isFiller = (line) => /^\s*$/.test(line) || /^\s*(\/\/|\/\*|\*)/.test(line);
+
+  /** Every decorator attached to the member declared at `index`. */
+  const decoratorsAround = (lines, index) => {
+    const block = [];
+    // Downwards: `@Get()` is frequently followed by `@Permissions(...)`, so the gate
+    // is not always above the route. Only the first non-decorator, non-comment line
+    // ends the block, which is the method signature.
+    for (let i = index + 1; i < lines.length; i += 1) {
+      if (isDecorator(lines[i])) block.push(lines[i]);
+      else if (!isFiller(lines[i])) break;
+    }
+    // Upwards: over the decorator block and the comments that document it, stopping
+    // at the previous member's signature.
+    for (let i = index - 1; i >= 0; i -= 1) {
+      if (isDecorator(lines[i])) block.push(lines[i]);
+      else if (!isFiller(lines[i])) break;
+    }
+    return block.join('\n');
+  };
+
+  const controllers = globSync(resolve(root, 'backend/src/**/*.controller.ts'));
+  assert.ok(controllers.length > 10, 'the controllers must actually be found');
+
+  const ungated = [];
+  for (const file of controllers) {
+    const source = readFileSync(file, 'utf8');
+    // Only `RbacGuard` enforces the metadata requirement. A controller guarded by
+    // something else — `OptionalJwtAuthGuard` on the bootstrap payload, for one — is
+    // a deliberate surface, and a route there is not missing a gate.
+    const classDecorators = source.slice(0, source.search(/\nexport class/) + 1);
+    if (!/@UseGuards\([^)]*RbacGuard/.test(classDecorators)) continue;
+
+    const lines = source.split(/\r?\n/);
+    lines.forEach((line, index) => {
+      const route = /^\s*@(Get|Post|Put|Patch|Delete)\(/.exec(line);
+      if (!route) return;
+
+      const block = decoratorsAround(lines, index);
+      const gated =
+        /@Permissions\(/.test(block) ||
+        /@Roles\(/.test(block) ||
+        /@AllowAuthenticated\(/.test(block) ||
+        /@Public\(/.test(block);
+
+      if (!gated) {
+        ungated.push(`${file.replace(`${root}/`, '')}:${index + 1}  ${route[1].toUpperCase()}  ${line.trim()}`);
+      }
+    });
+  }
+
+  assert.deepEqual(
+    ungated,
+    [],
+    'a route with no gate is refused at runtime by the fail-closed guard, which makes the ' +
+      'endpoint dead rather than obvious. Name what it requires:\n' + ungated.join('\n'),
+  );
 });
 
 test('FC-SEC-013 — role definition is SuperAdmin-only, role assignment is permission-gated', () => {

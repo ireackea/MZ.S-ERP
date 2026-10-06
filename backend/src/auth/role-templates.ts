@@ -47,6 +47,13 @@ const RAW_DEFAULT_ROLES: DefaultRoleTemplate[] = [
       'items.view',
       'items.create',
       'items.update',
+      // Importing is part of running a catalogue, so a Manager has it. Note what is
+      // NOT here: `items.import.revert`. Taking rows back out is a different
+      // decision from putting them in — it removes work other people are reading, and
+      // it is refused outright once anything has moved against those rows. A role
+      // that grants the import and not the undo is the shape that makes the undo
+      // deliberate instead of routine.
+      'items.import',
       'formulation.view',
       'opening-balances.view',
       'partners.view',
