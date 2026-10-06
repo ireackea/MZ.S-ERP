@@ -102,6 +102,20 @@ export interface Item {
   waterUsagePerUnit?: number;
   sustainabilityRating?: 'A' | 'B' | 'C' | 'D';
   warehouseId?: DataScope;
+  /**
+   * Whether the item has been retired.
+   *
+   * Absent from this type while the server has sent it all along — the DTO carried
+   * `isArchived`, `archivedAt` and `archivedBy`, and the list endpoint returns them,
+   * but the type did not. So the import studio, which is handed active *and* archived
+   * items to check for duplicates, had to treat them as indistinguishable: an archived
+   * item's code was reported as a live conflict against something the operator cannot
+   * see on screen. A type that omits a field the wire carries does not make the field
+   * absent — it makes every read of it a lie the compiler cannot catch.
+   */
+  isArchived?: boolean;
+  archivedAt?: string;
+  archivedBy?: string;
 }
 
 /**

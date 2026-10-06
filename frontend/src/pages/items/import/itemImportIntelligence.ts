@@ -1,3 +1,4 @@
+import { nonImportableFields } from './import-fields';
 import type { ExcelImportRow, ExcelImportColumnMatch } from '@services/itemsService';
 import type { Item } from '../../../types';
 
@@ -7,13 +8,23 @@ export type ImportIssueSeverity = 'error' | 'warning' | 'info';
 
 export type ImportRowIssue = {
   severity: ImportIssueSeverity;
-  field: keyof ExcelImportRow | 'row' | 'duplicate';
+  /**
+   * Which field the issue is about.
+   *
+   * `'server'` is not a column. It marks a message that came back from the import
+   * endpoint after the operator pressed the button — the row passed every local rule
+   * and the server still refused it, usually for a reason only the catalogue knows.
+   * Without a name for that channel the studio could not tell the operator's own
+   * pre-flight warnings apart from the authoritative answer, and would render the
+   * second as if the first had been right all along.
+   */
+  field: keyof ExcelImportRow | 'row' | 'duplicate' | 'server';
   message: string;
   value?: unknown;
 };
 
 export type ImportDuplicateMatch = {
-  type: 'existing-code' | 'existing-barcode' | 'file-code' | 'file-barcode' | 'fuzzy-name';
+  type: 'existing-code' | 'existing-barcode' | 'file-code' | 'file-barcode' | 'fuzzy-name' | 'archived-match';
   label: string;
   confidence: number;
   itemId?: string;
@@ -30,6 +41,13 @@ export type ImportPreviewRow = {
   qualityScore: number;
 };
 
+// FC-ITEM-IMPORT — one message, quoted from the field list that declares the field
+// un-importable. It used to be a range warning about a value nobody was going to
+// store, and a scored check that always passed.
+const NON_IMPORTABLE_STOCK_MESSAGE =
+  nonImportableFields().find((field) => field.field === 'currentStock')?.notImportableReason ??
+  'الرصيد الحالي لا يقبله الاستيراد.';
+
 export type ImportAnalysisSummary = {
   total: number;
   ready: number;
@@ -41,6 +59,14 @@ export type ImportAnalysisSummary = {
   averageQuality: number;
   mappedColumns: number;
   lowConfidenceColumns: number;
+  /**
+   * How many catalogue items the duplicate check actually saw.
+   *
+   * The check is only as good as its input, so the input is reported rather than
+   * assumed: a file analysed before the catalogue arrives is checked against nothing
+   * and will confidently call duplicates "no match". The studio reads this to say so.
+   */
+  catalogueSize: number;
 };
 
 export type ImportAnalysisResult = {
@@ -93,7 +119,11 @@ const getQualityScore = (row: ExcelImportRow) => {
     Boolean(String(row.description || row.englishName || '').trim()),
     numberOrUndefined(row.minLimit) != null,
     numberOrUndefined(row.maxLimit) != null,
-    numberOrUndefined(row.currentStock) != null,
+    // FC-ITEM-IMPORT — `currentStock` used to be one of the ten scored checks, and
+    // the check was `!= null` on a value the parser had already defaulted to `0`.
+    // So it always passed: the studio scored a row higher for carrying a stock
+    // figure the payload then dropped on the floor. Rewarding a field the import
+    // refuses teaches the operator to fill it in.
     row.packageWeight == null || Number(row.packageWeight) > 0,
   ];
   return Math.round((checks.filter(Boolean).length / checks.length) * 100);
@@ -129,11 +159,26 @@ export const analyzeItemImportRows = (params: {
     if (barcode) barcodeCounts.set(barcode, (barcodeCounts.get(barcode) || 0) + 1);
   });
 
+  // Indexed separately, like the server does.
+  //
+  // One index held both, so an archived item was reported to the operator as an
+  // "existing code" conflict — the row came back marked as a duplicate against a
+  // retired item, and since the studio's own list filters archived rows out by
+  // default, there was nothing on screen to match it against. The operator's only
+  // options were to skip a row that was actually fine, or to strip the code and
+  // create a second item that the server would then refuse anyway.
   const existingByCode = new Map<string, Item>();
   const existingByBarcode = new Map<string, Item>();
+  const archivedByCode = new Map<string, Item>();
+  const archivedByBarcode = new Map<string, Item>();
   params.existingItems.forEach((item) => {
     const code = normalizeKey(item.code);
     const barcode = normalizeKey(item.barcode);
+    if (item.isArchived) {
+      if (code) archivedByCode.set(code, item);
+      if (barcode) archivedByBarcode.set(barcode, item);
+      return;
+    }
     if (code) existingByCode.set(code, item);
     if (barcode) existingByBarcode.set(barcode, item);
   });
@@ -167,20 +212,30 @@ export const analyzeItemImportRows = (params: {
     pushRangeIssue(issues, 'maxLimit', 'الحد الأعلى', row.maxLimit);
     pushRangeIssue(issues, 'orderLimit', 'حد إعادة الطلب', row.orderLimit);
     pushRangeIssue(issues, 'packageWeight', 'وزن العبوة', row.packageWeight);
-    pushRangeIssue(issues, 'currentStock', 'الرصيد الحالي', row.currentStock);
+    // No range check for `currentStock`: the import does not accept it, so a figure
+    // in that column is not a value anybody is about to store. It is reported once,
+    // as information, below.
 
     const minLimit = numberOrUndefined(row.minLimit) ?? 0;
     const maxLimit = numberOrUndefined(row.maxLimit) ?? 1000;
     const orderLimit = numberOrUndefined(row.orderLimit);
-    const currentStock = numberOrUndefined(row.currentStock) ?? 0;
     if (minLimit > maxLimit) {
       issues.push({ severity: 'error', field: 'minLimit', message: 'الحد الأدنى أكبر من الحد الأعلى.' });
     }
     if (orderLimit != null && maxLimit > 0 && orderLimit > maxLimit) {
       issues.push({ severity: 'warning', field: 'orderLimit', message: 'حد إعادة الطلب أعلى من الحد الأعلى.' });
     }
-    if (maxLimit > 0 && currentStock > maxLimit * 2) {
-      issues.push({ severity: 'warning', field: 'currentStock', message: 'الرصيد الحالي أعلى بكثير من الحد الأعلى.' });
+    // FC-ITEM-IMPORT — said once, as information, and only when the operator
+    // actually put something in the column. It used to be a range *warning* about a
+    // value that was never going to be stored, and it was one of ten scored checks,
+    // so a file could be brought to 100% quality by filling in a figure the import
+    // would discard.
+    if (numberOrUndefined(row.currentStock) != null) {
+      issues.push({
+        severity: 'info',
+        field: 'currentStock',
+        message: NON_IMPORTABLE_STOCK_MESSAGE,
+      });
     }
     if (!row.code) issues.push({ severity: 'warning', field: 'code', message: 'الصنف بلا كود، وسيصعب تتبعه لاحقاً.' });
     if (!row.barcode) issues.push({ severity: 'info', field: 'barcode', message: 'يمكن إضافة باركود لتحسين المسح السريع.' });
@@ -203,19 +258,60 @@ export const analyzeItemImportRows = (params: {
       duplicates.push({ type: 'existing-barcode', label: `الباركود موجود في النظام: ${existingBarcode.name}`, confidence: 1, itemId: String(existingBarcode.id) });
     }
 
+    // An archived match is a *choice*, not a conflict.
+    //
+    // The item is out of the catalogue by decision, so the row is not blocked — but the
+    // operator has to be told, because the alternative is either reviving an item they
+    // meant to retire or creating a second one that shares its code. The row is
+    // pre-wired to revive, since the file they just chose is the most recent statement
+    // of intent, and the decision dropdown still lets them skip it instead.
+    const archivedCode = code ? archivedByCode.get(code) : undefined;
+    const archivedBarcode = barcode ? archivedByBarcode.get(barcode) : undefined;
+    const archivedMatch = archivedCode ?? archivedBarcode;
+    if (!existingCode && !existingBarcode && archivedMatch) {
+      duplicates.push({
+        type: 'archived-match',
+        label: `الكود/الباركود يخص صنفاً مؤرشفاً: ${archivedMatch.name} — سيُعاد تفعيله`,
+        confidence: 1,
+        itemId: String(archivedMatch.id),
+      });
+    }
+
     if (!existingCode && !existingBarcode && name) {
       const candidateName = normalizeComparable(`${name} ${category} ${unit}`);
-      const fuzzy = existingNameIndex
-        .map((entry) => ({ item: entry.item, confidence: scoreSimilarity(candidateName, entry.name) }))
-        .sort((left, right) => right.confidence - left.confidence)[0];
-      if (fuzzy && fuzzy.confidence >= 0.72) {
-        duplicates.push({ type: 'fuzzy-name', label: `تشابه محتمل مع: ${fuzzy.item.name}`, confidence: fuzzy.confidence, itemId: String(fuzzy.item.id) });
+      // Reduce, not map-then-sort.
+      //
+      // This used to build a scored array of the whole catalogue for every row and
+      // sort it to read the first element — a full sort, per row, for one number. With
+      // 400 imported rows against 900 catalogue items that is 400 sorts of 900
+      // entries, hundreds of thousands of comparisons, on the main thread, between the
+      // operator opening a file and being able to act on it. The sort bought nothing:
+      // only the maximum is ever read, and `>` is a valid reduction over the same set
+      // in one pass with no allocation.
+      //
+      // Ties keep the earlier catalogue entry, which is what the sort did too, so the
+      // reported match is unchanged.
+      let best: { item: Item; confidence: number } | null = null;
+      for (const entry of existingNameIndex) {
+        const confidence = scoreSimilarity(candidateName, entry.name);
+        if (best === null || confidence > best.confidence) {
+          best = { item: entry.item, confidence };
+        }
+      }
+      if (best && best.confidence >= 0.72) {
+        duplicates.push({ type: 'fuzzy-name', label: `تشابه محتمل مع: ${best.item.name}`, confidence: best.confidence, itemId: String(best.item.id) });
         issues.push({ severity: 'warning', field: 'duplicate', message: 'يوجد صنف مشابه بالاسم أو القسم، راجع القرار قبل الاستيراد.' });
       }
     }
 
     const hasErrors = issues.some((issue) => issue.severity === 'error');
-    const hasExactDuplicate = duplicates.some((duplicate) => duplicate.type !== 'fuzzy-name');
+    // `archived-match` is deliberately excluded from "exact duplicate". It *is* an
+    // exact match, but it must not disable the row: an archived code that blocked the
+    // import is the defect being fixed, and re-introducing the block on the client
+    // would leave the server and the studio disagreeing about the same file.
+    const hasExactDuplicate = duplicates.some(
+      (duplicate) => duplicate.type !== 'fuzzy-name' && duplicate.type !== 'archived-match',
+    );
     const hasWarnings = issues.some((issue) => issue.severity === 'warning') || duplicates.length > 0;
     const status: ImportRowStatus = hasErrors
       ? 'error'
@@ -228,7 +324,13 @@ export const analyzeItemImportRows = (params: {
     return {
       id: `${sourceRow}-${index}-${code || barcode || name || 'row'}`,
       sourceRow,
-      row: { ...row, sourceRow },
+      // The archived item's publicId travels with the row, which is what turns this
+      // into a reactivate-on-import rather than a second item wearing the same code.
+      row: {
+        ...row,
+        sourceRow,
+        ...(archivedMatch ? { publicId: String(archivedMatch.publicId ?? '') } : {}),
+      },
       issues,
       duplicates,
       status,
@@ -257,6 +359,15 @@ export const analyzeItemImportRows = (params: {
       averageQuality,
       mappedColumns,
       lowConfidenceColumns,
+      /**
+       * How many catalogue items the duplicate check actually saw.
+       *
+       * Reported rather than assumed, because the check is only as good as its input:
+       * a file loaded before the archived list arrives is checked against a partial
+       * catalogue and will confidently call items "no duplicate" that are. The studio
+       * uses this to say so rather than to look broken.
+       */
+      catalogueSize: existingNameIndex.length,
     },
   };
 };
@@ -298,3 +409,62 @@ export const buildImportIssueExportRows = (rows: ImportPreviewRow[]) => rows.fla
     })),
   ];
 });
+
+/**
+ * The outcome report: what the server did with each row, once it has answered.
+ *
+ * The review export answers "what did I decide before pressing the button". This one
+ * answers "what happened", which is the question an operator actually has afterwards —
+ * and after Wave 4 the studio stays open showing the refusals, so they are on screen
+ * for exactly as long as it takes to realise that scrolling back through them and
+ * writing them down by hand is the only way to fix the file.
+ *
+ * One row per refusal, not one per row, because a row with two refusals is two things
+ * to fix. A row that landed contributes one line with its outcome and no message, so
+ * the report is a complete account of the file rather than only its problems.
+ *
+ * The server's own message is written verbatim. Rewording it would make the report
+ * disagree with the row the operator is looking at, and the two are read side by side.
+ */
+export const buildImportOutcomeExportRows = (
+  rows: ImportPreviewRow[],
+  outcome: { results: Array<{ row: number; name: string; status: string }>; errors: Array<{ row: number; field: string; message: string; error?: string }> },
+) => {
+  const landed = new Map(outcome.results.map((entry) => [entry.row, entry]));
+  const serverErrors = new Map<number, Array<{ field: string; message: string }>>();
+  for (const error of outcome.errors) {
+    const list = serverErrors.get(error.row) ?? [];
+    list.push({ field: error.field, message: error.error || error.message });
+    serverErrors.set(error.row, list);
+  }
+
+  return rows.flatMap((entry) => {
+    const errors = serverErrors.get(entry.sourceRow) ?? [];
+    const common = {
+      row: entry.sourceRow,
+      name: entry.row.name || '',
+      code: entry.row.code || '',
+      barcode: entry.row.barcode || '',
+    };
+
+    if (errors.length > 0) {
+      return errors.map((error) => ({
+        ...common,
+        outcome: 'مرفوض',
+        field: error.field,
+        message: error.message,
+      }));
+    }
+
+    const result = landed.get(entry.sourceRow);
+    if (!result) {
+      return [{ ...common, outcome: 'لم يُنفَّذ', field: '', message: 'لم يذكره الخادم في النتيجة.' }];
+    }
+    return [{
+      ...common,
+      outcome: result.status === 'updated' ? 'محدَّث' : 'منشأ',
+      field: '',
+      message: '',
+    }];
+  });
+};

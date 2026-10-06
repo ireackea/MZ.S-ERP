@@ -14,6 +14,7 @@ import {
   parseExcelFileWithInsights,
   uploadItemAttachment,
   type ExcelImportParseResult,
+  type ExcelImportResult,
   type ExcelImportRow,
 } from '@services/itemsService';
 import ItemsSmartCatalog from './ItemsSmartCatalog';
@@ -34,6 +35,7 @@ import {
   type PendingActionState,
   type StatusFilter,
 } from './shared';
+import { IMPORT_FIELDS } from './import/import-fields';
 
 const ItemsPageContent: React.FC = () => {
   const { data: session } = useSession();
@@ -433,22 +435,36 @@ const ItemsPageContent: React.FC = () => {
       return;
     }
 
+    // FC-ITEM-IMPORT — the exported columns are the field list, so the export is the
+    // template by construction.
+    //
+    // It used to be a hand-written object with Arabic keys, and it had drifted from
+    // the template in both directions: it had no `packageWeight` column at all, so
+    // an export-then-import round trip — which a spreadsheet-shaped product invites
+    // — zeroed every package weight, and it had a `الكمية الحالية` column that the
+    // template also offered and the server also refuses.
+    //
+    // The status column is kept, and is the one column that is not a field: it is a
+    // derived read, so it is labelled and it is *not* something the matcher will
+    // ever bind to. `exported` on the field list says which of the rest belong here.
     await exportRowsToExcel({
       fileName: `items-${showArchived ? 'archived' : 'active'}-${new Date().toISOString().slice(0, 10)}.xlsx`,
       sheetName: showArchived ? 'Archived Items' : 'Items',
-      rows: visibleItems.map((item) => ({
-        'كود الصنف': item.code || '',
-        الباركود: item.barcode || '',
-        'اسم الصنف': item.name,
-        'الاسم الإنجليزي': item.englishName || '',
-        الفئة: item.category,
-        الوحدة: item.unit,
-        'الكمية الحالية': n(item.currentStock, 0),
-        'الحد الأدنى': n(item.minLimit, 0),
-        'الحد الأعلى': n(item.maxLimit, 1000),
-        'حد إعادة الطلب': item.orderLimit == null ? '' : n(item.orderLimit, 0),
-        الحالة: getItemStatusMeta(item).label,
-      })),
+      rows: visibleItems.map((item) => {
+        const row: Record<string, string | number> = {};
+        for (const definition of IMPORT_FIELDS) {
+          if (!definition.exported) continue;
+          const value = item[definition.field as keyof Item];
+          if (value === null || value === undefined) {
+            row[definition.label] = '';
+            continue;
+          }
+          row[definition.label] = typeof value === 'number' ? n(value, 0) : String(value);
+        }
+        // Derived, read-only, and named so the matcher will not bind a column to it.
+        row['الحالة (للمراجعة فقط)'] = getItemStatusMeta(item).label;
+        return row;
+      }),
     });
 
     logUserActivity({ userId: actorId, userName: actorName, event: 'data_export', details: `تصدير Excel من صفحة الأصناف - ${visibleItems.length} سجل` });
@@ -539,23 +555,49 @@ const ItemsPageContent: React.FC = () => {
     }
   };
 
-  const handleConfirmImport = async (rowsToImport: ExcelImportRow[]) => {
-    if (!rowsToImport.length) return;
+  /**
+   * Runs the import and hands the result back to the studio, which stays open.
+   *
+   * It used to close the modal the instant the response arrived and *then* refresh —
+   * so the operator watched 400 rows of their file disappear, saw a green toast, and
+   * never found out which rows the server had refused. The refusals were joined into
+   * one toast string, which at 200 errors is a single line of text the toast layer
+   * truncates to nothing at all. The studio already has a table built to show exactly
+   * this, and it was being closed before the answer arrived.
+   *
+   * Now the studio owns the outcome. It marks the refused rows, offers the report for
+   * download, and only closes when the operator closes it.
+   */
+  const handleConfirmImport = async (
+    rowsToImport: ExcelImportRow[],
+    controls?: { signal?: AbortSignal; onProgress?: (percent: number) => void; idempotencyKey?: string },
+  ): Promise<ExcelImportResult | null> => {
+    if (!rowsToImport.length) return null;
 
     try {
       setIsImporting(true);
-      const result = await bulkImportFromExcel(rowsToImport);
-      toast.success(`تم تنفيذ الاستيراد: ${result.success} صف ناجح، ${result.failed} مرفوض`);
+      const result = await bulkImportFromExcel(rowsToImport, {
+        sourceFileName: importSourceFileName,
+        signal: controls?.signal,
+        onProgress: controls?.onProgress,
+        idempotencyKey: controls?.idempotencyKey,
+      });
 
       if (result.errors.length > 0) {
-        toast.warning(`أخطاء: ${result.errors.map((entry) => `صف ${entry.row}: ${entry.error}`).join(', ')}`);
+        // A count, not a list. The studio has the list, on screen, marked per row.
+        toast.warning(
+          `تم الاستيراد: ${result.success} ناجح${result.failed ? ` · ${result.failed} مرفوض` : ''}. راجع الصفوف المرفوضة في الاستوديو.`,
+        );
+      } else {
+        toast.success(`تم تنفيذ الاستيراد: ${result.success} صف ناجح`);
       }
 
-        closeImportModal();
       await refreshItemsPage();
       logUserActivity({ userId: actorId, userName: actorName, event: 'data_import', details: `استيراد ${result.success} صنف من Excel` });
+      return result;
     } catch (importError: any) {
       toast.error(importError?.message || 'فشل استيراد البيانات');
+      return null;
     } finally {
       setIsImporting(false);
     }
@@ -682,10 +724,19 @@ const ItemsPageContent: React.FC = () => {
         rows={importParseResult?.rows || []}
         sourceHeaders={importParseResult?.sourceHeaders || []}
         columnMatches={importParseResult?.columnMatches || []}
-        existingItems={items}
+        // Active *and* archived. Passing only the active list made every archived item
+        // invisible to the duplicate check, so a file full of items the operator had
+        // themselves retired in 2024 came back clean — the studio would import all of
+        // them, the server would accept them as new, and the catalogue would hold the
+        // same thing twice with one copy hidden from the list. The archived set is
+        // already loaded in this page, so this is a decision and not a new request.
+        existingItems={[...items, ...archivedItems]}
+        skippedEmptyRows={importParseResult?.skippedEmptyRows || 0}
+        headerRow={importParseResult?.headerRow || 1}
+        duplicateHeaders={importParseResult?.duplicateHeaders || []}
         isImporting={isImporting}
         onClose={closeImportModal}
-        onConfirm={(rowsToImport) => { void handleConfirmImport(rowsToImport); }}
+        onConfirm={handleConfirmImport}
       />
 
       <ItemsDialogs

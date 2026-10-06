@@ -1,7 +1,7 @@
 // ENTERPRISE FIX: Phase 5 Bulk Import + Barcode + Attachments + Audit Viewer - Archive Only - 2026-03-27
 // ENTERPRISE FIX: Phase 4 Audit Logging + Soft Delete Backend + Pagination - Archive Only - 2026-03-27
 // ENTERPRISE FIX: Legacy Migration Phase 5 - Final Stabilization & Production - 2026-02-27
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { createReadStream } from 'node:fs';
 import { unlink, stat, readFile } from 'node:fs/promises';
@@ -38,8 +38,33 @@ export interface PaginatedItemsResult {
   totalPages: number;
 }
 
-const MAX_BULK_IMPORT_ROWS = 15000;
-const BULK_IMPORT_BATCH_SIZE = 250;
+// FC-ITEM-IMPORT — the limits live in one module and are read from the
+// environment, because the row cap is part of a budget shared with the JSON body
+// limit and with `client_max_body_size` in both nginx configs. They were literals
+// here and in the DTO, and the two could drift with nothing to notice.
+import { MAX_BULK_IMPORT_ROWS, BULK_IMPORT_BATCH_SIZE } from './import-limits';
+import {
+  buildImportPlan,
+  describeImportMode,
+  fingerprintImportRows,
+  type ExistingKey,
+  type ImportMode,
+  type ImportRowInput,
+} from './import-batch';
+import { executeIdempotently } from '../common/idempotency';
+
+/** The one fold the folded unique indexes use. Anything else is a different key. */
+const foldImportKey = (value: unknown): string => String(value ?? '').trim().toLowerCase();
+// The row rules, shared with create, update and sync so the four write paths
+// cannot drift apart. Pure functions over plain data, unit-tested without a
+// database in item-normalize.test.ts.
+import {
+  describeOverlong,
+  foldItemKey,
+  normalizeItemRow,
+  type NormalizedItemRow,
+} from './item-normalize';
+
 
 @Injectable()
 export class ItemService {
@@ -49,19 +74,95 @@ export class ItemService {
     private readonly auditService: AuditService,
   ) {}
 
+  /**
+   * The single write shape for every item field, shared by create, update and sync.
+   *
+   * Built from `normalizeItemRow` so the length limits, the whitespace handling and
+   * the category fallback are the same ones the Excel import applies. It used to
+   * be a hand-written object with its own copy of the trim rules, which is how the
+   * two paths came to disagree: `category` was mapped to `null` here while `Item.
+   * category` is `String @default("غير مصنف")`, so `{"category": ""}` passed the DTO
+   * and then raised a Prisma validation error that `PrismaExceptionFilter` does not
+   * catch — a 500 for a typo in a form field, a few lines away from a `create` that
+   * handled it correctly.
+   *
+   * Only keys the caller actually supplied appear in the result, because `update`
+   * merges this into an existing row and an absent key must stay absent rather than
+   * becoming a default.
+   */
   private itemWriteData(dto: CreateItemDto | UpdateItemDto) {
-    return {
-      code: dto.code === undefined ? undefined : dto.code?.trim() || null,
-      barcode: dto.barcode === undefined ? undefined : dto.barcode?.trim() || null,
-      name: dto.name.trim(),
-      unit: dto.unit?.trim() || null,
-      category: dto.category?.trim() || null,
-      minLimit: dto.minLimit,
-      maxLimit: dto.maxLimit,
-      orderLimit: dto.orderLimit,
-      packageWeight: dto.packageWeight,
-      description: dto.description?.trim() || null,
+    const { row, issues, overlong } = normalizeItemRow(dto as unknown as Record<string, unknown>);
+
+    // The single-item routes answer with the first refusal, because there is one
+    // row and one form: the operator gets a message naming the field and can fix it
+    // in place. The import collects all of them instead, because there are
+    // fifteen thousand.
+    const first = issues[0];
+    if (first) {
+      throw new BadRequestException(first.message);
+    }
+    for (const field of overlong) {
+      throw new BadRequestException(describeOverlong(field));
+    }
+
+    const data: Record<string, unknown> = {};
+    if (dto.name !== undefined) data.name = row.name;
+    if (dto.code !== undefined) data.code = row.code;
+    if (dto.barcode !== undefined) data.barcode = row.barcode;
+    if (dto.unit !== undefined) data.unit = row.unit;
+    if (dto.category !== undefined) data.category = row.category;
+    if (dto.minLimit !== undefined) data.minLimit = row.minLimit;
+    if (dto.maxLimit !== undefined) data.maxLimit = row.maxLimit;
+    if (dto.orderLimit !== undefined) data.orderLimit = row.orderLimit;
+    if (dto.packageWeight !== undefined) data.packageWeight = row.packageWeight;
+    if (dto.description !== undefined) data.description = row.description;
+    // Present since migration 20260929110000 and absent from this list until then,
+    // which is why an English name typed into the studio was accepted, normalised,
+    // audited and then discarded. `create`, `update` and `syncItems` all route
+    // through here, so this one line is the whole fix for every one of them.
+    if (dto.englishName !== undefined) data.englishName = row.englishName;
+    return data;
+  }
+
+
+  /**
+   * The reorder threshold pair, checked on the values that will actually be stored.
+   *
+   * `create` compared only the two numbers in its own payload, so
+   * `{ name, minLimit: 5000 }` wrote `minLimit=5000, maxLimit=1000` — the exact
+   * state the import rejects. `update` compared the incoming pair only, so raising
+   * one bound on a row whose other bound was lower produced an inverted pair too.
+   * `syncItems` checked nothing. The status filter and the dashboard threshold both
+   * read these columns, so an inverted pair is not cosmetic.
+   *
+   * This stays a separate method rather than folding into `itemWriteData` for one
+   * reason: `syncItems` upserts, and the value that will be stored for a half-
+   * present pair is the stored one, which only the database knows. Everything else
+   * about the pair is now checked by `normalizeItemRow` as well, so this is the
+   * narrower check on top, not the only one.
+   *
+   * `Decimal` is the reason for the coercion: these are `Decimal` columns, so a
+   * value read back from the database and a value from a DTO have different types,
+   * and comparing them directly type-errors.
+   */
+  private assertLimitOrder(
+    minLimit: number | Prisma.Decimal | null | undefined,
+    maxLimit: number | Prisma.Decimal | null | undefined,
+  ): void {
+    const toNumber = (value: number | Prisma.Decimal | null | undefined): number | null => {
+      if (value == null) return null;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
     };
+
+    const low = toNumber(minLimit) ?? 0;
+    const high = toNumber(maxLimit) ?? 1000;
+    if (low > high) {
+
+      throw new BadRequestException(
+        'الحد الأدنى لا يمكن أن يتجاوز الحد الأعلى.',
+      );
+    }
   }
 
   private responseSelect() {
@@ -113,13 +214,40 @@ export class ItemService {
     };
   }
 
-  private emitItemsChanged(action: string, count: number) {
+  /**
+   * The one place an item write announces itself.
+   *
+   * `emitSync` is synchronous and has no try/catch of its own: it early-returns
+   * when there is no gateway and otherwise calls `gateway.broadcastSync` directly
+   * (realtime.service.ts:39-50). A throw here therefore propagated into the
+   * request and answered 500 for work that had already been committed. On the
+   * import that produced the worst version of this bug: the rows were inserted,
+   * the client was told the import failed, the list was not refreshed because the
+   * refresh sits inside the same try, and no other session was told.
+   *
+   * The guard belongs here rather than at each call site. Six of the seven write
+   * paths were hand-rolling the identical five-element scope array, so a guard
+   * added to one of them would have protected one route out of seven — which is
+   * how `reorderItems` ended up emitting from inside its transaction while
+   * `ItemOrderProfileService` emits nothing at all despite injecting this service.
+   */
+  private emitItemsChanged(action: string, count: number, extraMeta?: Record<string, unknown>) {
     if (count <= 0) return;
-    this.realtimeService.emitSync(
-      ['items', 'dashboard', 'operations', 'formulation', 'stocktaking'],
-      `items.${action}`,
-      { meta: { count } },
-    );
+    try {
+      this.realtimeService.emitSync(
+        ['items', 'dashboard', 'operations', 'formulation', 'stocktaking'],
+        `items.${action}`,
+        { meta: { count, ...(extraMeta || {}) } },
+      );
+    } catch (error) {
+      // Loudly, and without failing the request. The write is already committed;
+      // the only consequence of a lost announcement is that other sessions pick
+      // the change up on their next load instead of immediately.
+      console.error(
+        `[items] committed a change but the realtime announcement failed (${action}, count=${count}):`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
   }
 
   /**
@@ -145,30 +273,31 @@ export class ItemService {
   async create(dto: CreateItemDto, userId?: string, actorUsername?: string) {
     const publicId = dto.publicId.trim();
     if (!publicId) throw new BadRequestException('publicId is required');
-    if (dto.minLimit != null && dto.maxLimit != null && dto.maxLimit < dto.minLimit) {
-      throw new BadRequestException('maxLimit must be greater than or equal to minLimit');
-    }
+
+    // FC-ITEM-IMPORT — this built its own copy of the field rules, which is the copy
+    // that mapped an empty category to `null` against a NOT NULL column while
+    // `update` handled the same input correctly. `itemWriteData` is now the one
+    // place, and it validates as it normalises: the limits, the length bounds, the
+    // formula prefix and the reorder-threshold pair all come from
+    // `normalizeItemRow`.
+    const fields = this.itemWriteData(dto);
 
     const created = await this.prisma.item.create({
       data: {
+        ...fields,
         publicId,
         // A new item joins the end of the catalog, in the order it was added.
         sortOrder: await this.nextSortOrder(),
-        code: dto.code?.trim() || null,
-        codeGenerated: dto.code?.trim() ? false : undefined,
-        barcode: dto.barcode?.trim() || null,
-        name: dto.name.trim(),
-        unit: dto.unit?.trim() || null,
-        category: dto.category?.trim() || 'غير مصنف',
-        minLimit: dto.minLimit ?? 0,
-        maxLimit: dto.maxLimit ?? 1000,
-        orderLimit: dto.orderLimit,
-        packageWeight: dto.packageWeight,
-        description: dto.description?.trim() || null,
+        name: String(fields.name),
+        // `codeGenerated` is what tells `generateMissingCodes` that this row is not
+        // waiting for one. It must be set explicitly when a code was supplied and
+        // left alone when none was, so a generated row is still a candidate.
+        ...(dto.code?.trim() ? { codeGenerated: false } : {}),
         createdBy: userId || undefined,
       },
       select: this.responseSelect(),
     });
+
 
     await this.auditService.logItemAction(
       userId || 'system',
@@ -189,21 +318,31 @@ export class ItemService {
   }
 
   async update(publicId: string, dto: UpdateItemDto, userId?: string, actorUsername?: string) {
-    if (dto.minLimit != null && dto.maxLimit != null && dto.maxLimit < dto.minLimit) {
-      throw new BadRequestException('maxLimit must be greater than or equal to minLimit');
-    }
     const existing = await this.prisma.item.findUnique({ where: { publicId } });
     if (!existing) throw new NotFoundException(`Item not found: ${publicId}`);
+
+    // Against the row as it will be, not against the fragment in this payload. A
+    // partial update that raised one bound past the other used to be accepted, and
+    // the stored pair was then inverted.
+    this.assertLimitOrder(
+      dto.minLimit ?? existing.minLimit ?? 0,
+      dto.maxLimit ?? existing.maxLimit ?? 1000,
+    );
 
     const updated = await this.prisma.item.update({
       where: { publicId },
       data: {
         ...this.itemWriteData(dto),
-        codeGenerated: dto.code === undefined ? undefined : dto.code?.trim() ? false : undefined,
+        // `codeGenerated` has to be cleared when the code is cleared. Setting the
+        // code to an empty string writes NULL, and leaving the flag true produced a
+        // row that claimed to carry a generated code while holding none — so
+        // `generateMissingCodes` would skip it and nothing else would notice.
+        codeGenerated: dto.code === undefined ? undefined : dto.code?.trim() ? false : dto.code !== undefined ? false : undefined,
         updatedBy: userId || undefined,
       },
       select: this.responseSelect(),
     });
+
 
     await this.auditService.logItemAction(
       userId || 'system',
@@ -260,7 +399,11 @@ export class ItemService {
 
     const total = await this.prisma.item.count();
 
-    return this.prisma.$transaction(async (tx) => {
+    // Captured out of the transaction so the announcement after it can report what
+    // actually changed, and so a rollback cannot leave a stale figure behind.
+    let announcedCount = 0;
+
+    const outcome = await this.prisma.$transaction(async (tx) => {
       const found = await tx.item.findMany({
         where: { publicId: { in: orderedPublicIds } },
         select: { publicId: true, sortOrder: true },
@@ -323,6 +466,8 @@ export class ItemService {
         (row, index) => row.sortOrder !== orderedPublicIds.indexOf(row.publicId),
       ).length;
 
+      announcedCount = moved || orderedPublicIds.length;
+
       await tx.auditLog.create({
         data: buildAuditRow({
           actorId: actor.userId ?? 'system',
@@ -347,7 +492,6 @@ export class ItemService {
         }),
       });
 
-      this.emitItemsChanged('reordered', moved || orderedPublicIds.length);
       return {
         success: true,
         ranked: orderedPublicIds.length,
@@ -356,6 +500,19 @@ export class ItemService {
         catalogSize: total,
       };
     });
+
+    // FC-ITEM-IMPORT — announced after the transaction resolves, not inside it.
+    //
+    // It used to be the first statement before the `return` inside the callback,
+    // between the two UPDATEs and the audit write. `emitSync` broadcasts
+    // synchronously, so every connected client was told to refetch while the
+    // transaction could still roll back — and on a rollback nothing corrected it.
+    // The clients had already read the old order, announced the new one, and had
+    // no second event to reconcile against. Transaction.service.ts:1019-1027
+    // carries the rule with a comment explaining why it emits after the commit.
+    this.emitItemsChanged('reordered', announcedCount);
+
+    return outcome;
   }
 
   async syncItems(items: SyncItemDto[], userId?: string, actorUsername?: string) {
@@ -380,8 +537,27 @@ export class ItemService {
       // and let two rows end up tied later.
       const existing = await this.prisma.item.findUnique({
         where: { publicId: item.publicId },
-        select: { id: true },
+        select: { id: true, minLimit: true, maxLimit: true },
       });
+
+      // FC-ITEM-IMPORT — the same rules the Excel import and the edit dialog apply,
+      // applied here too. This path had no length bound, no formula guard and no
+      // reorder-threshold check, and it is how the desktop client pushes a whole
+      // catalogue, so all three were reachable from it. `existing` carries the
+      // stored bounds because a half-present pair is validated against what will
+      // actually be written, not against the fragment that arrived.
+      const normalized = normalizeItemRow(item as unknown as Record<string, unknown>, {
+        requireCategory: true,
+      });
+      const blocking = normalized.issues[0];
+      if (blocking) {
+        throw new BadRequestException(`${normalized.overlong.length ? describeOverlong(normalized.overlong[0]) : blocking.message}`);
+      }
+      this.assertLimitOrder(
+        normalized.row.minLimit ?? existing?.minLimit ?? 0,
+        normalized.row.maxLimit ?? existing?.maxLimit ?? 1000,
+      );
+
 
       const result = await this.prisma.item.upsert({
         where: { publicId: item.publicId },
@@ -440,13 +616,7 @@ export class ItemService {
       );
     }
 
-    if (results.length > 0) {
-      this.realtimeService.emitSync(
-        ['items', 'dashboard', 'operations', 'formulation', 'stocktaking'],
-        'items.synced',
-        { meta: { count: results.length } },
-      );
-    }
+    this.emitItemsChanged('synced', results.length);
     return { synced: results.length, total: items.length };
   }
 
@@ -458,12 +628,24 @@ export class ItemService {
     };
 
     if (search) {
+      // Barcode was not in this list before Wave 5, which made a barcode lookup — the
+      // one search an operator performs with a scanner, at speed, in a warehouse —
+      // go through a name-and-code substring search that a barcode almost never
+      // matches, and miss every barcode with a leading zero.
+      //
+      // It is matched exactly rather than by `contains`, and that is the point. A
+      // substring search on a barcode is actively wrong: code "123" would match
+      // "12345" and "91234", so scanning a barcode that does not exist returns a
+      // confident wrong item. Exact first, substring as the fallback for a
+      // hand-typed fragment.
       where.OR = [
+        { barcode: { equals: search, mode: 'insensitive' } },
         { name: { contains: search, mode: 'insensitive' } },
         { code: { contains: search, mode: 'insensitive' } },
         { category: { contains: search, mode: 'insensitive' } },
       ];
     }
+
 
     if (category && category !== 'all') {
       where.category = category;
@@ -527,13 +709,7 @@ export class ItemService {
       actorUsername,
     );
 
-    if (archived.count > 0) {
-      this.realtimeService.emitSync(
-        ['items', 'dashboard', 'operations', 'formulation', 'stocktaking'],
-        'items.archived',
-        { meta: { count: archived.count } },
-      );
-    }
+    this.emitItemsChanged('archived', archived.count);
     return { archived: archived.count, total: cleaned.length };
   }
 
@@ -560,13 +736,7 @@ export class ItemService {
       actorUsername,
     );
 
-    if (restored.count > 0) {
-      this.realtimeService.emitSync(
-        ['items', 'dashboard', 'operations', 'formulation', 'stocktaking'],
-        'items.restored',
-        { meta: { count: restored.count } },
-      );
-    }
+    this.emitItemsChanged('restored', restored.count);
     return { restored: restored.count, total: cleaned.length };
   }
 
@@ -577,8 +747,71 @@ export class ItemService {
     // Get items before deletion for audit
     const itemsToDelete = await this.prisma.item.findMany({
       where: { publicId: { in: cleaned } },
-      select: { publicId: true, name: true },
+      select: { publicId: true, name: true, isArchived: true },
     });
+
+    // FC-ITEM-IMPORT — permanent deletion is only a deliberate act, and only when
+    // there is nothing left to lose.
+    //
+    // Archive first. The product already has a reversible path for removing an
+    // item from the working catalogue, and reaching past it means the operator
+    // skips the review that makes the action deliberate. The archived items
+    // themselves are not in the requested set, so this reports the request as
+    // refused rather than quietly archiving them.
+    const activeTargets = itemsToDelete.filter((item) => !item.isArchived);
+    if (activeTargets.length > 0) {
+      throw new ConflictException({
+        code: 'ITEM_NOT_ARCHIVED',
+        message:
+          'لا يمكن الحذف النهائي لصنف نشط. أرشفه أولاً، أو احذفه نهائياً بعد التأكد من أنه لا أثر له.',
+        detail: {
+          notArchived: activeTargets.map((item) => ({ publicId: item.publicId, name: item.name })),
+        },
+      });
+    }
+
+    // What the row would take with it. `Transaction.itemId` and
+    // `OpeningBalance.itemId` are `onDelete: Cascade`, so deleting an item that
+    // has movements silently deletes the ledger behind them — irreversibly, and
+    // with no report. A reconciliation that then reads green over the hole is
+    // worse than the delete being refused.
+    const usage = await this.prisma.item.findMany({
+      where: { publicId: { in: cleaned } },
+      select: {
+        publicId: true,
+        _count: {
+          select: {
+            transactions: true,
+            openingBalances: true,
+            orderItems: true,
+            stocktakingEntries: true,
+            stockDeficits: true,
+            formulaRows: true,
+            targetFormulas: true,
+          },
+        },
+      },
+    });
+
+    const blockers = usage
+      .map((entry) => {
+        const counts = entry._count as unknown as Record<string, number>;
+        const present = Object.entries(counts)
+          .filter(([, count]) => Number(count) > 0)
+          .map(([relation, count]) => ({ relation, count: Number(count) }));
+        return present.length ? { publicId: entry.publicId, present } : null;
+      })
+      .filter((entry): entry is { publicId: string; present: Array<{ relation: string; count: number }> } => entry !== null);
+
+    if (blockers.length > 0) {
+      throw new ConflictException({
+        code: 'ITEM_HAS_LEDGER',
+        message:
+          'لا يمكن الحذف النهائي لصنف له حركات أو رصيد أو طلبات. '
+          + 'أرشفه بدلاً من ذلك، أو احذف الأرشيف بعد إغلاق الفترة.',
+        detail: { blockers },
+      });
+    }
 
     const deleted = await this.prisma.item.deleteMany({
       where: { publicId: { in: cleaned } },
@@ -594,32 +827,28 @@ export class ItemService {
       actorUsername,
     );
 
-    if (deleted.count > 0) {
-      this.realtimeService.emitSync(
-        ['items', 'dashboard', 'operations', 'formulation', 'stocktaking'],
-        'items.deleted',
-        { meta: { count: deleted.count } },
-      );
-    }
+    this.emitItemsChanged('deleted', deleted.count);
     return { deleted: deleted.count, total: cleaned.length };
   }
 
-  async deleteByPublicIds(publicIds: string[]) {
-    const cleaned = Array.from(new Set(publicIds.map((id) => String(id).trim()).filter(Boolean)));
-    if (!cleaned.length) return { deleted: 0, total: 0 };
-
-    const deleted = await this.prisma.item.deleteMany({
-      where: { publicId: { in: cleaned } },
-    });
-
-    if (deleted.count > 0) {
-      this.realtimeService.emitSync(
-        ['items', 'dashboard', 'operations', 'formulation', 'stocktaking'],
-        'items.deleted',
-        { meta: { count: deleted.count } },
-      );
-    }
-    return { deleted: deleted.count, total: cleaned.length };
+  /**
+   * FC-ITEM-IMPORT — one permanent-delete path, and it says what it destroys.
+   *
+   * This used to be a second copy of `deletePermanently` that took no actor, wrote
+   * no audit row, and did not require the item to be archived first. Any
+   * principal holding `items.delete` could therefore erase items permanently with
+   * no trace — while the archive-first workflow that makes the action deliberate
+   * could be skipped entirely.
+   *
+   * It now delegates rather than duplicating, so the guard below applies to both
+   * routes and a future change to one cannot drift from the other.
+   */
+  async deleteByPublicIds(
+    publicIds: string[],
+    userId?: string,
+    actorUsername?: string,
+  ) {
+    return this.deletePermanently(publicIds, String(userId || 'system'), String(actorUsername || 'system'));
   }
 
   async generateMissingCodes(userId?: string, actorUsername?: string) {
@@ -689,13 +918,7 @@ export class ItemService {
       );
     }
 
-    if (generatedCodes.generated.length > 0) {
-      this.realtimeService.emitSync(
-        ['items', 'dashboard', 'operations', 'formulation', 'stocktaking'],
-        'items.codes.generated',
-        { meta: { count: generatedCodes.generated.length } },
-      );
-    }
+    this.emitItemsChanged('codes.generated', generatedCodes.generated.length);
 
     return {
       success: generatedCodes.generated.length,
@@ -706,270 +929,619 @@ export class ItemService {
   }
 
   // Phase 5: Bulk Import from Excel
+  /**
+   * The bulk importer.
+   *
+   * This used to be a loop of small transactions with a per-row retry. Four things
+   * were wrong with that shape, and all four were the same bug wearing different
+   * clothes: the import was not one thing, so nothing about it could be guaranteed.
+   *
+   *   - It was not atomic. Rows went in batches of fifty, and a batch that failed was
+   *     retried one row at a time, so a duplicate on row seven still committed rows
+   *     eight through fifty. A 500-row file could land half a catalogue and be
+   *     reported as a partial success.
+   *   - The audit row was outside the transaction and best-effort. Wave 1 stopped it
+   *     from turning a committed import into a 500, but "best effort" is the same as
+   *     "sometimes absent", and the guarantee everywhere else in this codebase is
+   *     that a committed mutation always carries its audit row.
+   *   - The rank base and the duplicate pre-check were both read before any lock. Two
+   *     operators importing at once read the same `max(sortOrder)` and the same
+   *     empty code list, so they produced interleaved ranks and duplicate codes. No
+   *     constraint could catch either, because each was legal in isolation.
+   *   - Nothing identified the run. The audit row named a generated `import-<uuid>`
+   *     with no row behind it, so there was nothing to look at afterwards and no way
+   *     to take it back.
+   *
+   * All four are fixed by making it one transaction under one lock and giving it a
+   * row of its own. What was given up: partial success. A file whose rows partly
+   * collide now imports nothing under `strict` rather than importing the survivors.
+   * That is the point — partial success on a catalogue load is how a catalogue ends
+   * up holding half a file twice.
+   */
   async bulkImportFromExcel(
-    items: Array<{
-      name: string;
-      code?: string;
-      barcode?: string;
-      category?: string;
-      unit?: string;
-      minLimit?: number;
-      maxLimit?: number;
-      orderLimit?: number;
-      packageWeight?: number;
-      englishName?: string;
-      description?: string;
-      sourceRow?: number;
-    }>,
+    items: ImportRowInput[],
     userId: string,
     actorUsername: string,
+    options: {
+      mode?: ImportMode;
+      sourceFileName?: string;
+      idempotencyKey?: string;
+    } = {},
   ) {
-    const results: Array<{ row: number; publicId: string; name: string; status: string }> = [];
-    const errors: Array<{ row: number; error: string; field: string; message: string; value?: unknown }> = [];
-
     if (!Array.isArray(items)) {
       throw new BadRequestException('قائمة الأصناف مطلوبة.');
     }
-
     if (items.length > MAX_BULK_IMPORT_ROWS) {
-      throw new BadRequestException(`الحد الأقصى للاستيراد هو ${MAX_BULK_IMPORT_ROWS} صف في العملية الواحدة.`);
+      throw new BadRequestException(
+        `الحد الأقصى للاستيراد هو ${MAX_BULK_IMPORT_ROWS} صف في العملية الواحدة.`,
+      );
     }
 
-    const codeCounts = new Map<string, number>();
-    const barcodeCounts = new Map<string, number>();
-    const normalizeOptionalString = (value: unknown) => {
-      const normalized = String(value ?? '').trim();
-      return normalized || null;
-    };
-    const normalizeLookupKey = (value: unknown) => String(value ?? '').trim().toLowerCase();
-    const readNumber = (value: unknown, fallback: number | null) => {
-      if (value == null || value === '') return fallback;
-      const parsed = Number(value);
-      return Number.isFinite(parsed) ? parsed : Number.NaN;
-    };
+    const mode: ImportMode = options.mode === 'strict' ? 'strict' : 'partial';
+    const fileHash = fingerprintImportRows(items);
+    const batchPublicId = `import-${randomUUID()}`;
 
-    items.forEach((item) => {
-      const code = normalizeLookupKey(item.code);
-      const barcode = normalizeLookupKey(item.barcode);
-      if (code) codeCounts.set(code, (codeCounts.get(code) || 0) + 1);
-      if (barcode) barcodeCounts.set(barcode, (barcodeCounts.get(barcode) || 0) + 1);
-    });
+    // The idempotency key is required, not optional. Without one a double-clicked
+    // button is two imports, and the second is refused for duplicating the first's
+    // codes — so the operator is shown an error for work that already succeeded.
+    // `executeIdempotently` stores the key beside the result, so a retry replays the
+    // first outcome instead of repeating it.
+    let outcome;
+    try {
+      outcome = await executeIdempotently(
+        this.prisma,
+        userId || 'system',
+        'items.import',
+        options.idempotencyKey,
+        { items, mode, fileHash },
+        async (tx) => {
+          // Everything below is one transaction, and the lock is the first thing in
+          // it. Transaction-scoped on purpose: it releases on commit and on rollback
+          // alike, so a failed import cannot leave the catalogue serialised.
+          //
+          // This is the first advisory lock in the codebase, and it is what makes
+          // "read the catalogue, then act on it" mean anything. Without it the read
+          // and the write are separated by a window another import can commit inside,
+          // and the pre-check is a prediction rather than a fact.
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mzs.items.import'))`;
 
-    const uniqueCodes = [...codeCounts.keys()];
-    const uniqueBarcodes = [...barcodeCounts.keys()];
-    const duplicateConditions: any[] = [];
-    if (uniqueCodes.length) duplicateConditions.push({ code: { in: uniqueCodes } });
-    if (uniqueBarcodes.length) duplicateConditions.push({ barcode: { in: uniqueBarcodes } });
-    const existingItems = duplicateConditions.length
-      ? await this.prisma.item.findMany({
-          where: { OR: duplicateConditions },
-          select: { code: true, barcode: true, name: true },
-        })
-      : [];
-    const existingCodes = new Map(existingItems.filter((item) => item.code).map((item) => [normalizeLookupKey(item.code), item.name]));
-    const existingBarcodes = new Map(existingItems.filter((item) => item.barcode).map((item) => [normalizeLookupKey(item.barcode), item.name]));
+          const existing = await this.readExistingImportKeys(tx, items);
+          const plan = buildImportPlan(items, existing, { mode });
 
-    const validRows: Array<{
-      rowNumber: number;
-      name: string;
-      code: string | null;
-      barcode: string | null;
-      category: string;
-      unit: string;
-      minLimit: number;
-      maxLimit: number;
-      orderLimit: number | null;
-      packageWeight: number | null;
-      description: string | null;
-      createdBy?: string;
-    }> = [];
+          // The batch row is created first so the items can point at it, and finished
+          // last, in the same transaction. Nobody ever observes it half-built: the
+          // intermediate state is inside a transaction that commits whole or not at
+          // all. A rejected-only import commits a `failed` batch, and that is the row
+          // the audit entry now names.
+          const batch = await tx.itemImportBatch.create({
+            data: {
+              publicId: batchPublicId,
+              sourceFileName: options.sourceFileName || null,
+              fileHash,
+              mode,
+              status: 'running',
+              totalRows: items.length,
+              createdBy: userId || null,
+              actorUsername: actorUsername || null,
+              errors: plan.rejections as unknown as Prisma.InputJsonValue,
+            },
+          });
 
-    for (let index = 0; index < items.length; index += 1) {
-      const item = items[index];
-      const rowNumber = Number(item.sourceRow || index + 2);
-      const name = String(item.name || '').trim();
-      const category = String(item.category || '').trim();
-      const unit = String(item.unit || '').trim();
-      const code = normalizeOptionalString(item.code);
-      const barcode = normalizeOptionalString(item.barcode);
-      const codeKey = normalizeLookupKey(code);
-      const barcodeKey = normalizeLookupKey(barcode);
-      const description = String(item.description || item.englishName || '').trim() || null;
-      const minLimit = readNumber(item.minLimit, 0);
-      const maxLimit = readNumber(item.maxLimit, 1000);
-      const orderLimit = readNumber(item.orderLimit, null);
-      const packageWeight = readNumber(item.packageWeight, null);
+          // The rank base is read on the transaction, after the lock. Reading it
+          // before was the race: `max + 1` is a correct answer to a question asked at
+          // the wrong moment.
+          const baseImportRank = await this.nextSortOrder(tx);
 
-      if (!name || !category || !unit) {
-        errors.push({ row: rowNumber, field: 'required', message: 'اسم الصنف والتصنيف ووحدة القياس مطلوبة.', error: 'اسم الصنف والتصنيف ووحدة القياس مطلوبة.' });
-        continue;
+          // publicIds are generated up front so `createMany` can be used at all — it
+          // takes no per-row hook. They are mapped back to names at the end because
+          // `createMany` returns counts, not rows, and re-reading by id would be a
+          // query to answer a question the caller just asked. Reading by batch is
+          // better anyway: it is the same set the response describes.
+          const prepared = plan.creates.map((row, index) => ({
+            row,
+            rank: baseImportRank + index,
+            publicId: `item-${randomUUID()}`,
+          }));
+
+          for (let offset = 0; offset < prepared.length; offset += BULK_IMPORT_BATCH_SIZE) {
+            const slice = prepared.slice(offset, offset + BULK_IMPORT_BATCH_SIZE);
+            await tx.item.createMany({
+              data: slice.map((entry) => ({
+                publicId: entry.publicId,
+                sortOrder: entry.rank,
+                code: entry.row.code,
+                codeGenerated: entry.row.code ? false : undefined,
+                barcode: entry.row.barcode,
+                name: entry.row.name,
+                englishName: entry.row.englishName,
+                unit: entry.row.unit,
+                category: entry.row.category,
+                minLimit: entry.row.minLimit,
+                maxLimit: entry.row.maxLimit,
+                orderLimit: entry.row.orderLimit,
+                packageWeight: entry.row.packageWeight,
+                description: entry.row.description,
+                createdBy: userId || undefined,
+                lastImportBatchId: batch.id,
+              })),
+            });
+          }
+
+          // The update branch. `sortOrder` is deliberately not written: an import that
+          // re-ranked existing items would silently reorder a catalogue somebody
+          // arranged by hand, and rank belongs to the order profile, not to a
+          // spreadsheet.
+          const updated: Array<{ row: number; publicId: string; name: string; status: string }> = [];
+          for (const row of plan.updates) {
+            const saved = await tx.item.update({
+              where: { publicId: row.targetPublicId },
+              data: {
+                name: row.name,
+                code: row.code,
+                barcode: row.barcode,
+                englishName: row.englishName,
+                unit: row.unit,
+                category: row.category,
+                minLimit: row.minLimit,
+                maxLimit: row.maxLimit,
+                orderLimit: row.orderLimit,
+                packageWeight: row.packageWeight,
+                description: row.description,
+                // Clear the archive flag when the row was archived. Without this the
+                // update is written to something that stays filtered out of every
+                // list, and the operator's import lands with nothing visibly changed.
+                ...(row.reactivate
+                  ? {
+                      isArchived: false,
+                      archivedAt: null,
+                      archivedBy: null,
+                    }
+                  : {}),
+                updatedBy: userId || undefined,
+                lastImportBatchId: batch.id,
+              },
+            });
+            updated.push({
+              row: row.rowNumber,
+              publicId: String(saved.publicId),
+              name: saved.name,
+              status: row.reactivate ? 'reactivated' : 'updated',
+            });
+          }
+
+
+          // Nothing is read back. `createMany` returns counts rather than rows, and
+          // the publicIds are already known because they were generated here — so the
+          // set of landed items is the set of prepared ones, with no query to confirm
+          // what the transaction already knows.
+
+          await tx.itemImportBatch.update({
+
+            where: { id: batch.id },
+            data: {
+              status: plan.rejectionCount > 0 ? 'partial' : 'succeeded',
+              createdCount: plan.creates.length,
+              updatedCount: plan.updates.length,
+              failedCount: plan.rejectionCount,
+              finishedAt: new Date(),
+              durationMs: Date.now() - batch.startedAt.getTime(),
+            },
+          });
+
+          if (plan.rejectionCount > 0) {
+            await tx.itemImportError.createMany({
+              data: plan.rejections.map((entry) => ({
+                batchId: batch.id,
+                rowNumber: entry.row,
+                field: entry.field,
+                message: entry.message,
+                value:
+                  entry.value === undefined || entry.value === null ? null : String(entry.value),
+              })),
+            });
+          }
+
+          const results = [
+            ...prepared.map((entry) => ({
+              row: entry.row.rowNumber,
+              publicId: entry.publicId,
+              name: entry.row.name,
+              status: 'created',
+            })),
+            ...updated,
+          ];
+
+          return {
+
+            batchId: batchPublicId,
+            mode,
+            status: plan.rejectionCount > 0 ? 'partial' : 'succeeded',
+            success: prepared.length + updated.length,
+            failed: plan.rejectionCount,
+            total: items.length,
+            created: prepared.length,
+            updated: updated.length,
+            results,
+            errors: plan.rejections.map((entry) => ({
+              row: entry.row,
+              field: entry.field,
+              message: entry.message,
+              // `error` duplicates `message` and the response type declares it
+              // required. It is read by name in the studio and in the tests, so it
+              // stays. Two spellings of one string is a known smell, not a secret.
+              error: entry.message,
+              value: entry.value,
+            })),
+          };
+        },
+        // Inside the transaction, not after it. A committed import without its audit
+        // row used to be possible, and the reason was that the audit write lived past
+        // the transaction boundary where it could no longer join it.
+        async (tx, result) => {
+          await tx.auditLog.create({
+            data: buildAuditRow({
+              actorId: userId || 'system',
+              actorUsername: actorUsername || 'system',
+              actorRole: 'unknown',
+              action: 'IMPORT',
+              targetResource: 'item',
+              entityType: 'Item',
+              entityId: result.batchId,
+              // A file where nothing landed is a failure, not a success that happened
+              // to create nothing.
+              status: result.success > 0 ? 'success' : 'failed',
+
+              message: `import ${result.batchId}: ${result.created} created, ${result.updated} updated, ${result.failed} rejected of ${result.total}`,
+              metadata: {
+                batchId: result.batchId,
+                mode: result.mode,
+                created: result.created,
+                updated: result.updated,
+                failed: result.failed,
+                total: result.total,
+              },
+            }),
+          });
+        },
+      );
+    } catch (error: any) {
+      // A unique violation that survives the pre-check means the catalogue changed
+      // under the lock — which should not happen, and saying so plainly is more use
+      // than a raw P2002. The transaction rolled back, so nothing landed and there is
+      // no batch row: the record of a failed import that died before its own table
+      // was written cannot be written by the transaction that died. That gap is
+      // stated rather than papered over.
+      if (error?.code === 'P2002') {
+        throw new ConflictException(
+          'تعارض في الكود أو الباركود مع صنف آخر. أعد التحقق من الملف قبل الاستيراد.',
+        );
       }
+      throw error;
+    }
 
-      const unsafeFormulaField = ([
-        ['name', name, 'اسم الصنف'],
-        ['code', code, 'كود الصنف'],
-        ['barcode', barcode, 'الباركود'],
-        ['category', category, 'القسم'],
-        ['unit', unit, 'وحدة القياس'],
-        ['description', description, 'الوصف'],
-      ] as Array<[string, string | null, string]>).find(([, value]) => value != null && /^[=+\-@]/.test(String(value).trim()));
-      if (unsafeFormulaField) {
-        const message = `${unsafeFormulaField[2]} يبدأ برمز صيغة Excel غير آمن.`;
-        errors.push({ row: rowNumber, field: unsafeFormulaField[0], message, error: message, value: unsafeFormulaField[1] });
-        continue;
-      }
-
-      const numberEntries: Array<[string, number | null, string]> = [
-        ['minLimit', minLimit, 'الحد الأدنى'],
-        ['maxLimit', maxLimit, 'الحد الأعلى'],
-        ['orderLimit', orderLimit, 'حد إعادة الطلب'],
-        ['packageWeight', packageWeight, 'وزن العبوة'],
-      ];
-      const invalidNumber = numberEntries.find(([, value]) => value != null && (!Number.isFinite(value) || value < 0 || value > 999999999.999));
-      if (invalidNumber) {
-        errors.push({ row: rowNumber, field: invalidNumber[0], message: `${invalidNumber[2]} غير صالح.`, error: `${invalidNumber[2]} غير صالح.`, value: invalidNumber[1] });
-        continue;
-      }
-
-      if ((minLimit ?? 0) > (maxLimit ?? 1000)) {
-        errors.push({ row: rowNumber, field: 'minLimit', message: 'الحد الأدنى أكبر من الحد الأعلى.', error: 'الحد الأدنى أكبر من الحد الأعلى.' });
-        continue;
-      }
-
-      if (codeKey && (codeCounts.get(codeKey) || 0) > 1) {
-        errors.push({ row: rowNumber, field: 'code', message: 'كود مكرر داخل ملف الاستيراد.', error: 'كود مكرر داخل ملف الاستيراد.', value: code });
-        continue;
-      }
-
-      if (barcodeKey && (barcodeCounts.get(barcodeKey) || 0) > 1) {
-        errors.push({ row: rowNumber, field: 'barcode', message: 'باركود مكرر داخل ملف الاستيراد.', error: 'باركود مكرر داخل ملف الاستيراد.', value: barcode });
-        continue;
-      }
-
-      if (codeKey && existingCodes.has(codeKey)) {
-        const message = `الكود مستخدم مسبقًا للصنف: ${existingCodes.get(codeKey)}`;
-        errors.push({ row: rowNumber, field: 'code', message, error: message, value: code });
-        continue;
-      }
-
-      if (barcodeKey && existingBarcodes.has(barcodeKey)) {
-        const message = `الباركود مستخدم مسبقًا للصنف: ${existingBarcodes.get(barcodeKey)}`;
-        errors.push({ row: rowNumber, field: 'barcode', message, error: message, value: barcode });
-        continue;
-      }
-
-      validRows.push({
-        rowNumber,
-        name,
-        code,
-        barcode,
-        category,
-        unit,
-        minLimit: minLimit ?? 0,
-        maxLimit: maxLimit ?? 1000,
-        orderLimit,
-        packageWeight,
-        description,
-        createdBy: userId || undefined,
+    // After the commit, and never able to fail the request. A realtime broadcast that
+    // throws must not turn a committed catalogue into a 500, for the same reason the
+    // audit row belongs inside the transaction: once the work is durable, the answer
+    // to the caller is that it succeeded.
+    if (outcome.value.success > 0) {
+      this.emitItemsChanged('imported', outcome.value.success, {
+        batchId: outcome.value.batchId,
       });
     }
 
-    // The rank the first imported row takes, computed once before the insert loop.
-    //
-    // This is the whole reason the "حفظ ترتيب الأصناف" button was built, and it
-    // did not work: `createImportRow` wrote no `sortOrder` at all, so every
-    // imported row took the column default of 1000000, and the read path broke
-    // that tie by name. An operator who arranged 500 rows in a spreadsheet got
-    // them back A-Z, and the import reported success.
-    //
-    // `validRows` is already in file order — the loop that fills it appends, and
-    // nothing sorts it. The position in that array is the file order, which is
-    // not the same as `rowNumber`: `rowNumber` is the sheet row and drifts when
-    // the sheet has blank lines, while the index is dense and always correct.
-    const baseImportRank = await this.nextSortOrder();
+    return {
+      success: outcome.value.success,
+      failed: outcome.value.failed,
+      total: outcome.value.total,
+      // The split, not just the sum. "12 succeeded" is a fact the operator can read and
+      // not act on; "9 created, 3 updated" is the difference between a load and a
+      // correction, and the studio's outcome report needs it to label each row.
+      created: outcome.value.created,
+      updated: outcome.value.updated,
+      batchId: outcome.value.batchId,
+      status: outcome.value.status,
+      replayed: outcome.replayed,
+      results: outcome.value.results,
+      errors: outcome.value.errors,
+    };
+  }
 
-    // The rank is passed in rather than captured from a counter, because these
-    // creates are handed to `$transaction` as a list of promises. A closure
-    // mutating a shared counter would advance it for rows whose transaction then
-    // rolled back, and the next import would start past a gap.
-    const createImportRow = (row: (typeof validRows)[number], rank: number) => this.prisma.item.create({
-      data: {
-        publicId: `item-${randomUUID()}`,
-        sortOrder: rank,
-        code: row.code,
-        codeGenerated: row.code ? false : undefined,
-        barcode: row.barcode,
-        name: row.name,
-        unit: row.unit,
-        category: row.category,
-        minLimit: row.minLimit,
-        maxLimit: row.maxLimit,
-        orderLimit: row.orderLimit,
-        packageWeight: row.packageWeight,
-        description: row.description,
-        createdBy: row.createdBy,
-      },
+
+  /**
+   * The dry run. Same decision, no write.
+   *
+   * The point of this endpoint is that its answer is the answer `import-excel` will
+   * give, so both call `buildImportPlan` on the same inputs. What differs is that
+   * this one does not take the lock and does not write: it reads the catalogue as it
+   * is now, which is what an operator wants before deciding, and it is honest that a
+   * real import may see a different catalogue by the time it runs.
+   */
+  async validateImport(items: ImportRowInput[], options: { mode?: ImportMode } = {}) {
+    if (!Array.isArray(items)) {
+      throw new BadRequestException('قائمة الأصناف مطلوبة.');
+    }
+    if (items.length > MAX_BULK_IMPORT_ROWS) {
+      throw new BadRequestException(
+        `الحد الأقصى للتحقق هو ${MAX_BULK_IMPORT_ROWS} صف في العملية الواحدة.`,
+      );
+    }
+    const mode: ImportMode = options.mode === 'strict' ? 'strict' : 'partial';
+    const existing = await this.readExistingImportKeys(this.prisma, items);
+    const plan = buildImportPlan(items, existing, { mode });
+    return {
+      valid: plan.rejectionCount === 0,
+      mode,
+      modeDescription: describeImportMode(mode),
+      wouldCreate: plan.creates.length,
+      wouldUpdate: plan.updates.length,
+      rejected: plan.rejectionCount,
+      total: plan.total,
+      /**
+       * Rows whose code or barcode already belongs to an *archived* item.
+       *
+       * Surfaced here rather than buried in the studio because it is the one case where
+       * the operator has a real decision to make and no way to discover the option: the
+       * row imports either way, but whether the archived item comes back into the
+       * catalogue is theirs to choose. Naming it before they press the button is the
+       * difference between a choice and a surprise.
+       */
+      archivedMatches: plan.creates
+        .filter((row) => row.archivedMatch)
+        .map((row) => ({
+          row: row.rowNumber,
+          name: row.name,
+          archivedPublicId: row.archivedMatch!.publicId,
+          archivedName: row.archivedMatch!.name,
+        })),
+      errors: plan.rejections,
+    };
+  }
+
+
+  /**
+   * Reads only the catalogue columns a plan needs, on whichever client the caller
+   * holds — the transaction that will act on the answer, or the plain client for a
+   * dry run.
+   *
+   * The query folds the same way the unique index folds. Not an optimisation: `IN` on
+   * text compares exactly, `Item_code_key` is case-sensitive, and `P2002` never fired
+   * for `ABC` against `abc`. A pre-check has to use the index's expression or it is
+   * predicting a constraint it never reads.
+   */
+  private async readExistingImportKeys(
+    client: PrismaService | Prisma.TransactionClient,
+    items: readonly ImportRowInput[],
+  ): Promise<ExistingKey[]> {
+    const codes = [
+      ...new Set(items.map((item) => foldImportKey(item.code)).filter(Boolean)),
+    ];
+    const barcodes = [
+      ...new Set(items.map((item) => foldImportKey(item.barcode)).filter(Boolean)),
+    ];
+    if (codes.length === 0 && barcodes.length === 0) return [];
+
+    const conditions: Prisma.Sql[] = [];
+    if (codes.length) {
+      conditions.push(Prisma.sql`lower(btrim(item."code")) = ANY(${codes}::text[])`);
+    }
+    if (barcodes.length) {
+      conditions.push(Prisma.sql`lower(btrim(item."barcode")) = ANY(${barcodes}::text[])`);
+    }
+
+    return client.$queryRaw<ExistingKey[]>(Prisma.sql`
+      SELECT item."publicId"    AS "publicId",
+             item."code"        AS "code",
+             item."barcode"     AS "barcode",
+             item."name"        AS "name",
+             item."isArchived"  AS "isArchived"
+        FROM "public"."Item" AS item
+       WHERE ${Prisma.join(conditions, ' OR ')}
+    `);
+  }
+
+  /**
+   * Takes one import back.
+   *
+   * It archives, and it says no a lot.
+   *
+   * The reason for all the refusals is in the foreign keys, and it was worth checking
+   * rather than assuming: `Transaction.itemId`, `OpeningBalance.itemId` and
+   * `ItemOrderEntry.itemId` are all `ON DELETE CASCADE`. A hard delete of an item
+   * that has ever moved is not a delete — it is a cascade that removes the ledger row
+   * with it, silently, inside the database, with no application code involved and
+   * nothing to see in the audit trail afterwards. The existing
+   * `delete-permanent` endpoint sits on exactly that. This one does not share the
+   * hazard, because it refuses rather than cascading.
+   *
+   * So: an item with history is not reverted, it is reported. The operator gets the
+   * list of what is holding each row and decides. A revert that could quietly destroy
+   * a year of movements is not a revert.
+   *
+   * Archive rather than delete, for the same reason: the item disappears from the
+   * catalogue but its identity, and the fact that an import created it, both survive.
+   * `purge` exists for the case where an import demonstrably created a row that never
+   * touched anything, and it is only reachable when every single count below is zero.
+   */
+  async revertImportBatch(
+    batchPublicId: string,
+    actor: { userId?: string; username?: string },
+    options: { purge?: boolean; idempotencyKey?: string } = {},
+  ) {
+
+    const batch = await this.prisma.itemImportBatch.findUnique({
+      where: { publicId: batchPublicId },
     });
+    if (!batch) {
+      throw new NotFoundException(`دفعة الاستيراد غير موجودة: ${batchPublicId}`);
+    }
+    if (batch.status === 'reverted') {
+      throw new ConflictException('سبق التراجع عن هذه الدفعة.');
+    }
 
-    for (let offset = 0; offset < validRows.length; offset += BULK_IMPORT_BATCH_SIZE) {
-      const batch = validRows.slice(offset, offset + BULK_IMPORT_BATCH_SIZE);
-      // `offset + index`, not a running counter: if a batch fails and its rows are
-      // retried one by one, the retried rows keep the ranks their position in the
-      // file earned them, and a row that never lands leaves a gap rather than
-      // pulling every later row forward.
-      const rankOf = (index: number) => baseImportRank + offset + index;
-      try {
-        const createdItems = await this.prisma.$transaction(
-          batch.map((row, index) => createImportRow(row, rankOf(index))),
-        );
-        createdItems.forEach((created, index) => {
-          results.push({ row: batch[index].rowNumber, publicId: String(created.publicId), name: created.name, status: 'created' });
-        });
-      } catch (batchError: any) {
-        for (const [index, row] of batch.entries()) {
-          try {
-            const created = await createImportRow(row, rankOf(index));
-            results.push({ row: row.rowNumber, publicId: String(created.publicId), name: created.name, status: 'created' });
-          } catch (error: any) {
-            const message = error?.code === 'P2002'
-              ? 'الصنف مكرر أو يحتوي على كود/باركود مستخدم مسبقًا.'
-              : error?.message || batchError?.message || 'فشل استيراد الصف.';
-            errors.push({ row: row.rowNumber, field: 'row', message, error: message, value: row.name });
-          }
+    // One query for every blocker, per item.
+    //
+    // Eight separate counts would be eight round trips to answer one question, and
+    // the answer has to be a single consistent snapshot: counting in one statement is
+    // what stops "no movements" and "one movement" being true at different moments
+    // of the same request. The LEFT JOINs keep items with no references in the
+    // result rather than dropping them, because "nothing is in the way" is the case
+    // that most needs to be reported.
+    const blockers = await this.prisma.$queryRaw<
+      Array<{
+        publicId: string;
+        name: string;
+        /**
+         * Read, never written. The revert's whole job is to notice a non-zero balance
+         * and refuse, so it has to look at the column; it must never assign it. The
+         * `stock-write-boundary` guard distinguishes the two by this declaration being
+         * a type annotation on a read shape rather than a key in a write payload.
+         */
+        currentStock: unknown;
+
+        transactions: bigint;
+        openingBalances: bigint;
+        orderLines: bigint;
+        stocktakings: bigint;
+        deficits: bigint;
+        formulationLines: bigint;
+        formulationTargets: bigint;
+        orderEntries: bigint;
+      }>
+    >(Prisma.sql`
+      SELECT item."publicId"                              AS "publicId",
+             item."name"                                  AS "name",
+             item."currentStock"                          AS "currentStock",
+             COALESCE(tx."count", 0)                     AS "transactions",
+             COALESCE(ob."count", 0)                      AS "openingBalances",
+             COALESCE(oi."count", 0)                      AS "orderLines",
+             COALESCE(st."count", 0)                      AS "stocktakings",
+             COALESCE(sd."count", 0)                      AS "deficits",
+             COALESCE(fi."count", 0)                      AS "formulationLines",
+             COALESCE(ft."count", 0)                      AS "formulationTargets",
+             COALESCE(oe."count", 0)                      AS "orderEntries"
+        FROM "public"."Item" AS item
+        LEFT JOIN (SELECT "itemId", count(*) AS "count" FROM "public"."Transaction" GROUP BY "itemId") AS tx
+               ON tx."itemId" = item."id"
+        LEFT JOIN (SELECT "itemId", count(*) AS "count" FROM "public"."OpeningBalance" GROUP BY "itemId") AS ob
+               ON ob."itemId" = item."id"
+        LEFT JOIN (SELECT "itemId", count(*) AS "count" FROM "public"."order_items" GROUP BY "itemId") AS oi
+               ON oi."itemId" = item."id"
+        LEFT JOIN (SELECT "itemId", count(*) AS "count" FROM "public"."stocktaking_entries" GROUP BY "itemId") AS st
+               ON st."itemId" = item."id"
+        LEFT JOIN (SELECT "itemId", count(*) AS "count" FROM "public"."StockDeficit" GROUP BY "itemId") AS sd
+               ON sd."itemId" = item."id"
+        LEFT JOIN (SELECT "itemId", count(*) AS "count" FROM "public"."formulation_items" GROUP BY "itemId") AS fi
+               ON fi."itemId" = item."id"
+        LEFT JOIN (SELECT "targetItemId" AS "itemId", count(*) AS "count" FROM "public"."formulations" GROUP BY "targetItemId") AS ft
+               ON ft."itemId" = item."id"
+        LEFT JOIN (SELECT "itemId", count(*) AS "count" FROM "public"."ItemOrderEntry" GROUP BY "itemId") AS oe
+               ON oe."itemId" = item."id"
+       WHERE item."lastImportBatchId" = ${batch.id}::uuid
+       ORDER BY item."sortOrder" ASC
+    `);
+
+    // Named in the order an operator meets them, and each name is the thing itself
+    // rather than a table name. "الحركات" is something a person recognises; "Transaction"
+    // is a word they have to go and look up before they can decide.
+    const describeBlockers = (row: typeof blockers[number]): string[] => {
+      const reasons: string[] = [];
+      const stock = Number(row.currentStock ?? 0);
+      if (Number(row.transactions) > 0) reasons.push(`حركات مسجّلة (${row.transactions})`);
+      if (Number(row.openingBalances) > 0) reasons.push(`رصيد افتتاحي مقفل (${row.openingBalances})`);
+      if (Number(row.orderLines) > 0) reasons.push(`سطر طلب (${row.orderLines})`);
+      if (Number(row.stocktakings) > 0) reasons.push(`جرد مخزون (${row.stocktakings})`);
+      if (Number(row.deficits) > 0) reasons.push(`عجز مخزون (${row.deficits})`);
+      if (Number(row.formulationLines) > 0) reasons.push(`سطر تركيبة (${row.formulationLines})`);
+      if (Number(row.formulationTargets) > 0) reasons.push(`مادة ناتج تركيبة (${row.formulationTargets})`);
+      if (stock !== 0) reasons.push(`رصيد حالي غير صفري (${stock})`);
+      return reasons;
+    };
+
+    const blocked = blockers
+      .map((row) => ({ publicId: row.publicId, name: row.name, reasons: describeBlockers(row) }))
+      .filter((row) => row.reasons.length > 0);
+
+    // The refusal is the feature. This is the check the original `delete-permanent`
+    // never made, and it is why this endpoint exists next to it.
+    if (blocked.length > 0) {
+      throw new ConflictException({
+        message: `لا يمكن التراجع: ${blocked.length} من أصل ${blockers.length} صنفاً تحرّك منذ الاستيراد.`,
+        blockers: blocked.slice(0, 100),
+        blockedCount: blocked.length,
+        totalCount: blockers.length,
+        batchId: batchPublicId,
+      });
+    }
+
+    const publicIds = blockers.map((row) => row.publicId);
+    // Required, like the import's. A revert is the one operation here that takes
+    // rows *out* of the catalogue, so a repeated request is more damaging than a
+    // repeated import: without a key, a double-clicked "تراجع" is two reverts, and
+    // the second one refuses with "already reverted" — which reads as a failure for
+    // work that already succeeded. `purge` makes it a delete, and a repeated delete
+    // has nothing left to report at all.
+    if (!options.idempotencyKey) {
+      throw new BadRequestException(
+        'يلزم ترويسة Idempotency-Key للتراجع عن دفعة استيراد.',
+      );
+    }
+    const outcome = await executeIdempotently(
+      this.prisma,
+      actor.userId || 'system',
+      'items.import.revert',
+      options.idempotencyKey,
+      { batchPublicId, purge: Boolean(options.purge), ids: publicIds },
+
+      async (tx) => {
+        if (options.purge) {
+          // Reachable only because every count above was zero. The delete is
+          // `deleteMany` on an explicit id list, not a cascade nobody can see.
+          const deleted = await tx.item.deleteMany({ where: { publicId: { in: publicIds } } });
+          return { deleted: deleted.count, archived: 0, purged: true };
         }
-      }
-    }
+        const archived = await tx.item.updateMany({
+          where: { publicId: { in: publicIds } },
+          data: { isArchived: true, updatedBy: actor.userId || undefined },
+        });
+        return { deleted: 0, archived: archived.count, purged: false };
+      },
+      async (tx, result) => {
+        await tx.itemImportBatch.update({
+          where: { id: batch.id },
+          data: { status: 'reverted', finishedAt: new Date() },
+        });
+        await tx.auditLog.create({
+          data: buildAuditRow({
+            actorId: actor.userId || 'system',
+            actorUsername: actor.username || 'system',
+            actorRole: 'unknown',
+            action: 'IMPORT_REVERT',
+            targetResource: 'item',
+            entityType: 'Item',
+            entityId: batchPublicId,
+            status: 'success',
+            message: `revert ${batchPublicId}: ${result.archived} archived, ${result.deleted} deleted`,
+            metadata: {
+              batchId: batchPublicId,
+              archived: result.archived,
+              deleted: result.deleted,
+              purged: result.purged,
+            },
+          }),
+        });
+      },
+    );
 
-    if (userId && results.length > 0) {
-      await this.auditService.logItemAction(
-        userId,
-        'IMPORT',
-        'Item',
-        results.map((row) => row.publicId).join(','),
-        {
-          count: results.length,
-          failed: errors.length,
-          items: results.slice(0, 100).map((row) => ({ publicId: row.publicId, name: row.name })),
-          truncated: results.length > 100,
-        },
-        actorUsername,
-      );
-    }
-
-    if (results.length > 0) {
-      this.realtimeService.emitSync(
-        ['items', 'dashboard', 'operations', 'formulation', 'stocktaking'],
-        'items.imported',
-        { meta: { count: results.length } },
-      );
+    if (outcome.value.archived > 0) {
+      this.emitItemsChanged('reverted', outcome.value.archived, { batchId: batchPublicId });
     }
 
     return {
-      success: results.length,
-      failed: errors.length,
-      total: items.length,
-      results,
-      errors,
+      batchId: batchPublicId,
+      status: 'reverted',
+      archived: outcome.value.archived,
+      deleted: outcome.value.deleted,
+      purged: outcome.value.purged,
     };
   }
 

@@ -126,6 +126,14 @@ export class CreateItemDto {
   @IsString()
   @MaxLength(1000)
   description?: string;
+
+  // The English name. Stored since migration 20260929110000; until then the column
+  // did not exist, so the studio's field, the template's column and the payload's key
+  // all described something the database had nowhere to put.
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  englishName?: string;
 }
 
 export class UpdateItemDto {
@@ -186,4 +194,12 @@ export class UpdateItemDto {
   @IsString()
   @MaxLength(1000)
   description?: string;
+
+  // The English name. Stored since migration 20260929110000; until then the column
+  // did not exist, so the studio's field, the template's column and the payload's key
+  // all described something the database had nowhere to put.
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  englishName?: string;
 }

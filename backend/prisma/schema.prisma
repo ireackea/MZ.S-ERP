@@ -183,6 +183,12 @@ model Item {
   packageWeight   Decimal?
   currentStock    Decimal          @default(0)
   description     String?
+  /// The English name. This column did not exist until migration
+  /// 20260929110000, even though the DTO, the import template, the client-side
+  /// matcher, the payload builder and the exporter all carried the field — so an
+  /// operator could type one, watch the request succeed, and find it gone. Nullable
+  /// and unindexed: nothing looks an item up by it yet.
+  englishName     String?
   imageUrl        String?
   attachments     Json?
   isArchived      Boolean          @default(false)
@@ -203,7 +209,17 @@ model Item {
   // catalog without that path knowing this column exists. A path that had to
   // remember to write a rank would eventually forget, and a forgotten rank
   // would scatter a new item into the middle of the catalog.
-  sortOrder       Int?
+  //
+  // The default is declared here because 20260928090000 set it in the database
+  // and an undeclared default is a default the next `prisma migrate dev` deletes
+  // as drift. Declaring it keeps the model and the database in agreement, which
+  // is also what makes the value survive a restore: the snapshot restore path
+  // re-inserts items with `createMany` and lets every column take its default,
+  // so a snapshot taken before this column existed lands the whole catalogue at
+  // 1000000 and reproduces, on every restore, the tie-everything bug
+  // 20260928110000_normalise_item_sort_order exists to repair. That migration is
+  // a one-off and does not re-run.
+  sortOrder       Int?              @default(1000000)
   openingBalances OpeningBalance[]
   targetFormulas  Formulation[]    @relation("FormulationTargetItem")
   formulaRows     FormulationItem[] @relation("FormulationIngredientItem")
@@ -220,6 +236,67 @@ model Item {
   @@index([barcode])
   @@index([isArchived])
   @@index([sortOrder])
+  /// The import that last wrote this row, when it was a bulk import. Nullable, and
+  /// not indexed on its own: most rows are NULL and most catalogue reads never touch
+  /// the column, so an index there would be paid for and never used. The lookup that
+  /// matters is "every item of one batch", which the partial index below serves.
+  lastImportBatchId String?         @db.Uuid
+  lastImportBatch   ItemImportBatch? @relation(fields: [lastImportBatchId], references: [id], onDelete: SetNull)
+}
+
+/// One run of the bulk importer, as a thing that can be named and taken back.
+model ItemImportBatch {
+  id     String @id @default(uuid()) @db.Uuid
+  /// What a route takes and what the audit row names. Short by construction: the
+  /// audit column it replaced carried one id per created item and overflowed its own
+  /// b-tree index at about sixty-five of them.
+  publicId String @unique
+  sourceFileName String?
+  /// Digest of the submitted rows, so re-importing the same file is a detectable
+  /// no-op rather than a second attempt at the same catalogue — which is how a
+  /// codeless file doubled the catalogue with no message.
+  fileHash String?
+  /// strict = all or nothing. partial = the rows that validated, in one transaction.
+  mode String @default("strict")
+  /// succeeded | partial | failed. A string rather than an enum so that adding a
+  /// state later is a migration of values rather than a type change on a table that
+  /// already holds production rows.
+  status String @default("running")
+  totalRows Int @default(0)
+  createdCount Int @default(0)
+  updatedCount Int @default(0)
+  skippedCount Int @default(0)
+  failedCount Int @default(0)
+  durationMs Int?
+  /// Deliberately not a foreign key on users: an import's provenance must outlive
+  /// the account that performed it, and users are deleted.
+  createdBy String?
+  actorUsername String?
+  startedAt DateTime @default(now())
+  finishedAt DateTime?
+  /// The whole rejection list, read whole. NOT an indexed text column: the overflow
+  /// this table exists beside was caused by putting a variable-length list into one.
+  errors Json?
+  items Item[]
+  rejections ItemImportError[]
+
+  @@index([fileHash])
+  @@index([startedAt(sort: Desc)])
+}
+
+/// One rejected row, at a grain a client can page through.
+model ItemImportError {
+  id String @id @default(uuid()) @db.Uuid
+  batchId String @db.Uuid
+  /// The sheet row the client claimed, so the message points at a line the operator
+  /// can see. A dense index when the client sent nothing usable.
+  rowNumber Int?
+  field String?
+  message String
+  value String?
+  batch ItemImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId, rowNumber])
 }
 
 /// A saved catalogue order, under a name the operator chose.

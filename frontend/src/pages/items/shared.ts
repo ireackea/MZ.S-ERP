@@ -2,6 +2,7 @@ import { AlertCircle, AlertTriangle, CheckCircle2, type LucideIcon } from 'lucid
 import { getInventoryStatus } from '@services/inventoryStatus';
 import type { Item, ItemSortMode } from '../../types';
 import type { ExcelImportRow, ItemDto } from '@services/itemsService';
+import { buildImportTemplateRow } from './import/import-fields';
 
 export type ViewMode = 'list' | 'grid';
 export type StatusFilter = 'all' | 'good' | 'warning' | 'critical';
@@ -87,21 +88,21 @@ export const EMPTY_BULK_FORM: BulkEditorForm = {
   orderLimit: '',
 };
 
-export const EXCEL_TEMPLATE_ROWS = [
-  {
-    code: 'ITEM-001',
-    barcode: '629000000001',
-    name: 'ذرة صفراء',
-    description: 'Yellow Corn',
-    category: 'مواد خام',
-    unit: 'كيلو',
-    packageWeight: 0,
-    minLimit: 10,
-    maxLimit: 1000,
-    orderLimit: 50,
-    currentStock: 0,
-  },
-];
+/**
+ * The download template, generated from the single field list.
+ *
+ * It used to be a hand-written row that contained `currentStock` — a column the
+ * server has no field for, which `forbidNonWhitelisted` turns into a 400 for the
+ * whole request. An operator filled in their stock figures, saw a green preview,
+ * and every item landed at zero. The column matcher separately gave that field
+ * nine aliases at 99% confidence and counted it in the quality score, so the
+ * interface worked actively against them.
+ *
+ * Deriving the row from `IMPORT_FIELDS` removes the possibility rather than the
+ * instance: a field the payload cannot carry cannot be offered for download,
+ * because the template and the payload are now the same list.
+ */
+export const EXCEL_TEMPLATE_ROWS: Array<Record<string, string | number>> = [buildImportTemplateRow()];
 
 const quantityFormatter = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 0,

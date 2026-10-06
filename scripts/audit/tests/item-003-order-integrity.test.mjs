@@ -177,13 +177,20 @@ test('the import and manual creation both assign a rank', () => {
   const importBody = service.slice(service.indexOf('async bulkImportFromExcel'));
   assert.match(
     importBody,
-    /sortOrder:\s*rank/,
+    /sortOrder:\s*entry\.rank/,
     'an imported row must be given its file position, or the file order is discarded',
   );
   assert.match(
     importBody,
-    /nextSortOrder\(\)/,
+    /nextSortOrder\(tx\)/,
     'the import must start from the current end of the catalogue, not from zero',
+  );
+  assert.match(
+    importBody,
+    /nextSortOrder\(tx\)/,
+    'the rank base must be read on the transaction, not on the root client. `max + 1` outside a ' +
+      'transaction is a correct answer to a question asked at the wrong moment, and it is the whole ' +
+      'reason two concurrent imports produced interleaved ranks.',
   );
 
   // The create path is the one an operator uses when adding an item by hand.

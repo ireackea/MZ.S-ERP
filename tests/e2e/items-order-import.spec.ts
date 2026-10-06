@@ -102,7 +102,7 @@ describe('ITEM-003 the catalog order is the one the operator arranged', () => {
 
     const imported = await request('/items/import-excel', {
       method: 'POST',
-      headers,
+       headers: { ...headers, 'Idempotency-Key': `w3-import-${randomUUID()}` },
       body: JSON.stringify({ items: intended.map((row, index) => ({ ...row, sourceRow: index + 2 })) }),
     });
 
@@ -211,7 +211,7 @@ describe('ITEM-003 the catalog order is the one the operator arranged', () => {
     ];
     const imported = await request('/items/import-excel', {
       method: 'POST',
-      headers,
+       headers: { ...headers, 'Idempotency-Key': `w3-import-${randomUUID()}` },
       body: JSON.stringify({ items: fresh.map((row, index) => ({ ...row, sourceRow: index + 2 })) }),
     });
     expect(imported.response.status).toBe(201);

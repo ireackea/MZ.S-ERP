@@ -15,6 +15,7 @@ import {
   Param,
   Patch,
   Delete,
+  Headers,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -138,8 +139,16 @@ export class ItemController {
 
   @Permissions('items.delete')
   @Post('delete')
-  async deleteMany(@Body() dto: DeleteItemsDto) {
-    return this.itemService.deleteByPublicIds(dto.publicIds);
+  async deleteMany(@Body() dto: DeleteItemsDto, @Req() req: any) {
+    // FC-ITEM-IMPORT — the actor was not passed, so this route audited nothing
+    // identifiable: the hard delete and the bulk purge are the two operations in
+    // this module that cannot be undone, and this is the one that left no name
+    // against them.
+    return this.itemService.deleteByPublicIds(
+      dto.publicIds,
+      req.user?.sub || req.user?.id,
+      req.user?.username,
+    );
   }
 
   @Permissions('items.archive')
@@ -198,12 +207,60 @@ export class ItemController {
   }
 
   // Phase 5: Bulk Import from Excel (JSON payload)
+  //
+  // `Idempotency-Key` is read from a header rather than the body, because that is
+  // where every other HTTP client already puts it and because a key in the body would
+  // be part of the payload it is supposed to identify. It is required, not optional:
+  // a double-clicked import button is two requests, and without a key the second one
+  // is refused for duplicating the first's codes — the operator is shown a failure
+  // for work that already succeeded, with no way to tell which of the two is real.
   @Permissions('items.import')
   @Post('import-excel')
-  async importExcel(@Body() dto: BulkImportDto, @Req() req: any) {
+  async importExcel(
+    @Body() dto: BulkImportDto,
+    @Req() req: any,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+  ) {
     const userId = req.user?.sub || req.user?.id;
     const actorUsername = req.user?.username;
-    return this.itemService.bulkImportFromExcel(dto.items, userId, actorUsername);
+    return this.itemService.bulkImportFromExcel(dto.items, userId, actorUsername, {
+      mode: dto.mode,
+      sourceFileName: dto.sourceFileName,
+      idempotencyKey,
+    });
+  }
+
+  // The dry run. Same permission as the import itself, because knowing whether a file
+  // will be accepted is not a lesser privilege than sending it, and gating it higher
+  // would only mean the studio cannot tell an operator their file is broken until
+  // they commit to sending it.
+  @Permissions('items.import')
+  @Post('import-excel/validate')
+  async validateExcel(@Body() dto: BulkImportDto) {
+    return this.itemService.validateImport(dto.items, { mode: dto.mode });
+  }
+
+  // Taking an import back is a different decision from making one, so it has its own
+  // permission. `items.*` covers it for Admin and SuperAdmin; a Manager, who may
+  // import, may not undo — and `isPermissionGranted` reads `items.import` as a
+  // different key from `items.import.revert` rather than as a prefix of it.
+  @Permissions('items.import.revert')
+  @Post('import-batches/:publicId/revert')
+  async revertImportBatch(
+    @Param('publicId') publicId: string,
+    @Req() req: any,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Query('purge') purge?: string,
+  ) {
+    return this.itemService.revertImportBatch(publicId, {
+      userId: req.user?.sub || req.user?.id,
+      username: req.user?.username,
+    }, {
+      // Explicit and spelled out, not inferred from the presence of a value. `?purge`
+      // and `?purge=false` are different requests and must not be the same one.
+      purge: purge === 'true',
+      idempotencyKey,
+    });
   }
 
   // Phase 5: Upload Image Attachment

@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const read = (relativePath) => readFileSync(resolve(root, relativePath), 'utf8');
@@ -21,18 +21,39 @@ test('bulk item import cannot write currentStock as ordinary metadata', () => {
 test('item service has no direct currentStock write in sync or import paths', () => {
   const service = read('backend/src/item/item.service.ts');
   const syncSection = service.slice(service.indexOf('async syncItems'), service.indexOf('async findAll'));
-  const importSection = service.slice(service.indexOf('async bulkImportFromExcel'), service.indexOf('// Phase 5: Upload Attachment'));
+  // Slice only the import method, not everything up to the next "Phase 5" comment.
+  // `revertImportBatch` was added between the import and that marker in Wave 3, and it
+  // legitimately *reads* `currentStock` from a SELECT to decide whether to refuse —
+  // refusing on a non-zero balance is the entire point of a revert. The guard is about
+  // *writing* stock, so it must not reach across a method boundary into a read.
+  const importSection = service.slice(
+    service.indexOf('async bulkImportFromExcel'),
+    service.indexOf('private async readExistingImportKeys'),
+  );
   assert.doesNotMatch(syncSection, /currentStock\s*:/);
   assert.doesNotMatch(importSection, /currentStock\s*:/);
   assert.doesNotMatch(importSection, /item\.currentStock/);
 });
 
-test('item form no longer submits unsupported product fields as if they were persisted', () => {
-  const form = read('frontend/src/components/ItemForm.tsx');
-  assert.doesNotMatch(form, /toApiPayload/);
-  assert.doesNotMatch(form, /apiClient\.post\(['"]\/items['"]/);
-  assert.doesNotMatch(form, /apiClient\.put\([^\n]*\/items\//);
-  assert.doesNotMatch(form, /toSyncPayload/);
+test('the dead item form is gone, and stays gone', () => {
+  // This used to assert that `ItemForm.tsx` did not submit stock or unsupported
+  // fields. It was guarding a live hazard in a file nothing imported: 27KB of a form
+  // with its own payload builders, reachable by anyone who decided to route to it.
+  //
+  // Wave 4 deleted it. The hazard went with the file, so reading the file to check its
+  // contents was checking a corpse — and the moment it stopped existing, the guard
+  // threw ENOENT and failed for a reason that had nothing to do with stock.
+  //
+  // The property that still matters is that it does not come back. A resurrected form
+  // with a hand-built payload is the failure this whole file exists to prevent, and a
+  // deleted component is a real thing to keep deleted.
+  const formPath = 'frontend/src/components/ItemForm.tsx';
+  assert.equal(
+    existsSync(join(root, formPath)),
+    false,
+    `${formPath} is dead code with its own payload builders and no importer. If a screen ` +
+      'genuinely needs it, reimplement it against itemWriteData rather than restoring this.',
+  );
 });
 
 test('transaction service centralizes currentStock writes in the stock delta helper', () => {

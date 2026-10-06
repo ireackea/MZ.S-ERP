@@ -418,7 +418,7 @@ const ItemsSmartCatalog: React.FC<ItemsSmartCatalogProps> = ({
       </section>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className="text-sm text-slate-500">إجمالي الأصناف</div><div className="mt-2 text-2xl font-black text-slate-900">{formatQuantity(stats.totalItems)}</div></div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className="text-sm text-slate-500">إجمالي الأصناف</div><div className="mt-2 text-2xl font-black text-slate-900">{formatQuantity(catalogTruncation?.truncated ? catalogTruncation.total : stats.totalItems)}</div>{catalogTruncation?.truncated && <div className="mt-1 text-xs font-bold text-amber-700">معروض الآن {formatQuantity(stats.totalItems)} منها</div>}</div>
         <div className="rounded-2xl border border-amber-200 bg-white p-4 shadow-sm"><div className="text-sm text-slate-500">منخفضة أو حرجة</div><div className="mt-2 text-2xl font-black text-amber-700">{formatQuantity(stats.warningItems)}</div></div>
         <div className="rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm"><div className="text-sm text-slate-500">متوسط جودة البيانات</div><div className="mt-2 text-2xl font-black text-emerald-700">{insights.averageQuality}%</div></div>
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className="text-sm text-slate-500">نواقص حرجة</div><div className="mt-2 text-sm font-bold text-slate-800">{insights.missingCode} بلا كود - {insights.missingBarcode} بلا باركود - {insights.missingPackageWeight} بلا وزن</div></div>
@@ -427,6 +427,7 @@ const ItemsSmartCatalog: React.FC<ItemsSmartCatalogProps> = ({
       <ItemOrderProfiles
         profiles={orderProfiles?.profiles ?? null}
         catalogSize={orderProfiles?.catalogSize ?? 0}
+        catalogTruncation={catalogTruncation}
         activeProfileId={orderProfiles?.activeProfileId ?? null}
         busy={applyingOrderProfile}
         canReorder={canReorder}

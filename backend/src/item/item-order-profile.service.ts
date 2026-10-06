@@ -191,6 +191,16 @@ export class ItemOrderProfileService {
       await this.audit(tx, actor, 'ITEM_ORDER_PROFILE_APPLIED', profile.name, ranked, profileId, { appended });
 
       return { id: profile.id, name: profile.name, ranked, appended };
+    }).then((result) => {
+      // FC-ITEM-IMPORT — announced after the commit, because this is the change the
+      // other sessions most need to hear about and the one they were never told
+      // about. `materialise` rewrites `Item.sortOrder` for the whole catalogue —
+      // the exact column every list endpoint orders by — and the service has
+      // injected RealtimeService since it was written without ever calling it, so
+      // after applying a saved order no other session learned the catalogue had
+      // been rearranged. It kept the stale order until its next manual load.
+      this.announceReorder(`applied:${profileId}`, result.ranked);
+      return result;
     });
   }
 
@@ -222,6 +232,12 @@ export class ItemOrderProfileService {
 
       await this.audit(tx, actor, 'ITEM_ORDER_PROFILE_REFRESHED', profile.name, items.length, profileId);
       return { id: written.id, name: written.name, itemCount: items.length };
+    }).then((result) => {
+      // Same reasoning as `apply`: refreshing a saved order re-ranks the catalogue
+      // through `writeProfile`'s materialise, so other sessions are looking at an
+      // order that no longer exists until they reload.
+      this.announceReorder(`refreshed:${profileId}`, result.itemCount);
+      return result;
     });
   }
 
@@ -355,6 +371,35 @@ export class ItemOrderProfileService {
    * relative order and follow, so a profile written before some items existed
    * still applies without dropping those items or re-alphabetising the tail.
    */
+  /**
+   * Announce a catalogue reorder without ever failing the request that caused it.
+   *
+   * `emitSync` is synchronous and unguarded (realtime.service.ts:39-50), so a
+   * throw would answer 500 for a transaction that had already committed. The same
+   * guard, with the same reasoning, is in `ItemService.emitItemsChanged`; the two
+   * live in separate services and neither can call the other without a circular
+   * dependency, so the shape is repeated deliberately and named the same way.
+   *
+   * The event is `items.reordered` rather than something profile-specific, because
+   * that is the event every client already knows how to handle — it is what
+   * `POST /items/reorder` sends, and `App.tsx` refreshes the catalogue on it.
+   */
+  private announceReorder(suffix: string, count: number) {
+    if (count <= 0) return;
+    try {
+      this.realtimeService.emitSync(
+        ['items', 'dashboard', 'operations', 'formulation', 'stocktaking'],
+        'items.reordered',
+        { meta: { count, source: `order-profile:${suffix}` } },
+      );
+    } catch (error) {
+      console.error(
+        `[item-order-profile] committed a reorder but the realtime announcement failed (${suffix}, count=${count}):`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
   private async materialise(tx: Prisma.TransactionClient, itemIds: number[]) {
     // Both columns are cast explicitly. A VALUES list built from parameters has no
     // type of its own, and Postgres resolves the first unknown column to `text` —

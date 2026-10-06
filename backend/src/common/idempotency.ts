@@ -73,7 +73,34 @@ export async function executeIdempotently<T>(
         }
         return { value: existing.response as unknown as T, replayed: true };
       }
-      if (error?.code === 'P2034' && attempt < 2) continue;
+      // `40001` is serialization_failure, and it arrives by two different doors.
+      //
+      // Prisma's own optimistic-concurrency check reports `P2034`. A `$queryRaw`
+      // inside the same transaction does not — it reports `P2010` with the underlying
+      // SQLSTATE in the message, because a raw statement bypasses the layer that
+      // translates the condition into `P2034`.
+      //
+      // The importer has raw statements — the advisory lock, the folded-duplicate
+      // lookup — so under two concurrent imports it hit exactly that second door: the
+      // transaction aborted, nothing committed, and the caller got a 500 for a
+      // condition that is *defined* to be retried. The rows did not land, so nothing
+      // was corrupted, but "try again" is the correct answer to a serialization
+      // failure and the operator was told to file a bug instead.
+      //
+      // Both codes are retried, and the SQLSTATE is read from the message rather than
+      // matched on a Prisma code alone, because that is the only place it appears.
+      const isSerializationFailure =
+        error?.code === 'P2034'
+        || (error?.code === 'P2010' && /40001|serialization/i.test(String(error?.message ?? '')));
+      if (isSerializationFailure) {
+        if (attempt < 2) continue;
+        // Three attempts and still contended. Reported as a conflict, not as the raw
+        // database error: the state is unknown-but-consistent, nothing was committed,
+        // and retrying is the right next move for the caller. Letting the raw error out
+        // turns a busy moment into a 500 and a bug report — the same mistake one level
+        // up, one branch further out.
+        throw new ConflictException('Operation could not acquire a consistent database state');
+      }
       throw error;
     }
   }

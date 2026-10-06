@@ -73,7 +73,7 @@ describe('inventory stock write boundary', () => {
 
       const imported = await request('/items/import-excel', {
         method: 'POST',
-        headers,
+        headers: { ...headers, 'Idempotency-Key': `w3-import-${randomUUID()}` },
         body: JSON.stringify({ items: [{ name, category: 'Test', unit: 'kg', currentStock: 99 }] }),
       });
       expect(imported.response.status).toBe(400);

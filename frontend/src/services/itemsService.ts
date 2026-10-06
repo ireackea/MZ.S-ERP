@@ -3,7 +3,12 @@
 // ENTERPRISE FIX: Server-First Sync + Optimistic UI - 2026-02-28
 import apiClient from '@api/client';
 import Fuse from 'fuse.js';
-import { readFirstWorksheetRows } from '../utils/excelWorkbook';
+import { readFirstWorksheetRows, readFirstWorksheetSource } from '../utils/excelWorkbook';
+// FC-ITEM-IMPORT — the single field list. The payload, the template, the alias
+// table and the studio's summary are all projections of it, so a field cannot be
+// offered for download and then refused by the server, or accepted and then
+// dropped without a word.
+import { IMPORTABLE_FIELDS } from '../pages/items/import/import-fields';
 import type { Item } from '../types';
 
 export interface ItemDto {
@@ -226,6 +231,25 @@ export const generateMissingCodes = async (maxRetries = 3): Promise<GenerateCode
 // Phase 5: Bulk Import from Excel (JSON)
 export interface ExcelImportRow {
   sourceRow?: number;
+  /**
+   * Which sheet the row came from, for a message that has to name a place.
+   *
+   * Provenance, not data. It is excluded from the importable key union below, and it
+   * has to be: a field that is a coordinate rather than a value must never be offered
+   * as a template column, because the server would try to store the sheet name in a
+   * column called `name`.
+   */
+  sourceSheet?: string;
+  /**
+   * The item this row updates rather than creates.
+   *
+   * Set by the studio when the row's code or barcode already belongs to a known item —
+   * which is the only way an archived item is revived rather than duplicated, and the
+   * only way a file that references a known item can correct it instead of colliding
+   * with it. Provenance, so excluded from the importable keys below: the server reads
+   * it to choose an update, and the template must never offer a column for it.
+   */
+  publicId?: string;
   name: string;
   code?: string;
   barcode?: string;
@@ -240,7 +264,30 @@ export interface ExcelImportRow {
   description?: string;
 }
 
-export type ExcelImportFieldKey = keyof Omit<ExcelImportRow, 'sourceRow'>;
+/**
+ * Every data field an import file can talk about, importable or not.
+ *
+ * Distinct from `ExcelImportFieldKey` on purpose. `currentStock` has to be
+ * *nameable* — the studio lists it, explains why it is refused, and never sends it —
+ * and a type that excluded it outright would force all of that to be cast. So the
+ * field list is declared over this wider union, and `IMPORTABLE_FIELDS` narrows to
+ * the subset an import may actually carry.
+ */
+export type ExcelImportRowField = keyof Omit<
+  ExcelImportRow,
+  'sourceRow' | 'sourceSheet' | 'publicId'
+>;
+
+/**
+ * The fields that are actually importable: no provenance, and no stock.
+ *
+ * Excluding `currentStock` here is what makes "the ledger owns stock" a compile
+ * error rather than a review comment. A caller that tries to build a payload with a
+ * balance cannot, and the two places that needed to *name* stock for a message are
+ * forced to do it through the wider `ExcelImportRowField` union where the reason can
+ * be written next to it.
+ */
+export type ExcelImportFieldKey = Exclude<ExcelImportRowField, 'currentStock'>;
 
 export interface ExcelImportColumnMatch {
   field: ExcelImportFieldKey;
@@ -255,6 +302,18 @@ export interface ExcelImportParseResult {
   sourceHeaders: string[];
   columnMatches: ExcelImportColumnMatch[];
   skippedEmptyRows: number;
+  /**
+   * The 1-based sheet row the headers were read from.
+   *
+   * Carried so the studio can say "الترويسة في الصف 3" instead of leaving the
+   * operator to wonder why the preview does not line up with what they see.
+   */
+  headerRow: number;
+  /**
+   * Header labels that appear more than once. Not resolved — a duplicate column has
+   * no correct winner, so it is reported and the operator decides.
+   */
+  duplicateHeaders: string[];
 }
 
 export type ItemImportIssue = {
@@ -269,14 +328,74 @@ export interface ExcelImportResult {
   success: number;
   failed: number;
   total: number;
+  /**
+   * The batch id, and the thing an operator needs in order to undo the import. It was
+   * absent before Wave 3 because nothing named the run: the audit row carried a
+   * generated id with no row behind it, so there was no handle to hold.
+   */
+  batchId?: string;
+  status?: 'succeeded' | 'partial' | 'failed';
+  /** True when this response was replayed for an Idempotency-Key already seen. */
+  replayed?: boolean;
   results: Array<{ row: number; publicId: string; name: string; status: string }>;
   errors: Array<ItemImportIssue & { error: string }>;
 }
 
-const toImportPayload = (items: ExcelImportRow[]) => items.map(({ englishName, description, currentStock, ...item }) => ({
-  ...item,
-  description: String(description || englishName || '').trim() || undefined,
-}));
+/** What a dry run reports. Nothing here is written. */
+export interface ExcelImportValidation {
+  valid: boolean;
+  mode: 'strict' | 'partial';
+  modeDescription: string;
+  wouldCreate: number;
+  wouldUpdate: number;
+  rejected: number;
+  total: number;
+  errors: ItemImportIssue[];
+}
+
+/**
+ * FC-ITEM-IMPORT — the payload is built from the same list the template and the
+ * matcher are built from.
+ *
+ * It used to be a destructuring line that pulled `englishName`, `description` and
+ * `currentStock` out and re-added only a folded `description`, which meant:
+ *
+ *   `englishName` never reached the server. `BulkImportItemDto` still declared it
+ *   and the service still had a fallback for it, so both were dead code that looked
+ *   alive — and a file with an English name and no description stored its English
+ *   name in the description column.
+ *
+ *   `currentStock` was dropped, correctly, and silently. Correct because the ledger
+ *   owns stock; silent because the template asked for the column.
+ *
+ * The field set is now `IMPORTABLE_FIELDS`, so a field that is not importable is
+ * not sent, and a field that is importable cannot be forgotten.
+ */
+const toImportPayload = (items: ExcelImportRow[]) =>
+  items.map((row) => {
+    const payload: Record<string, unknown> = { sourceRow: row.sourceRow };
+    // `publicId` is provenance, not a field, so it is not in IMPORTABLE_FIELDS and
+    // the loop below never reaches it. It still has to travel: it is how a row becomes
+    // an *update* instead of an insert, which is the only way an archived item is
+    // revived and the only way a file that references a known item can correct it
+    // rather than collide with it.
+    if (row.publicId) payload.publicId = row.publicId;
+    for (const definition of IMPORTABLE_FIELDS) {
+      const value = row[definition.field as keyof ExcelImportRow];
+      if (value === undefined || value === null || value === '') continue;
+      payload[definition.field] = value;
+    }
+    // Both columns, never one folded into the other. The template has a separate
+    // "الاسم الإنجليزي" column and a separate "الوصف" column; silently merging them
+    // meant whichever the operator filled in lost its own meaning.
+    if (row.englishName != null && String(row.englishName).trim() !== '') {
+      payload.englishName = String(row.englishName).trim();
+    }
+    if (row.description != null && String(row.description).trim() !== '') {
+      payload.description = String(row.description).trim();
+    }
+    return payload;
+  });
 
 const toWritePayload = (item: Item, includePublicId = true): ItemWritePayload => ({
   ...(includePublicId ? { publicId: String(item.id) } : {}),
@@ -411,10 +530,93 @@ export const deleteOrderProfile = async (profileId: string): Promise<{ id: strin
   return unwrap(response.data);
 };
 
-export const bulkImportFromExcel = async (items: ExcelImportRow[]): Promise<ExcelImportResult> => {
+export const bulkImportFromExcel = async (
+  items: ExcelImportRow[],
+  options: {
+    mode?: 'strict' | 'partial';
+    sourceFileName?: string;
+    idempotencyKey?: string;
+    signal?: AbortSignal;
+    onProgress?: (percent: number) => void;
+    timeout?: number;
+  } = {},
+): Promise<ExcelImportResult> => {
+  const idempotencyKey = options.idempotencyKey ?? crypto.randomUUID();
   try {
-    const response = await apiClient.post('/items/import-excel', { items: toImportPayload(items) });
+    const response = await apiClient.post(
+      '/items/import-excel',
+      {
+        items: toImportPayload(items),
+        mode: options.mode,
+        sourceFileName: options.sourceFileName,
+      },
+      {
+        headers: { 'Idempotency-Key': idempotencyKey },
+        // Cancellation and a ceiling, because a 500-row import over a slow link can
+        // hang for minutes with the modal showing an indefinite spinner and no way out.
+        // The abort is wired to the operator's own cancel button, and the timeout is a
+        // backstop for the case they walk away — the server is idempotent, so a retry
+        // with the same key cannot double-import.
+        signal: options.signal,
+        timeout: options.timeout ?? 120_000,
+        onUploadProgress: (event) => {
+          if (!options.onProgress || !event.total) return;
+          // Clamped: `event.total` is unknown for some bodies, and a percentage over
+          // 100 would render a progress bar past its end.
+          const percent = Math.min(99, Math.round((event.loaded / event.total) * 100));
+          options.onProgress(percent);
+        },
+      },
+    );
+    options.onProgress?.(100);
     return response.data as ExcelImportResult;
+  } catch (error) {
+    throw handleApiError(error);
+  }
+};
+
+
+/**
+ * The dry run. Reports what the import would do and writes nothing.
+ *
+ * Separate from `bulkImportFromExcel` rather than a flag on it, because a flag
+ * invites the caller to send `validate: false` where it meant `true`, and the
+ * difference is a write to the catalogue.
+ */
+export const validateExcelImport = async (
+  items: ExcelImportRow[],
+  options: { mode?: 'strict' | 'partial' } = {},
+): Promise<ExcelImportValidation> => {
+  try {
+    const response = await apiClient.post('/items/import-excel/validate', {
+      items: toImportPayload(items),
+      mode: options.mode,
+    });
+    return response.data as ExcelImportValidation;
+  } catch (error) {
+    throw handleApiError(error);
+  }
+};
+
+/**
+ * Takes one import back. Refuses, with the reason per item, when anything has moved
+ * since.
+ */
+export const revertImportBatch = async (
+  batchPublicId: string,
+  options: { purge?: boolean; idempotencyKey?: string } = {},
+): Promise<{ batchId: string; archived: number; deleted: number; purged: boolean }> => {
+  try {
+    // The key is required server-side, and deliberately so: this is the one call here
+    // that removes rows from the catalogue. A double-clicked revert with no key would
+    // be two reverts, and the second would answer "already reverted" for work that
+    // had just succeeded.
+    const response = await apiClient.post(
+      `/items/import-batches/${encodeURIComponent(batchPublicId)}/revert${options.purge ? '?purge=true' : ''}`,
+      undefined,
+      { headers: { 'Idempotency-Key': options.idempotencyKey ?? crypto.randomUUID() } },
+    );
+    return response.data as { batchId: string; archived: number; deleted: number; purged: boolean };
   } catch (error) {
     throw handleApiError(error);
   }
@@ -445,20 +647,10 @@ const parseImportNumber = (value: unknown) => {
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
-const IMPORT_FIELD_DEFINITIONS: Array<{ field: ExcelImportFieldKey; label: string; aliases: string[] }> = [
-  { field: 'name', label: 'اسم الصنف', aliases: ['name', 'item name', 'itemname', 'product name', 'اسم الصنف', 'الصنف', 'المادة', 'اسم المادة', 'اسم المنتج', 'الوصف العربي'] },
-  { field: 'code', label: 'كود الصنف', aliases: ['code', 'item code', 'itemcode', 'sku', 'كود', 'الكود', 'كود الصنف', 'رقم الصنف', 'رمز الصنف'] },
-  { field: 'barcode', label: 'الباركود', aliases: ['barcode', 'bar code', 'ean', 'upc', 'الباركود', 'باركود', 'رقم الباركود'] },
-  { field: 'englishName', label: 'الاسم الإنجليزي', aliases: ['english name', 'englishname', 'english', 'description en', 'الاسم الانجليزي', 'الاسم الإنجليزي', 'الاسم الانجليزى'] },
-  { field: 'description', label: 'الوصف', aliases: ['description', 'desc', 'notes', 'الوصف', 'ملاحظات', 'بيان'] },
-  { field: 'category', label: 'القسم', aliases: ['category', 'group', 'department', 'section', 'الفئة', 'التصنيف', 'القسم', 'المجموعة', 'البند'] },
-  { field: 'unit', label: 'الوحدة', aliases: ['unit', 'uom', 'unit of measure', 'الوحدة', 'وحدة', 'وحدة القياس'] },
-  { field: 'packageWeight', label: 'وزن العبوة', aliases: ['package weight', 'packageweight', 'pack weight', 'weight', 'وزن العبوة', 'وزن العبوه', 'وزن', 'وزن الشكارة'] },
-  { field: 'minLimit', label: 'الحد الأدنى', aliases: ['min limit', 'minlimit', 'minimum', 'min', 'الحد الأدنى', 'الحد الادنى', 'حد ادنى', 'حد أدنى'] },
-  { field: 'maxLimit', label: 'الحد الأعلى', aliases: ['max limit', 'maxlimit', 'maximum', 'max', 'الحد الأعلى', 'الحد الاعلى', 'الحد الأقصى', 'الحد الاقصى'] },
-  { field: 'orderLimit', label: 'حد إعادة الطلب', aliases: ['order limit', 'orderlimit', 'reorder limit', 'reorder', 'حد الطلب', 'حد إعادة الطلب', 'حد اعادة الطلب'] },
-  { field: 'currentStock', label: 'الرصيد الحالي', aliases: ['current stock', 'currentstock', 'stock', 'quantity', 'qty', 'balance', 'الكمية', 'الكمية الحالية', 'الرصيد', 'الرصيد الحالي'] },
-];
+// FC-ITEM-IMPORT — the alias table is derived from the one field list, so a header
+// spelling added for a new field exists for the matcher and the studio at the same time.
+const IMPORT_FIELD_DEFINITIONS: Array<{ field: ExcelImportFieldKey; label: string; aliases: string[] }> =
+  IMPORTABLE_FIELDS.map((definition) => ({ field: definition.field, label: definition.label, aliases: definition.aliases }));
 
 const resolveImportColumnMatches = (headers: string[]): ExcelImportColumnMatch[] => {
   const normalizedHeaders = headers
@@ -550,13 +742,22 @@ export const uploadItemAttachment = async (
 
 // Phase 5: Parse Excel File
 export const parseExcelFileWithInsights = async (file: File): Promise<ExcelImportParseResult> => {
-  const rows = await readFirstWorksheetRows(file);
+  // The source-aware reader, not the dense one. `sourceRow` has to be the line the
+  // operator is looking at in their own file: the dense reader said `index + 2`, so
+  // every message about a rejected row pointed one line off, and further off for each
+  // blank row above it. A stock file with a blank row in the middle is ordinary, and
+  // each one silently moved every error below it away from the truth.
+  const { rows, headers, headerRow, duplicateHeaders } = await readFirstWorksheetSource(file);
   const items: ExcelImportRow[] = [];
   let skippedEmptyRows = 0;
-  const sourceHeaders = Array.from(rows.reduce((headers, row) => {
-    Object.keys(row).forEach((header) => headers.add(header));
-    return headers;
-  }, new Set<string>()));
+  // The reader's headers, not the union of the data rows' keys.
+  //
+  // Deriving them from the rows meant a file with a header and no data reported *zero*
+  // columns — the studio's header line read "0 عمود مكتشف" about a file whose column
+  // names were sitting right there, and the column-matching panel was empty. That is
+  // the operator's empty template, the exact file the template download produces, and
+  // the one case where telling them what the file is *missing* is most useful.
+  const sourceHeaders = headers;
   const columnMatches = resolveImportColumnMatches(sourceHeaders);
   const activeMatches = columnMatches.filter((match) => match.header);
 
@@ -565,18 +766,30 @@ export const parseExcelFileWithInsights = async (file: File): Promise<ExcelImpor
     if (!match) return '';
     const value = row[match.header];
     if (value == null) return '';
-    const normalized = String(value).trim();
-    if (normalized) return normalized;
-    return '';
+    return String(value).trim();
   };
+
+  /**
+   * A number is either read or it is absent. It is never invented.
+   *
+   * This used to be `readNumber(...) ?? 0` and `?? 1000`, so a cell containing
+   * "غير متوفر" or "#N/A" became 0 and a blank `maxLimit` became 1000 — and the studio
+   * then showed the operator a tidy 0/1000 pair that looked like it had been read from
+   * the file. The default was indistinguishable from data, and the value that would
+   * actually be stored was chosen by a fallback rather than by the sheet. Absent
+   * stays absent, and the row's analysis says so.
+   */
   const readNumber = (row: Record<string, unknown>, field: ExcelImportFieldKey) => {
     const match = activeMatches.find((entry) => entry.field === field);
     return match ? parseImportNumber(row[match.header]) : undefined;
   };
 
-  rows.forEach((rawRow, index) => {
+  rows.forEach((source) => {
+    const rawRow = source.cells;
     const item: ExcelImportRow = {
-      sourceRow: index + 2,
+      // The real line in the operator's own sheet.
+      sourceRow: source.rowNumber,
+      sourceSheet: 'ورقة 1',
       name: readString(rawRow, 'name'),
       code: readString(rawRow, 'code') || undefined,
       barcode: readString(rawRow, 'barcode') || undefined,
@@ -585,21 +798,29 @@ export const parseExcelFileWithInsights = async (file: File): Promise<ExcelImpor
       unit: readString(rawRow, 'unit') || undefined,
       description: readString(rawRow, 'description') || undefined,
       packageWeight: readNumber(rawRow, 'packageWeight'),
-      minLimit: readNumber(rawRow, 'minLimit') ?? 0,
-      maxLimit: readNumber(rawRow, 'maxLimit') ?? 1000,
+      minLimit: readNumber(rawRow, 'minLimit'),
+      maxLimit: readNumber(rawRow, 'maxLimit'),
       orderLimit: readNumber(rawRow, 'orderLimit'),
-      currentStock: readNumber(rawRow, 'currentStock') ?? 0,
     };
 
-    const hasAnyValue = Object.entries(item).some(([key, value]) => key !== 'sourceRow' && String(value ?? '').trim());
-    if (hasAnyValue) {
-      items.push(item);
-    } else {
+    if (source.isEmpty) {
+      // Counted and reported, not dropped. An operator whose 400-row file imports 380
+      // deserves to be told about the 20 in a visible number, not to infer them.
       skippedEmptyRows += 1;
+      return;
     }
+
+    items.push(item);
   });
 
-  return { rows: items, sourceHeaders, columnMatches, skippedEmptyRows };
+  return {
+    rows: items,
+    sourceHeaders,
+    columnMatches,
+    skippedEmptyRows,
+    headerRow,
+    duplicateHeaders,
+  };
 };
 
 export const parseExcelFile = async (file: File): Promise<ExcelImportRow[]> => {

@@ -62,7 +62,19 @@ export class StocktakingService {
           item: { select: { publicId: true, name: true, unit: true, sortOrder: true } },
           counts: { orderBy: { countedAt: 'desc' as const } },
         },
-        orderBy: { item: { sortOrder: 'asc' as const, id: 'asc' as const } },
+        // Two keys, as an array rather than as one object.
+        //
+        // `{ item: { sortOrder, id } }` — the shape every earlier version of Prisma
+        // accepted, and what `tsc` still accepts, because the generated type is an
+        // object with both fields optional. Prisma 7's runtime validator rejects it:
+        // "Argument `item` of type ItemOrderByWithRelationInput needs at most one
+        // argument, but you provided sortOrder and id". So every stocktaking read
+        // answered 500, and a type-check could not see it.
+        //
+        // The array is Prisma's documented multi-key form and applies the keys in
+        // order, so the behaviour is identical to what the object was meant to say:
+        // the operator's saved catalog order first, `id` only to break a tie.
+        orderBy: [{ item: { sortOrder: 'asc' as const } }, { item: { id: 'asc' as const } }],
       },
     };
   }
