@@ -1,10 +1,16 @@
 // ENTERPRISE FIX: Phase 6 - Final Polish & Production Handover - 2026-03-05
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import bcrypt from 'bcryptjs';
 import { isPasswordPolicyCompliant, isWeakLegacyPassword } from '../src/common/password-policy';
 import { DEFAULT_ROLES } from '../src/auth/role-templates';
 
-const prisma = new PrismaClient();
+// Prisma 7 requires a driver adapter, exactly like the running app does in
+// prisma.service.ts. Calling the no-argument constructor here is why the seed used to
+// exit with PrismaClientInitializationError before writing a single row.
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: String(process.env.DATABASE_URL || '').trim() }),
+});
 const ENTERPRISE_DEFAULT_PASSWORD = 'SecurePassword2026!';
 
 // FC-SEC-006 — this file used to carry its own `defaultRoles` list, and it was

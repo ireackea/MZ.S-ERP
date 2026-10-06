@@ -26,7 +26,20 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # B15-0 — a declared ceiling. Without it the backup path is the only thing on this
+    # host that can grow without a limit, and the database sharing the host is what
+    # suffers when it does. `mem_limit` is above `max-old-space-size` on purpose: V8
+    # aborts with a diagnosable heap error, whereas the kernel OOM-kill is a number in
+    # `docker ps` and nothing else.
+    mem_limit: ${BACKUP_CONTAINER_MEMORY:-4g}
     environment:
+      # B15-0 — the heap ceiling, declared rather than left to the host. A backup that
+      # outgrows it fails as a V8 heap abort on this container alone.
+      NODE_OPTIONS: ${NODE_OPTIONS:---enable-source-maps --max-old-space-size=3072}
+      # B15-0 — the memory one backup is allowed to need. The dump ceiling is derived
+      # from this, so raising it is what makes a larger database copyable; it is not a
+      # reservation, and exceeding it is refused with a message rather than an OOM.
+      BACKUP_MAX_PEAK_BYTES: ${BACKUP_MAX_PEAK_BYTES:-3221225472}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       BACKUP_ENCRYPTION_SECRET: ${BACKUP_ENCRYPTION_SECRET:?BACKUP_ENCRYPTION_SECRET is required}
@@ -43,12 +56,36 @@ services:
       # FC-SEC-006 — the origin invitation links must point at. Defaults to the
       # port the production frontend image serves, not the vite dev port.
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:4173}
+      # B19 - off-host copies. Empty means "off", and the panel says so plainly.
+      # Point this at a mounted USB device or a network share that is NOT the backup
+      # directory: the service refuses a destination inside it, and every copy is read
+      # back and hashed before it is counted as protection.
+      BACKUP_OFFSITE_DIR: ${BACKUP_OFFSITE_DIR:-}
     ports:
-      - "3001:3001"
+      - "8080:3001"  # host:container. Windows reserved host 3001 (excluded 2970-3069); host moved to port 8080. Container port stays 3001.
     # FC-ITEM-001 — attachments must survive a container rebuild. Without this
     # the volume is anonymous and every uploaded file is lost on `up --build`.
+    #
+    # FC-BACKUP-001 — the same reasoning applies to the backup directory, and
+    # skipping it is far more damaging. `BackupService` resolves its directory as
+    # `path.join(process.cwd(), 'backups')`, which is `/app/backups` — inside the
+    # container's writable layer. docker-compose.prod.yml already mounts
+    # `backups-data` there; this file did not, so on the default stack every
+    # `docker compose up --build` deleted every archive.
+    #
+    # Observed on this machine: a 662 KB verified full backup from 2026-09-28 was
+    # present, and gone after a single `up --build backend`, with `index.json`
+    # reset to two bytes. That is the mechanism behind the missing safety snapshot:
+    # `executeScopedReset` refuses to run unless it has a verified pre-reset
+    # backup, records its id in the audit row, and then that backup is erased by
+    # the next ordinary deploy — leaving an audit trail that points at a file that
+    # no longer exists, and a reset with no way back.
+    #
+    # The volume is named, so it is also inspectable from the host rather than
+    # being reachable only through `docker compose exec`.
     volumes:
       - item_uploads:/app/uploads
+      - backup_storage:/app/backups
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 15s
@@ -69,3 +106,6 @@ volumes:
   postgres_data:
   # FC-ITEM-001 — named volume so item attachments are not lost on rebuild.
   item_uploads:
+  # FC-BACKUP-001 — named volume so verified backups, including the pre-reset
+  # safety snapshot a system reset refuses to run without, survive a rebuild.
+  backup_storage:

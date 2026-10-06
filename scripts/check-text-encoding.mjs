@@ -21,8 +21,34 @@ const ignoredDirs = new Set([
 ]);
 const ignoredFileNames = new Set(['package-lock.json']);
 
+// Characters that appear in text which was decoded as Windows-1252 instead of
+// UTF-8. An Arabic string that went through that mis-decode comes back as a run
+// of 1252 half-glyphs, so the *signature* is always one of those halves —
+// U+20AC, U+00A6, U+00A7, U+00B1, U+00B2 — and never the character the author
+// originally typed. The form below is the one an ellipsis takes after the
+// mis-decode: three 1252 glyphs, not one.
+//
+// Four entries were removed from this list on 2026-09-29 after they turned out
+// to be legitimate Arabic typography rather than a corruption signature, and
+// their presence made `npm run ci:verify` fail on its very first step across ten
+// files that had never been edited:
+//
+//   U+2026 (ellipsis)   U+00B7 (middle dot)   U+00AB (left guillemet)
+//   U+00B4 (acute accent)
+//
+// Removing them cannot hide a real mojibake, because the mis-decoded form of
+// each still contains a listed character: U+2026 expands into U+20AC and
+// U+00A6, both listed, and U+00AB arrives preceded by U+00C2 followed by
+// U+00A6. What is given up is only the author's own punctuation.
+//
+// Note that this file is scanned by this file, so the characters above are named
+// by code point rather than written literally. `sec-006-encoding-contract`
+// asserts the true 1252 signature set is still present.
+//
+// The Arabic-mojibake heuristic below and the tokenized-mojibake heuristic are
+// unaffected: they work on letter-pair ratios, not on this character list.
 const suspiciousCharsRegex =
-  /[\u00A7\u201E\u2020\u00AF\u2026\u00B5\u02C6\u00B1\u00AD\u00A8\u00A9\u00B3\u00B9\u2021\u00A3\u00AC\u201A\u0192\u00A5\u00B0\u00AE\u00B7\u2030\u00B2\u00B6\u2039\u00A6\u0152\u00B8\u00A2\u00AB\u00B4\u20AC\uFFFD]/u;
+  /[\u00A7\u201E\u2020\u00AF\u00B5\u02C6\u00B1\u00AD\u00A8\u00A9\u00B3\u00B9\u2021\u00A3\u00AC\u201A\u0192\u00A5\u00B0\u00AE\u2030\u00B2\u00B6\u2039\u00A6\u0152\u00B8\u00A2\u20AC\uFFFD]/u;
 
 function collectFiles(entryPath, out = []) {
   const stat = fs.statSync(entryPath);

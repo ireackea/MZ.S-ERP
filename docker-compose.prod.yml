@@ -35,7 +35,9 @@ services:
       SYSTEM_RESET_TOKEN: ${SYSTEM_RESET_TOKEN:?SYSTEM_RESET_TOKEN is required}
       BACKUP_ENCRYPTION_SECRET: ${BACKUP_ENCRYPTION_SECRET:?BACKUP_ENCRYPTION_SECRET is required}
       METRICS_AUTH_TOKEN: ${METRICS_AUTH_TOKEN:?METRICS_AUTH_TOKEN is required}
-      NODE_OPTIONS: ${NODE_OPTIONS:---enable-source-maps}
+      NODE_OPTIONS: ${NODE_OPTIONS:---enable-source-maps --max-old-space-size=${BACKUP_MAX_OLD_SPACE_MB:-3072}}
+      # B15-0 — one backup's memory budget. The dump ceiling is derived from it.
+      BACKUP_MAX_PEAK_BYTES: ${BACKUP_MAX_PEAK_BYTES:-3221225472}
     restart: unless-stopped
     volumes:
       - backups-data:/app/backups
