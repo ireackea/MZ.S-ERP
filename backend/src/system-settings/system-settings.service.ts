@@ -30,16 +30,18 @@ export type SettingDefinition = {
   category: 'company' | 'operations' | 'localization';
   valueType: SettingValueType;
   defaultValue: string | number | boolean;
+  /** A value the server refuses to blank. It is printed on every document. */
+  required?: boolean;
 };
 
 export const SETTING_CATALOGUE: readonly SettingDefinition[] = [
-  { key: 'company.name', label: 'اسم الشركة', category: 'company', valueType: 'string', defaultValue: '' },
+  { key: 'company.name', label: 'اسم الشركة', category: 'company', valueType: 'string', defaultValue: '', required: true },
   { key: 'company.address', label: 'العنوان', category: 'company', valueType: 'string', defaultValue: '' },
   { key: 'company.phone', label: 'الهاتف', category: 'company', valueType: 'string', defaultValue: '' },
   { key: 'company.email', label: 'البريد الإلكتروني', category: 'company', valueType: 'string', defaultValue: '' },
   { key: 'company.taxId', label: 'الرقم الضريبي', category: 'company', valueType: 'string', defaultValue: '' },
   { key: 'company.logoUrl', label: 'رابط الشعار', category: 'company', valueType: 'string', defaultValue: '' },
-  { key: 'company.currency', label: 'العملة', category: 'company', valueType: 'string', defaultValue: 'EGP' },
+  { key: 'company.currency', label: 'العملة', category: 'company', valueType: 'string', defaultValue: 'EGP', required: true },
   { key: 'operations.defaultUnloadingDuration', label: 'مدة التفريغ الافتراضية (دقيقة)', category: 'operations', valueType: 'number', defaultValue: 60 },
   { key: 'operations.defaultDelayPenalty', label: 'غرامة التأخير الافتراضية', category: 'operations', valueType: 'number', defaultValue: 0 },
   { key: 'localization.locale', label: 'اللغة', category: 'localization', valueType: 'string', defaultValue: 'ar' },
@@ -204,7 +206,15 @@ export class SystemSettingsService {
     if (raw !== null && raw !== undefined && typeof raw === 'object') {
       throw new BadRequestException(`${definition.label} must be text`);
     }
-    return String(raw ?? '');
+    const text = String(raw ?? '');
+    // The company name and the currency are the two values printed at the top of
+    // every stock card, statement and operations report. Blanking one is not a
+    // cosmetic mistake, and the form has no way to undo it after the fact, so it is
+    // refused here rather than accepted as an empty string.
+    if (definition.required && !text.trim()) {
+      throw new BadRequestException(`${definition.label} is required and cannot be left blank`);
+    }
+    return text;
   }
 
   private coerce(stored: string | null, definition: SettingDefinition): string | number | boolean {

@@ -17,6 +17,7 @@ const migration = readFileSync(
 );
 const schema = readFileSync(join(repoRoot, 'backend/prisma/schema.prisma'), 'utf8');
 const iam = readFileSync(join(repoRoot, 'frontend/src/modules/settings/components/GeneralSettings.tsx'), 'utf8');
+const api = readFileSync(join(repoRoot, 'frontend/src/services/systemSettingsApi.ts'), 'utf8');
 
 test('gate 2.1 company settings live on the server, with one owner', () => {
   assert.match(schema, /model SystemSetting \{/);
@@ -94,4 +95,48 @@ test('gate 2.1 the settings write is attributable', () => {
   assert.match(service, /SYSTEM_SETTINGS_UPDATE/);
   // The message is the part a human reads: which keys moved and what they became.
   assert.match(service, /`\$\{entry\.key\}: \$\{entry\.from/);
+});
+
+test('a setting the screen cannot edit must never be written by that screen', () => {
+  // The defect this guards: the two operations defaults have no input on this form,
+  // but every binding used to be sent on save. With no input to refill them the
+  // values arrived as `undefined`, were coerced to 0, and an operator editing the
+  // phone number reset the unloading duration to 0 in the same request — while the
+  // screen reported success.
+  assert.match(api, /editable: false/, 'a binding must be able to declare itself read-only');
+  assert.doesNotMatch(
+    api,
+    /settings: BINDINGS\.map\(/,
+    'the request body is built from every binding, read-only keys included',
+  );
+  assert.match(api, /settings: EDITABLE_BINDINGS\.map\(/);
+
+  // Read-only here is not unused: the daily-operations screen and the statement fall
+  // back to these values when no unloading rule matches, so the read must survive.
+  assert.match(api, /for \(const binding of BINDINGS\) \{/);
+
+  // And the form must not offer an input it does not own.
+  assert.doesNotMatch(iam, /المدة الافتراضية للتفريغ/);
+  assert.doesNotMatch(iam, /غرامة التأخير الافتراضية/);
+});
+
+test('the values printed on every document cannot be blanked', () => {
+  // `defaultValue: ''` for the company name, and a free-text input with no check,
+  // meant a cleared field was saved as an empty string and every printed document
+  // lost its header — with a success message.
+  assert.match(service, /required\?: boolean/);
+  assert.match(service, /company\.name'[^\n]*required: true/);
+  assert.match(service, /company\.currency'[^\n]*required: true/);
+  assert.match(service, /definition\.required && !text\.trim\(\)/);
+
+  // Refused at the boundary and named on screen, so the operator is told which field.
+  assert.match(api, /label: string/);
+  assert.match(iam, /required/);
+});
+
+test('a parent re-render must not discard what the operator typed', () => {
+  // `useEffect(() => setForm(settings), [settings])` reset the form on every new
+  // prop object, including one that carried no change.
+  assert.match(iam, /sameSettings/);
+  assert.match(iam, /synced\.current/);
 });

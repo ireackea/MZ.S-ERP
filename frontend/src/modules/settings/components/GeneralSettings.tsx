@@ -1,5 +1,5 @@
 // ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Save, ShieldAlert } from 'lucide-react';
 import { usePermissions } from '@hooks/usePermissions';
 import { toast } from '@services/toastService';
@@ -11,14 +11,29 @@ interface GeneralSettingsProps {
   onUpdateSettings: (settings: SystemSettings) => void;
 }
 
+const sameSettings = (a: SystemSettings, b: SystemSettings) =>
+  a.companyName === b.companyName &&
+  a.currency === b.currency &&
+  a.address === b.address &&
+  a.phone === b.phone &&
+  a.logoUrl === b.logoUrl &&
+  a.defaultUnloadingDuration === b.defaultUnloadingDuration &&
+  a.defaultDelayPenalty === b.defaultDelayPenalty;
+
 const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, onUpdateSettings, }) => {
   const { hasPermission } = usePermissions();
   const canView = hasPermission('settings.view.general');
   const canEdit = hasPermission('settings.update.system');
   const [form, setForm] = useState<SystemSettings>(settings);
   const [saving, setSaving] = useState(false);
+  // The last prop values this form was reset from. Resetting the form is right when
+  // the parent genuinely has new values, and wrong when the parent re-renders with an
+  // equal object: that discarded whatever the operator had typed.
+  const synced = useRef<SystemSettings>(settings);
 
   useEffect(() => {
+    if (sameSettings(synced.current, settings)) return;
+    synced.current = settings;
     setForm(settings);
   }, [settings]);
 
@@ -33,9 +48,12 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, onUpdateSet
           setForm((current) => ({ ...current, ...fresh }));
         }
       })
-      .catch(() => {
-        // A failed read must not blank the form. What is on screen stays, and the
-        // save below reports the truth if that fails too.
+      .catch((error: any) => {
+        // A failed read must not blank the form, and it must not be silent either:
+        // the values on screen are then the parent defaults, not the stored ones, and
+        // an operator who cannot tell the difference will edit and save the wrong
+        // company name over the real one.
+        toast.error(error?.message || 'تعذّر قراءة الإعدادات العامة من الخادم.');
       });
     return () => {
       cancelled = true;
@@ -87,17 +105,27 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, onUpdateSet
     <form onSubmit={handleSave} className="space-y-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
       <div>
         <h2 className="text-2xl font-black text-slate-900">الإعدادات العامة</h2>
-        <p className="mt-2 text-sm text-slate-500">الهوية الأساسية للنظام وقيم التشغيل الافتراضية المستخدمة عبر الشاشات.</p>
+        <p className="mt-2 text-sm text-slate-500">هوية النظام التي تظهر على المطبوعات والتقارير. قيم التشغيل الافتراضية للتفريغ وغرامة التأخير تُدار من قسم «الأقسام ووحدات القياس» وقواعد التفريغ.</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <label className="space-y-2 text-sm font-semibold text-slate-700">
           <span>اسم الشركة</span>
-          <input value={form.companyName} onChange={(e) => update('companyName', e.target.value)} className="w-full rounded-2xl border border-slate-300 px-4 py-3" />
+          <input
+            value={form.companyName}
+            onChange={(e) => update('companyName', e.target.value)}
+            required
+            className="w-full rounded-2xl border border-slate-300 px-4 py-3"
+          />
         </label>
         <label className="space-y-2 text-sm font-semibold text-slate-700">
           <span>العملة</span>
-          <input value={form.currency} onChange={(e) => update('currency', e.target.value)} className="w-full rounded-2xl border border-slate-300 px-4 py-3" />
+          <input
+            value={form.currency}
+            onChange={(e) => update('currency', e.target.value)}
+            required
+            className="w-full rounded-2xl border border-slate-300 px-4 py-3"
+          />
         </label>
         <label className="space-y-2 text-sm font-semibold text-slate-700 md:col-span-2">
           <span>العنوان</span>
@@ -110,14 +138,6 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, onUpdateSet
         <label className="space-y-2 text-sm font-semibold text-slate-700">
           <span>رابط الشعار</span>
           <input value={form.logoUrl || ''} onChange={(e) => update('logoUrl', e.target.value)} className="w-full rounded-2xl border border-slate-300 px-4 py-3" />
-        </label>
-        <label className="space-y-2 text-sm font-semibold text-slate-700">
-          <span>المدة الافتراضية للتفريغ بالدقائق</span>
-          <input type="number" value={form.defaultUnloadingDuration ?? 0} onChange={(e) => update('defaultUnloadingDuration', Number(e.target.value || 0))} className="w-full rounded-2xl border border-slate-300 px-4 py-3" />
-        </label>
-        <label className="space-y-2 text-sm font-semibold text-slate-700">
-          <span>غرامة التأخير الافتراضية</span>
-          <input type="number" value={form.defaultDelayPenalty ?? 0} onChange={(e) => update('defaultDelayPenalty', Number(e.target.value || 0))} className="w-full rounded-2xl border border-slate-300 px-4 py-3" />
         </label>
       </div>
 
