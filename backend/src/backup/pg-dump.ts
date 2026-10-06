@@ -8,6 +8,7 @@
  */
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { ENCODED_COST } from './disk-headroom';
 
 const run = promisify(execFile);
 
@@ -20,7 +21,105 @@ export type PgDumpResult = {
   byteLength: number;
 };
 
-export const MAX_DUMP_BYTES = 512 * 1024 * 1024;
+/**
+ * B15-0 — the longest string this runtime can hold: `2**29 - 24` characters.
+ *
+ * Measured, not assumed: `'a'.repeat(536870888)` succeeds and
+ * `'a'.repeat(536870889)` throws `RangeError: Invalid string length`.
+ */
+export const V8_MAX_STRING_LENGTH = 2 ** 29 - 24;
+
+/**
+ * B15-0 — peak memory per byte of dump, measured on this runtime.
+ *
+ * A 48 MiB dump drove the process to a 603 MiB RSS: the `pg_dump` stdout buffer, the
+ * base64 copy of it, the JSON holding that, the UTF-8 buffer of the JSON, the
+ * ciphertext, and the base64 of the ciphertext — six copies, 12.6x. Rounded up to 13
+ * because a factor that is exactly right is a factor that fails on the day the dump
+ * compresses differently.
+ *
+ * This number is the reason the ceiling below is not the number the catalogue used
+ * to advertise. It goes away in B15-2, when the archive is written as a stream and
+ * nothing but a chunk is ever resident.
+ */
+export const DUMP_PEAK_FACTOR = 13;
+
+/** The declared memory budget for one backup. Overridable, but never unbounded. */
+export const BACKUP_MAX_PEAK_BYTES = envInt('BACKUP_MAX_PEAK_BYTES', 3 * 1024 * 1024 * 1024);
+
+/** The ceiling the configured limit used to claim: 512 MiB. */
+export const CONFIGURED_MAX_DUMP_BYTES = envInt('BACKUP_MAX_DUMP_BYTES', 512 * 1024 * 1024);
+
+/**
+ * The dump size whose archive still fits in one string.
+ *
+ * The archive is base64 twice (`ENCODED_COST`, ≈1.778x), so this is where
+ * `encrypted.toString('base64')` stops being representable: ≈288 MiB, against the
+ * 512 MiB the code used to allow. Everything above this line failed with a raw
+ * `RangeError` from inside V8, after the dump had already been taken and roughly six
+ * gigabytes had been allocated.
+ */
+export const STRING_CEILING_DUMP_BYTES = Math.floor(V8_MAX_STRING_LENGTH / ENCODED_COST);
+
+/** The dump size whose peak stays inside the declared budget. */
+export const PEAK_CEILING_DUMP_BYTES = Math.floor(BACKUP_MAX_PEAK_BYTES / DUMP_PEAK_FACTOR);
+
+export const MAX_DUMP_BYTES = Math.max(
+  16 * 1024 * 1024,
+  Math.min(CONFIGURED_MAX_DUMP_BYTES, STRING_CEILING_DUMP_BYTES, PEAK_CEILING_DUMP_BYTES),
+);
+
+export type DumpCeiling = {
+  bytes: number;
+  /** Which of the three walls set the ceiling, for a message an operator can act on. */
+  boundBy: 'configured' | 'string-length' | 'memory-budget';
+  /** Why this wall, in the operator's language. */
+  reason: string;
+};
+
+export const describeDumpCeiling = (): DumpCeiling => {
+  if (MAX_DUMP_BYTES === PEAK_CEILING_DUMP_BYTES) {
+    return {
+      bytes: MAX_DUMP_BYTES,
+      boundBy: 'memory-budget',
+      reason: 'وهو ما يسمح به سقف الذاكرة المعلن، لأن النسخة تُحمل في الذاكرة كاملة',
+    };
+  }
+  if (MAX_DUMP_BYTES === STRING_CEILING_DUMP_BYTES) {
+    return {
+      bytes: MAX_DUMP_BYTES,
+      boundBy: 'string-length',
+      reason: 'لأن الأرشيف يُخزَّن كنص، والحد الأقصى لطول النص في هذا التشغيل أصغر',
+    };
+  }
+  return { bytes: MAX_DUMP_BYTES, boundBy: 'configured', reason: 'وهو ما ضبطته في الإعدادات' };
+};
+
+export const mibLabel = (bytes: number) => `${Math.round(bytes / (1024 * 1024))} MiB`;
+
+export const dumpTooLargeMessage = (actualBytes: number, ceiling: DumpCeiling = describeDumpCeiling()) =>
+  `النسخة أكبر من الحد المسموح: التفريغ ${mibLabel(actualBytes)} والحد ${mibLabel(ceiling.bytes)}، ${ceiling.reason}. ` +
+  'قاعدة البيانات نفسها لم تتأثر. ' +
+  'ارفع BACKUP_MAX_PEAK_BYTES إن كانت الذاكرة كافية، أو صدّر نسخة من pg_dump مباشرة إلى قرص خارجي.';
+
+/**
+ * The exact decoded length of a base64 string.
+ *
+ * `Math.floor(length * 3 / 4)` overstates a padded string by up to two bytes, which
+ * is invisible in a headroom estimate and wrong in a manifest field that is compared
+ * against a measured file size.
+ */
+export const base64ByteLength = (value: unknown): number => {
+  const text = String(value ?? '');
+  if (!text.length) return 0;
+  const padding = text.endsWith('==') ? 2 : text.endsWith('=') ? 1 : 0;
+  return Math.max(0, Math.floor((text.length * 3) / 4) - padding);
+};
+
+function envInt(name: string, fallback: number): number {
+  const raw = Number(process.env[name]);
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : fallback;
+}
 
 export type ParsedDatabaseUrl = {
   host: string;
@@ -151,8 +250,15 @@ export const dumpPostgres = async (
   if (!buffer || buffer.length === 0) {
     throw new DatabaseDumpError('pg_dump produced an empty dump');
   }
+  // B15-0 — refuse here, with the numbers, while the dump is still a Buffer.
+  //
+  // Before this, the ceiling was 512 MiB and the archive is 1.778x the dump, so any
+  // dump above ~288 MiB reached `encrypted.toString('base64')` and threw
+  // `RangeError: Invalid string length` from inside V8 — after the dump had been
+  // taken and roughly six gigabytes had been allocated. The refusal now names the
+  // size, the limit and the wall that set it.
   if (buffer.length > MAX_DUMP_BYTES) {
-    throw new DatabaseDumpError(`pg_dump output exceeded ${MAX_DUMP_BYTES} bytes`);
+    throw new DatabaseDumpError(dumpTooLargeMessage(buffer.length));
   }
 
   return { base64: buffer.toString('base64'), format, byteLength: buffer.length };

@@ -9,13 +9,78 @@ const withBackupHeaders = (headers?: Record<string, string>) => {
   return baseHeaders;
 };
 
+/**
+ * B5 / B13 — the one answer to "can I lose everything right now and get it back".
+ *
+ * Read by the dashboard, the reset screen and `App`, all from the same endpoint, so
+ * the three cannot tell the operator different things about the same archive.
+ */
+export type BackupVerdict = 'ok' | 'stale' | 'unhealthy' | 'none';
+
+export interface BackupHealth {
+  verdict: BackupVerdict;
+  summary: string;
+  lastBackup: {
+    id: string;
+    type: string;
+    createdAt: string;
+    ageMs: number;
+    ageHours: number;
+    sizeBytes: number;
+    integrity: string;
+    restorable: boolean;
+  } | null;
+  archiveCount: number;
+  restorableCount: number;
+  threeTwoOne: {
+    copies: number;
+    storageLocations: number;
+    offSite: number;
+    satisfied: boolean;
+    note: string;
+  };
+  schedule: {
+    enabled: boolean;
+    lastRunAt: string | null;
+    frequency: string;
+    nextRunAtHint: string;
+  } | null;
+  problems: Array<{ code: string; severity: 'error' | 'warning'; message: string }>;
+}
+
+/**
+ * `verify: true` re-reads every archive rather than answering from the cache. An
+ * operator auditing their backups needs a measurement, not a recent recollection.
+ */
+export async function fetchBackupHealth(options: { verify?: boolean } = {}): Promise<BackupHealth | null> {
+  try {
+    const response = await apiClient.get(
+      options.verify ? '/backup/health?verify=1' : '/backup/health',
+      { headers: withBackupHeaders() },
+    );
+    return unwrap<BackupHealth>(response.data);
+  } catch {
+    // A health check that throws must not blank the screen. `null` means "unknown",
+    // and the callers render that as unknown rather than as healthy — which is the
+    // whole difference this endpoint exists to make.
+    return null;
+  }
+}
+
 export type BackupKind = 'full' | 'inventory' | 'config' | 'safety_snapshot';
+
+export interface BackupImportResult {
+  backup: BackupHistoryEntry;
+  /** The archive is older than the retention window, so the next backup may delete it. */
+  atRiskOfImmediatePrune: boolean;
+  warnings: string[];
+}
 
 export interface BackupHistoryEntry {
   id: string;
   fileName: string;
   type: BackupKind;
-  trigger: 'manual' | 'scheduled';
+  trigger: 'manual' | 'scheduled' | 'import';
   createdAt: string;
   sizeBytes: number;
   checksumSha256: string;
@@ -63,6 +128,13 @@ export interface BackupStorageStats {
     dayOfWeek: number;
     dayOfMonth: number;
     retentionDays: number;
+    // B9 — the other two retention rules. Sending them matters as much as showing
+    // them: the schedule endpoint accepts unknown keys and discards them, so a
+    // control that saves without the service understanding the field produces a
+    // setting that governs nothing and reports no error.
+    maxCount: number;
+    minCount: number;
+    maxSafetySnapshots: number;
     storageTargets: Array<'local' | 'usb' | 'drive'>;
     encryptionEnabled: boolean;
     hasEncryptionPassword: boolean;
@@ -119,6 +191,9 @@ export async function saveBackupSchedule(payload: {
   dayOfWeek?: number;
   dayOfMonth?: number;
   retentionDays?: number;
+  maxCount?: number;
+  minCount?: number;
+  maxSafetySnapshots?: number;
   storageTargets?: Array<'local' | 'usb' | 'drive'>;
   encryptionEnabled?: boolean;
   encryptionPassword?: string;
@@ -197,10 +272,70 @@ export async function downloadBackupFile(backupId: string): Promise<{ fileName: 
   };
 }
 
+/**
+ * B2 — a refusal has to reach the operator in words.
+ *
+ * The service answers 409 for the two deletions that must not happen (the last
+ * copy, a snapshot an unconfirmed restore depends on). Axios rejects a non-2xx
+ * before the `success === false` check below can run, so the rejection's message
+ * is the generic "Request failed with status code 409" and the reason — the part
+ * that tells the operator what to do instead — is dropped. Read it off the
+ * response body.
+ */
+/**
+ * B21 — the way back in.
+ *
+ * Sent as `multipart` rather than as a base64 JSON field, and not as a style choice:
+ * an archive carries the whole database as base64 already, so a JSON body would hold
+ * a second full copy in memory on both sides on top of the multipart buffers. A file
+ * that cannot be uploaded is the same dead end as a file that cannot be read.
+ */
+export async function importBackupFile(file: File): Promise<BackupImportResult> {
+  const form = new FormData();
+  form.append('file', file, file.name);
+
+  let response;
+  try {
+    response = await apiClient.post('/backup/import', form, {
+      headers: withBackupHeaders(),
+    });
+  } catch (error: any) {
+    // A large upload is the case most likely to be refused in transit, by a proxy
+    // rather than by this service, and a proxy's 413 carries no message the operator
+    // can act on — axios reports only "Request failed with status code 413".
+    const status = error?.response?.status;
+    if (status === 413) {
+      throw new Error(
+        'حجم الملف أكبر من الذي يسمح به الخادم الوكيل. ارفع `client_max_body_size` في إعدادات nginx أو صدّر الملف من داخل الشبكة.',
+      );
+    }
+    const body = error?.response?.data;
+    if (body?.success === false) {
+      throw new Error(body?.message || body?.error || 'تعذّر استيراد النسخة.');
+    }
+    throw error;
+  }
+
+  const payload = response.data;
+  if (payload?.success === false) {
+    throw new Error(payload?.message || payload?.error || 'تعذّر استيراد النسخة.');
+  }
+  return payload?.data as BackupImportResult;
+}
+
 export async function removeBackup(backupId: string): Promise<boolean> {
-  const response = await apiClient.delete(`/backup/${encodeURIComponent(backupId)}`, {
-    headers: withBackupHeaders(),
-  });
+  let response;
+  try {
+    response = await apiClient.delete(`/backup/${encodeURIComponent(backupId)}`, {
+      headers: withBackupHeaders(),
+    });
+  } catch (error: any) {
+    const body = error?.response?.data;
+    if (body?.success === false) {
+      throw new Error(body?.message || body?.error || 'تعذر حذف النسخة الاحتياطية.');
+    }
+    throw error;
+  }
   const payload = response.data;
   if (payload?.success === false) {
     throw new Error(payload?.message || payload?.error || 'Delete failed');

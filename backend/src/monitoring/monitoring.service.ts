@@ -11,6 +11,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import * as bcrypt from 'bcryptjs';
 import { AuditService } from '../audit/audit.service';
 import { BackupService } from '../backup/backup.service';
+import { BackupStateService } from '../backup/backup-state.service';
 import { DatabaseInfrastructureService } from '../database/database-infrastructure.service';
 import { PrismaService } from '../prisma.service';
 import { ClientLogDto } from './dto/client-log.dto';
@@ -99,6 +100,22 @@ export const RESET_TARGETS: ResetTarget[] = [
       { table: 'UnloadingRule', stage: 'inventory', model: 'unloadingRule' },
       { table: 'Item', stage: 'inventory', model: 'item' },
 
+      // The saved catalogue orders. Entries cascade from the items, so deleting
+      // Item alone empties every profile while leaving the profile itself in
+      // place, active, and still announcing a non-zero itemCount. That is a
+      // permanently stuck object rather than a cleared one: applying it is refused
+      // because it is empty, and deleting it is refused because it is the active
+      // profile — and there was no route to deactivate it. Observed on the live
+      // database on 2026-09-28 immediately after a reset: `isActive = true`,
+      // `itemCount = 142`, zero entries.
+      //
+      // Deleting the profiles is the honest outcome for a data reset: an order
+      // over rows that no longer exist has nothing to say. Listed explicitly
+      // rather than relied on as a cascade so their row counts reach the report,
+      // and so the entry table is cleared even if the relation is ever relaxed.
+      { table: 'ItemOrderEntry', stage: 'inventory', model: 'itemOrderEntry' },
+      { table: 'ItemOrderProfile', stage: 'inventory', model: 'itemOrderProfile' },
+
       // Sales documents. Not inventory, but `order_items` is RESTRICT on Item,
       // so a scope that clears items and leaves order lines behind does not
       // produce a clean database — it produces orders pointing at nothing. They
@@ -132,6 +149,10 @@ export class MonitoringService {
     private readonly databaseInfrastructure: DatabaseInfrastructureService,
     private readonly auditService: AuditService,
     private readonly backupService: BackupService,
+    // B13 - the same health answer the dashboard and App read. This screen used to
+    // infer health from one field of one manifest row, which is how three screens
+    // came to disagree about the same archive.
+    private readonly backupState: BackupStateService,
   ) {}
 
   async getHealth(): Promise<HealthStatus> {
@@ -613,9 +634,15 @@ export class MonitoringService {
       }
     }
 
-    // The freshness of the safety net, stated before it is relied on.
-    const lastBackup = await this.backupService.listBackups().catch(() => [] as any[]);
-    const newest = (lastBackup as any[])[0] ?? null;
+    // B13 - the freshness of the safety net, from the one place that answers it.
+    //
+    // This used to read the manifest itself and infer health from a single field of
+    // the newest row. A reset that says "your backup is fine" while the dashboard
+    // says otherwise is worse than a reset that admits it does not know, so both
+    // now read the same answer, and a failure to read it is reported as unknown
+    // rather than as healthy.
+    const health = await this.backupState.getHealth().catch(() => null);
+    const newest = health?.lastBackup ?? null;
 
     return {
       scope,
@@ -624,16 +651,19 @@ export class MonitoringService {
       keptSuperAdmin,
       actorWillBeDeleted,
       blockedBy,
+      // `backupHealth` is the whole answer, carried through so this screen and the
+      // dashboard cannot diverge. `lastBackup` stays for the callers that read it.
+      backupHealth: health,
       lastBackup: newest
         ? {
             id: newest.id,
             createdAt: newest.createdAt,
-            type: newest.type,
+            type: String(newest.type || 'full'),
             integrity: newest.integrity,
             // Gate 1.2: `integrity` is measured now, so "the last backup is
             // restorable" is a question with an answer rather than a constant.
-            restorable: newest.integrity === 'verified',
-            complete: newest.complete !== false,
+            restorable: newest.restorable,
+            complete: true,
           }
         : null,
       generatedAt: new Date(now).toISOString(),
@@ -843,6 +873,45 @@ export class MonitoringService {
       }
 
       this.logger.log(`Pre-reset backup created and verified (id=${backupId})`);
+
+      // FC-BACKUP-001 — existence on disk, not just a healthy return value.
+      //
+      // The checks above read `integrity` and `complete` off the object
+      // `createBackup` returned. They say nothing about whether the archive is
+      // still there, and a reset that deletes the database is the worst possible
+      // moment to discover the answer changed. On this machine the answer did: a
+      // 662 KB verified archive was present in the listing and gone after a single
+      // `docker compose up --build backend`, because the backup directory lives in
+      // the container's writable layer. The audit row for the reset still named its
+      // id, pointing at a file that no longer existed.
+      //
+      // `createBackup` is also what writes the manifest, so the entry is read back
+      // through it rather than by re-reading the file: if the entry is absent the
+      // archive is unaddressable by id, which is the same defect retention pruning
+      // would cause and is equally unrecoverable for this purpose.
+      if (backupId) {
+        const onDisk = await this.backupService.findBackupById(backupId);
+        if (!onDisk) {
+          this.logger.error(
+            `Pre-reset backup ${backupId} reports as created but is not in the manifest `
+              + 'and cannot be addressed; the reset is being refused.',
+          );
+          await this.recordResetAudit({
+            user,
+            meta,
+            action: 'SYSTEM_RESET_REFUSED_MISSING_BACKUP',
+            details: { scope: dto.scope, reason, backupId },
+            status: 'FAILED',
+          });
+          throw new ServiceUnavailableException({
+            code: 'SYSTEM_RESET_BACKUP_MISSING',
+            message:
+              'النسخة الاحتياطية التي أُنشئت غير موجودة أو غير قابلة للوصول بالمعرّف المذكور، '
+              + 'ولم يُنفَّذ المسح. البيانات لم تتغيّر.',
+            detail: { backupId },
+          });
+        }
+      }
     }
 
     // 7) Execute scoped, atomic reset.

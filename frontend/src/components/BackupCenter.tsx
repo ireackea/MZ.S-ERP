@@ -4,7 +4,7 @@
 // ENTERPRISE FIX: Arabic Encoding Restoration - Full Components Folder - 2026-03-04
 // Arabic text encoding verified and corrected
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { formatDateTime } from '@services/dateFormat';
 import {
@@ -24,14 +24,23 @@ import { toast } from '@services/toastService';
 import { User } from '../types';
 import { usePermissions } from '../hooks/usePermissions';
 import {
+  BACKUP_FILTERS,
+  countArchives,
+  filterArchives,
+  type BackupFilter,
+} from './backup-log-filter';
+import {
   applyRestore,
   BackupHistoryEntry,
+  BackupHealth,
   BackupKind,
   BackupStorageStats,
   createBackupByType,
   downloadBackupFile,
+  fetchBackupHealth,
   fetchBackupHistory,
   fetchStorageStats,
+  importBackupFile,
   previewRestore,
   removeBackup,
   saveBackupSchedule,
@@ -67,7 +76,14 @@ const formatBackupDateTime = (value?: string | null) => (
   }) : 'غير متوفر'
 );
 
-const triggerLabel = (trigger: 'manual' | 'scheduled') => (trigger === 'scheduled' ? 'مجدول' : 'يدوي');
+// B21 - an imported archive is labelled as such. Filing it as manual would be a
+// lie an auditor has to disprove: nobody pressed a button for it.
+const triggerLabel = (trigger: 'manual' | 'scheduled' | 'import') =>
+  trigger === 'scheduled'
+    ? 'مجدول'
+    : trigger === 'import'
+      ? 'مستورد'
+      : 'يدوي';
 
 const frequencyLabel = (frequency: 'daily' | 'weekly' | 'monthly') => {
   if (frequency === 'weekly') return 'أسبوعي';
@@ -75,11 +91,19 @@ const frequencyLabel = (frequency: 'daily' | 'weekly' | 'monthly') => {
   return 'يومي';
 };
 
-const storageTargetLabel: Record<'local' | 'usb' | 'drive', string> = {
-  local: 'تخزين محلي',
-  usb: 'وحدة USB',
-  drive: 'مشاركة شبكة',
-};
+/**
+ * Where archives actually go.
+ *
+ * A constant, and no longer a choice. The three checkboxes this replaces were saved,
+ * validated and echoed back by the service while **nothing wrote to a USB device or a
+ * network share** — every archive went to this one directory. The state existed only to
+ * feed an option that had no effect, and the schedule could not be saved without ticking
+ * at least one of them.
+ *
+ * The service still accepts `usb` and `drive` (removing them from its schema would make an
+ * existing saved schedule unreadable), so it is sent `['local']`: what is actually true.
+ */
+const ARCHIVE_STORAGE_TARGETS = ['local'] as const;
 
 const segmentTextClass: Record<'database' | 'config' | 'free', string> = {
   database: 'text-blue-700',
@@ -113,7 +137,7 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busyType, setBusyType] = useState<Exclude<BackupKind, 'safety_snapshot'> | null>(null);
-  const [activeType, setActiveType] = useState<Exclude<BackupKind, 'safety_snapshot'>>('full');
+  const [logFilter, setLogFilter] = useState<BackupFilter>('all');
 
   const [scheduleEnabled, setScheduleEnabled] = useState(true);
   const [scheduleFrequency, setScheduleFrequency] = useState<'daily' | 'weekly' | 'monthly'>('daily');
@@ -122,12 +146,26 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
   const [scheduleDayOfWeek, setScheduleDayOfWeek] = useState(0);
   const [scheduleDayOfMonth, setScheduleDayOfMonth] = useState(1);
   const [retentionDays, setRetentionDays] = useState(30);
-  const [storageTargets, setStorageTargets] = useState<Array<'local' | 'usb' | 'drive'>>(['local']);
+  // B9 — the count cap and the floor. `retentionDays` alone cannot bound the store:
+  // an hourly schedule with a 30-day policy keeps 720 archives, and nothing stopped
+  // retention from emptying it entirely.
+  const [retentionMaxCount, setRetentionMaxCount] = useState(60);
+  const [retentionMinCount, setRetentionMinCount] = useState(2);
   const [encryptionEnabled, setEncryptionEnabled] = useState(true);
   const [encryptionPassword, setEncryptionPassword] = useState('');
   const [restorePin, setRestorePin] = useState('');
   const [restorePassword, setRestorePassword] = useState('');
   const [savingSchedule, setSavingSchedule] = useState(false);
+  // B21 — reset to '' after every attempt, so choosing the same file twice in a row
+  // fires `change` again. Without it a failed import appears to do nothing when
+  // retried, which is the worst possible reading of "it did not work".
+  const [importing, setImporting] = useState(false);
+  // B5 - the health answer, from the one endpoint. A null result means unknown, and is
+  // as unknown: a panel that falls back to "fine" when it cannot ask is the
+  // failure this replaces.
+  const [health, setHealth] = useState<BackupHealth | null>(null);
+  const [healthUnknown, setHealthUnknown] = useState(false);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   const [restoreModalOpen, setRestoreModalOpen] = useState(false);
   const [restoreTarget, setRestoreTarget] = useState<BackupHistoryEntry | null>(null);
@@ -143,16 +181,29 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
   const canRestore = hasPermission('backup.restore') && isPrivilegedRole;
   const canDownload = hasPermission('backup.download');
   const canDelete = hasPermission('backup.delete') && isPrivilegedRole;
+  // B21 — importing puts a file into the trusted store, so it is gated the same way
+  // deleting from it is. It is not gated by the restore PIN, because it destroys
+  // nothing: a restore still needs the PIN, and that is where the blast radius is.
+  const canImport = hasPermission('backup.import') && isPrivilegedRole;
 
-  const createActionLabel = useMemo(() => {
-    if (activeType === 'inventory') return 'إنشاء نسخة بيانات المخزون';
-    if (activeType === 'config') return 'إنشاء نسخة الإعدادات';
-    return 'إنشاء نسخة كاملة';
-  }, [activeType]);
+  /**
+   * Phase 0 — the fetched schedule, kept whole rather than only as loose fields.
+   *
+   * Every field the service sends was being copied into a separate `useState`, and two of
+   * them were dropped on the floor: `hasRestorePin` and `hasEncryptionPassword`. The
+   * server had been answering "is a restore PIN configured?" since B5, and the interface
+   * could not have displayed the answer even if it had wanted to — so it guessed, printed
+   * a fixed sentence, and demanded a PIN that a default deployment does not have.
+   *
+   * Splitting a server response across a dozen states is what made it possible to forget
+   * two of them without any test noticing.
+   */
+  const [scheduleInfo, setScheduleInfo] = useState<BackupStorageStats['schedule'] | null>(null);
 
   const hydrateSchedule = (stats: BackupStorageStats | null) => {
     if (!stats?.schedule) return;
     const schedule = stats.schedule;
+    setScheduleInfo(schedule);
     setScheduleEnabled(Boolean(schedule.enabled));
     setScheduleFrequency(schedule.frequency);
     setScheduleHour(schedule.hour);
@@ -160,7 +211,8 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
     setScheduleDayOfWeek(schedule.dayOfWeek);
     setScheduleDayOfMonth(schedule.dayOfMonth);
     setRetentionDays(schedule.retentionDays);
-    setStorageTargets((schedule.storageTargets as Array<'local' | 'usb' | 'drive'>) || ['local']);
+    setRetentionMaxCount(schedule.maxCount ?? 60);
+    setRetentionMinCount(schedule.minCount ?? 2);
     setEncryptionEnabled(Boolean(schedule.encryptionEnabled));
   };
 
@@ -168,10 +220,17 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
     if (showSpinner) setLoading(true);
     setRefreshing(!showSpinner);
     try {
-      const [stats, logs] = await Promise.all([fetchStorageStats(), fetchBackupHistory()]);
+      const [stats, logs, reported] = await Promise.all([
+        fetchStorageStats(),
+        fetchBackupHistory(),
+        // B5 - asked here so the panel, the reset screen and App read one answer.
+        fetchBackupHealth({ verify: false }),
+      ]);
       setStorage(stats);
       setHistory(logs);
       hydrateSchedule(stats);
+      setHealth(reported);
+      setHealthUnknown(reported === null);
     } catch (error: any) {
       toast.error(error?.message || 'تعذر تحميل بيانات النسخ الاحتياطي.');
     } finally {
@@ -184,11 +243,19 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
     void loadData(true);
   }, []);
 
-  const filteredHistory = useMemo(() => {
-    const sorted = [...history].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-    if (activeType === 'full') return sorted.filter((entry) => entry.type === 'full' || entry.type === 'safety_snapshot');
-    return sorted.filter((entry) => entry.type === activeType);
-  }, [history, activeType]);
+  /**
+   * Filtering and nothing else.
+   *
+   * This was a `useMemo` over `activeType`, the same variable that chose what the primary
+   * create button built and what it was labelled — so picking a filter changed the button.
+   * The decisions now live in `backup-log-filter.ts` where they can be tested, and this
+   * state cannot reach anything but the list.
+   */
+  const filteredHistory = useMemo(
+    () => filterArchives(history, logFilter),
+    [history, logFilter],
+  );
+  const archiveCounts = useMemo(() => countArchives(history), [history]);
 
   const latestBackup = useMemo(() => {
     return [...history].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0];
@@ -196,7 +263,10 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
 
   const runBackup = async (type: Exclude<BackupKind, 'safety_snapshot'>) => {
     if (!canCreate) return;
-    if (type === activeType) setShowPulse(true);
+    // The ring used to be gated on `type === activeType`, which meant it only ever
+    // animated for whichever type happened to match the log filter. With three separate
+    // buttons and a fixed label each, every click gets its own feedback.
+    setShowPulse(true);
     setBusyType(type);
     try {
       await createBackupByType(type, encryptionPassword || undefined);
@@ -206,20 +276,13 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
       toast.error(error?.message || 'فشل إنشاء النسخة الاحتياطية.');
     } finally {
       setBusyType(null);
-      if (type === activeType) {
-        setTimeout(() => setShowPulse(false), 250);
-      }
+      setTimeout(() => setShowPulse(false), 250);
     }
   };
 
   const handleSaveSchedule = async () => {
     if (!canSchedule) {
       toast.error('لا تملك صلاحية تعديل جدولة النسخ الاحتياطية.');
-      return;
-    }
-
-    if (storageTargets.length === 0) {
-      toast.error('اختر وجهة تخزين واحدة على الأقل.');
       return;
     }
 
@@ -233,7 +296,9 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
         dayOfWeek: scheduleDayOfWeek,
         dayOfMonth: scheduleDayOfMonth,
         retentionDays,
-        storageTargets,
+        maxCount: retentionMaxCount,
+        minCount: retentionMinCount,
+        storageTargets: [...ARCHIVE_STORAGE_TARGETS],
         encryptionEnabled,
         encryptionPassword: encryptionPassword || undefined,
         restorePin: restorePin || undefined,
@@ -271,6 +336,51 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
     }
   };
 
+  /**
+   * B21 — the way back in.
+   *
+   * Deleting a backup is the step that used to be irreversible from the interface's
+   * point of view: the file went to the operator's disk, and nothing here would take
+   * it back. This is the counterpart, and it is on the same screen as the delete
+   * button so the two are visibly a pair.
+   *
+   * A confirmation, because the file picker makes it easy to pick the wrong file and
+   * the service's refusals are the only thing standing between a mistake and a
+   * confusing error. It is not the restore confirmation — nothing is destroyed here.
+   */
+  const handleImport = async (file: File | null | undefined) => {
+    if (!canImport) {
+      toast.error('لا تملك صلاحية استيراد النسخ الاحتياطية.');
+      return;
+    }
+    if (!file) return;
+
+    if (!window.confirm(
+      `سيُضاف الملف «${file.name}» إلى قائمة النسخ بعد التحقق منه. `
+      + 'لن تُستعاد أي بيانات الآن — الاستعادة خطوة منفصلة.',
+    )) {
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const result = await importBackupFile(file);
+      toast.success('تم استيراد النسخة والتحقق منها. يمكنك الآن الاستعادة منها.');
+      for (const warning of result.warnings || []) {
+        // A warning that only lives in a console is a warning that never reaches the
+        // operator it is about. The one that matters most is the archive being old
+        // enough for retention to delete it again.
+        toast.error(warning, { duration: 12000 });
+      }
+      await loadData(false);
+    } catch (error: any) {
+      toast.error(error?.message || 'تعذّر استيراد ملف النسخة الاحتياطية.');
+    } finally {
+      setImporting(false);
+      if (importInputRef.current) importInputRef.current.value = '';
+    }
+  };
+
   const handleDelete = async (entry: BackupHistoryEntry) => {
     if (!canDelete) {
       toast.error('لا تملك صلاحية حذف النسخ الاحتياطية.');
@@ -294,8 +404,20 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
     }
 
     try {
-      if (!restorePin.trim()) {
-        toast.error('أدخل رمز الاستعادة أولًا.');
+      // Phase 0 — the PIN is demanded only when one is actually configured.
+      //
+      // This check was unconditional, so an operator who had never set a PIN was told to
+      // "enter the restore code first" for a code that did not exist and could not be
+      // obtained. There was no value to type and no way forward: **no backup on the server
+      // could be restored through this screen.**
+      //
+      // The server already sent `hasRestorePin` and declared it in the API types; it was
+      // simply never read. The rule on the server is the same: no PIN configured means no
+      // PIN demanded, and configuring one makes it mandatory again.
+      if (scheduleInfo?.hasRestorePin && !restorePin.trim()) {
+        toast.error(
+          'هذا الخادم مُهيّأ برمز استعادة. أدخله للمتابعة — اضغط «إعدادات الجدولة» لضبطه أو تغييره.',
+        );
         return;
       }
 
@@ -305,11 +427,28 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
         decryptionPassword: restorePassword || undefined,
       });
 
+      // FC-OPS-003 — the snapshot is named from the server's answer, never asserted
+      // locally.
+      //
+      // This used to say «تم إنشاء لقطة أمان مؤقتة» unconditionally, while the service
+      // set `safetySnapshotId: null` and took no snapshot at all. The operator was told
+      // the undo existed immediately before the one action that cannot be undone.
+      //
+      // Now the message reports what came back. If the id is empty the dialog must not
+      // open — a confirmation screen for a restore with no way back is the same lie one
+      // step later — and the reason belongs in the message, because the server's
+      // refusal explains why.
+      const snapshotId = String(preview?.safetySnapshotId || '');
+      if (!snapshotId) {
+        toast.error('لم تُنشأ لقطة أمان، لذلك لم تُعرَض الاستعادة. البيانات لم تتغيّر.');
+        return;
+      }
+
       setRestoreTarget(entry);
       setRestoreToken(String(preview?.restoreToken || ''));
-      setSafetySnapshotId(String(preview?.safetySnapshotId || ''));
+      setSafetySnapshotId(snapshotId);
       setRestoreModalOpen(true);
-      toast.success('تم إنشاء لقطة أمان مؤقتة. راجع المعاينة قبل تأكيد الاستعادة.');
+      toast.success('أُخذت لقطة أمان قبل الاستعادة. راجع المعاينة قبل التأكيد.');
       await loadData(false);
     } catch (error: any) {
       toast.error(error?.message || 'تعذر تجهيز معاينة الاستعادة.');
@@ -413,24 +552,107 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
         </div>
       </motion.div>
 
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.05 }} className={`${cardClasses} p-5`}>
-        <h3 className="text-lg font-bold text-slate-900 mb-3">تصفية السجل حسب النوع</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          {(['full', 'inventory', 'config'] as Array<Exclude<BackupKind, 'safety_snapshot'>>).map((type) => (
-            <button
-              key={type}
-              type="button"
-              onClick={() => setActiveType(type)}
-              className={`rounded-xl px-4 py-3 border text-sm font-semibold transition ${
-                activeType === type
-                  ? 'border-blue-600 bg-blue-50 text-blue-700 shadow-sm'
-                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              {typeLabel(type)}
-            </button>
-          ))}
+      {/* B5 — the health answer, first on the screen.
+          Placed above the create buttons on purpose: the question an operator opens
+          this page with is "am I protected", and a page that opens with "create a
+          backup" answers a different one. */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25 }}
+        className={[
+          cardClasses,
+          'p-5 border-2',
+          !health || health.verdict === 'unhealthy' || health.verdict === 'none'
+            ? 'border-red-300 bg-red-50'
+            : health.verdict === 'stale'
+              ? 'border-amber-300 bg-amber-50'
+              : 'border-emerald-300 bg-emerald-50',
+        ].join(' ')}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="text-lg font-bold text-slate-900">حالة الحماية</h3>
+          <button
+            type="button"
+            onClick={() => void loadData(false)}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            title="إعادة التحقق بقراءة ملفات النسخ من جديد"
+          >
+            تحقّق الآن
+          </button>
         </div>
+
+        {/* Unknown is not healthy. A panel that falls back to "fine" when it cannot
+            ask is the exact failure this replaces. */}
+        {healthUnknown && (
+          <p className="mt-2 text-sm font-semibold text-red-800">
+            تعذّر قراءة حالة النسخ الاحتياطية. لا تفترض أنها سليمة.
+          </p>
+        )}
+
+        {health && (
+          <>
+            <p className="mt-2 text-sm font-semibold text-slate-800">{health.summary}</p>
+
+            <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+              <div className="rounded-lg border border-white bg-white p-2">
+                <div className="text-slate-500">آخر نسخة</div>
+                <div className="font-semibold text-slate-800">
+                  {health.lastBackup ? formatBackupDateTime(health.lastBackup.createdAt) : 'لا توجد'}
+                </div>
+              </div>
+              <div className="rounded-lg border border-white bg-white p-2">
+                <div className="text-slate-500">عمرها</div>
+                <div className="font-semibold text-slate-800">
+                  {health.lastBackup ? `${health.lastBackup.ageHours} ساعة` : '—'}
+                </div>
+              </div>
+              <div className="rounded-lg border border-white bg-white p-2">
+                <div className="text-slate-500">الحجم</div>
+                <div className="font-semibold text-slate-800">
+                  {health.lastBackup ? formatBytes(health.lastBackup.sizeBytes) : '—'}
+                </div>
+              </div>
+              <div className="rounded-lg border border-white bg-white p-2">
+                <div className="text-slate-500">قابلة للاستعادة</div>
+                <div className="font-semibold text-slate-800">
+                  {health.restorableCount} من {health.archiveCount}
+                </div>
+              </div>
+            </div>
+
+            <p className="mt-2 text-xs text-slate-700">
+              <span className="font-semibold">قاعدة 3-2-1:</span> {health.threeTwoOne.note}
+            </p>
+
+            {health.schedule && (
+              <p className="mt-1 text-xs text-slate-700">
+                <span className="font-semibold">الجدولة:</span>{' '}
+                {health.schedule.enabled
+                  ? `مفعّلة (${health.schedule.frequency})، آخر تشغيل ${formatBackupDateTime(health.schedule.lastRunAt) || 'لم تُسجَّل'}.`
+                  : 'معطّلة — لن تُنشأ نسخ جديدة تلقائياً.'}
+              </p>
+            )}
+
+            {health.problems.length > 0 && (
+              <ul className="mt-3 space-y-1 text-xs">
+                {health.problems.map((problem) => (
+                  <li
+                    key={problem.code}
+                    className={[
+                      'rounded-lg border px-2 py-1.5',
+                      problem.severity === 'error'
+                        ? 'border-red-200 bg-red-100 text-red-900'
+                        : 'border-amber-200 bg-amber-100 text-amber-900',
+                    ].join(' ')}
+                  >
+                    {problem.message}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.1 }} className={`${cardClasses} p-5`}>
@@ -468,6 +690,43 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
           </label>
         </div>
 
+        {/* B9 — the other two retention rules, side by side with the age rule they
+            share a pass with. Shown together because they interact: a floor above
+            the cap would silently stop retention deleting anything at all. */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+          <label className="text-sm text-slate-700">
+            أقصى عدد نسخ محفوظة
+            <input
+              type="number"
+              min={1}
+              max={1000}
+              value={retentionMaxCount}
+              onChange={(event) => setRetentionMaxCount(Number(event.target.value || 60))}
+              disabled={!canSchedule}
+              className="mt-1 w-full rounded-lg border border-slate-300 p-2 disabled:bg-slate-100 disabled:text-slate-500"
+            />
+            <span className="block text-xs text-slate-500 mt-1">
+              يمنع تراكم النسخ عندما تكون المدة أطول من الفترة الفعلية بين النسخ.
+            </span>
+          </label>
+
+          <label className="text-sm text-slate-700">
+            أقل عدد نسخة لا يُحذف
+            <input
+              type="number"
+              min={1}
+              max={retentionMaxCount}
+              value={retentionMinCount}
+              onChange={(event) => setRetentionMinCount(Number(event.target.value || 1))}
+              disabled={!canSchedule}
+              className="mt-1 w-full rounded-lg border border-slate-300 p-2 disabled:bg-slate-100 disabled:text-slate-500"
+            />
+            <span className="block text-xs text-slate-500 mt-1">
+              بلا هذا الحدّ يمكن لعملية التنظيف أن تُفرغ المخزن، فتُرفض إعادة ضبط المصنع لعدم وجود نسخة.
+            </span>
+          </label>
+        </div>
+
         {scheduleFrequency === 'weekly' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
             <label className="text-sm text-slate-700">
@@ -499,33 +758,97 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
           <label className="text-sm text-slate-700">
             رمز الاستعادة PIN
             <input type="password" value={restorePin} onChange={(event) => setRestorePin(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" placeholder="PIN من 4 أرقام أو أكثر" />
+            <span className="block text-xs font-normal text-slate-500 mt-1">
+              {scheduleInfo?.hasRestorePin
+                ? 'مُهيّأ. مطلوب مع كل عملية استعادة. اتركه فارغاً ولن يُغيَّر.'
+                : 'غير مُهيّأ. الاستعادة تعمل بدونه الآن؛ ضبطه يجعله إلزامياً.'}
+            </span>
           </label>
 
           <label className="text-sm text-slate-700">
             كلمة مرور فك التشفير لعملية الاستعادة
             <input type="password" value={restorePassword} onChange={(event) => setRestorePassword(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" placeholder="كلمة المرور" />
+            <span className="block text-xs font-normal text-slate-500 mt-1">
+              {scheduleInfo?.hasEncryptionPassword
+                ? 'مُعيَّنة لهذه الخوادم.'
+                : 'لا توجد نسخة مشفّرة بكلمة مرور على هذا الخادم.'}
+            </span>
           </label>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-2 text-sm">
-          {(['local', 'usb', 'drive'] as Array<'local' | 'usb' | 'drive'>).map((target) => {
-            const checked = storageTargets.includes(target);
+<div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          {/*
+/*
+            Phase 2 — the storage target options are gone, and B19 is what replaced them.
+
+            `local`, `usb` and `drive` were offered as checkboxes, saved, validated and
+            returned by the service. **Nothing wrote to a USB device or a network share.**
+            Every archive went to one directory on this machine, whichever boxes were
+            ticked — so the control was a claim about resilience that the system did not
+            honour, sitting one screen away from a panel that honestly reported
+            `offSiteCopies: 0`. Two contradictory statements about the same fact, and the
+            reassuring one was the false one.
+
+            They were removed rather than left in place. Off-host copying now exists behind
+            `BACKUP_OFFSITE_DIR`, and what it achieved is read from the measured copy count
+            rather than from a setting — because a destination that is configured and a copy
+            that arrived are different claims, and only the second one is protection.
+
+            What protects the archives is not this counter: it is the refusal to remove the
+            last copy, the `minCount` floor, and the ceiling on safety snapshots — all of
+            which apply to a human and to the scheduler alike.
+          */}
+          {(() => {
+            // Three states, because "configured" and "working" are different facts and
+            // collapsing them is how a dead USB device ends up reading as coverage.
+            const locations = health?.threeTwoOne?.storageLocations ?? 1;
+            const verified = health?.threeTwoOne?.offSite ?? 0;
+
+            if (locations > 1 && verified > 0) {
+              return (
+                <div className="w-full rounded-xl px-4 py-3 bg-emerald-50 border border-emerald-200 text-emerald-900 text-sm font-semibold flex items-start gap-2">
+                  <ShieldCheck size={16} className="mt-0.5 shrink-0" />
+                  <span>
+                    هناك نسخة خارج هذا الخادم، وتم التحقق منها بعد كتابتها.
+                    <span className="block font-normal text-xs mt-1">
+                      {verified} نسخة مؤكَّدة. العدد محسوب من النسخ التي قُرئت من الوجهة
+                      الخارجية وعُورضت مطابقةً، لا من ضبط إعداد.
+                    </span>
+                  </span>
+                </div>
+              );
+            }
+
+            if (locations > 1) {
+              return (
+                <div className="w-full rounded-xl px-4 py-3 bg-red-50 border border-red-200 text-red-900 text-sm font-semibold flex items-start gap-2">
+                  <ShieldCheck size={16} className="mt-0.5 shrink-0" />
+                  <span>
+                    النسخ خارج المضيف مُهيّأة لكنها غير فعّالة.
+                    <span className="block font-normal text-xs mt-1">
+                      لم تُؤكَّد أي نسخة في الوجهة الخارجية. تحقّق من وجود القرص أو المشاركة
+                      mounts، وأن المساحة كافية. النسخة المحلية سليمة، لكنها الوحيدة المتاحة.
+                    </span>
+                  </span>
+                </div>
+              );
+            }
+
             return (
-              <button
-                key={target}
-                type="button"
-                disabled={!canSchedule}
-                onClick={() =>
-                  setStorageTargets((prev) =>
-                    prev.includes(target) ? prev.filter((item) => item !== target) : [...prev, target],
-                  )
-                }
-                className={`px-3 py-1.5 rounded-lg border disabled:bg-slate-100 disabled:text-slate-500 ${checked ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-300 text-slate-700 bg-white'}`}
-              >
-                {storageTargetLabel[target]}
-              </button>
+              <div className="w-full rounded-xl px-4 py-3 bg-amber-50 border border-amber-200 text-amber-900 text-sm font-semibold flex items-start gap-2">
+                <ShieldCheck size={16} className="mt-0.5 shrink-0" />
+                <span>
+                  جميع النسخ محفوظة في مجلد واحد على هذا الخادم فقط. لا توجد نسخة خارج المضيف.
+                  <span className="block font-normal text-xs mt-1">
+                    لتفعيل النسخ خارج المضيف، وجّه{' '}
+                    <code className="font-mono">BACKUP_OFFSITE_DIR</code> إلى مجلد على قرص
+                    أو مشاركة منفصلة ثم أعد تشغيل الخادم. كل نسخة تُقرأ وتُقارن بعدها، فلا
+                    يزيد العدّاد إلا بما تأكّد فعلاً.
+                  </span>
+                </span>
+              </div>
             );
-          })}
+          })()}
 
           <button
             type="button"
@@ -573,21 +896,117 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
             </AnimatePresence>
             <button
               type="button"
-              onClick={() => void runBackup(activeType)}
+              onClick={() => void runBackup('full')}
               disabled={busyType !== null || !canCreate}
               className="relative z-10 w-full rounded-xl px-4 py-3 bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-60"
             >
-              {busyType === activeType ? 'جارٍ إنشاء النسخة...' : createActionLabel}
+              {busyType === 'full' ? 'جارٍ إنشاء النسخة...' : 'إنشاء نسخة كاملة'}
             </button>
           </div>
           <button type="button" onClick={() => void runBackup('inventory')} disabled={busyType !== null || !canCreate} className="rounded-xl px-4 py-3 bg-emerald-600 text-white font-semibold hover:bg-emerald-700 disabled:opacity-60">{busyType === 'inventory' ? 'جارٍ إنشاء النسخة...' : 'إنشاء نسخة المخزون'}</button>
           <button type="button" onClick={() => void runBackup('config')} disabled={busyType !== null || !canCreate} className="rounded-xl px-4 py-3 bg-amber-600 text-white font-semibold hover:bg-amber-700 disabled:opacity-60">{busyType === 'config' ? 'جارٍ إنشاء النسخة...' : 'إنشاء نسخة الإعدادات'}</button>
         </div>
-        <div className="mt-3 rounded-xl px-4 py-3 bg-slate-100 border border-slate-200 text-slate-700 text-sm font-semibold inline-flex items-center justify-center gap-2">
-          <ShieldCheck size={16} /> الاستعادة تتطلب رمز PIN صالح، وصلاحية استعادة، ودورًا إداريًا.
+        {/*
+          What is actually protecting this restore.
+
+          This used to be a fixed sentence — «الاستعادة تتطلب رمز PIN صالح، وصلاحية
+          استعادة، ودورًا إداريًا» — shown unconditionally. It described neither
+          configuration that actually exists: the service's rule was "a PIN is required,
+          and if none is configured no restore is possible at all", so the sentence claimed
+          a protection that was either absent or, worse, implied by a screen that demanded
+          a code the operator did not have.
+
+          A protection notice must never claim a protection that is not running. So it now
+          reflects the real state, and says plainly when the restore is unprotected by a PIN.
+        */}
+        <div
+          className={[
+            'mt-3 rounded-xl px-4 py-3 border text-sm font-semibold flex items-start gap-2',
+            scheduleInfo?.hasRestorePin
+              ? 'bg-slate-100 border-slate-200 text-slate-700'
+              : 'bg-amber-50 border-amber-200 text-amber-900',
+          ].join(' ')}
+        >
+          <ShieldCheck size={16} className="mt-0.5 shrink-0" />
+          <span>
+            {scheduleInfo?.hasRestorePin
+              ? 'الاستعادة تتطلب رمز الاستعادة وصلاحية استعادة ودورًا إداريًا، وتأخذ لقطة أمان قبل التنفيذ.'
+              : 'لا يوجد رمز استعادة مُهيّأ على هذا الخادم، فالاستعادة محمية بالصلاحية والدور وقاعدة الاستعادة فقط. '
+                + 'ضبط رمز استعادة يجعله إلزاميًا من أول محاولة.'}
+          </span>
+        </div>
+
+        {/* B21 — the counterpart to the delete button further down. */}
+        <div className="mt-4 pt-4 border-t border-slate-200">
+          <label className="block text-sm text-slate-700 font-semibold mb-2">
+            استيراد ملف نسخة احتياطية من الخارج
+            <span className="block text-xs font-normal text-slate-500 mt-1">
+              أعِد ملف ‎.ffbkp‎ الذي نزّلته سابقاً إلى القائمة ليصبح قابلاً للاستعادة.
+              لن تُستعاد أي بيانات تلقائياً.
+            </span>
+          </label>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".ffbkp,application/octet-stream"
+            disabled={!canImport || importing}
+            onChange={(event) => void handleImport(event.target.files?.[0])}
+            className="block w-full text-sm text-slate-600 file:ml-3 file:rounded-lg file:border-0 file:bg-slate-800 file:px-4 file:py-2 file:text-white file:font-semibold hover:file:bg-slate-700 disabled:opacity-50"
+          />
+          {!canImport && (
+            <p className="mt-2 text-xs text-amber-700">لا تملك صلاحية استيراد النسخ الاحتياطية.</p>
+          )}
+          {importing && <p className="mt-2 text-xs text-slate-600">جارٍ التحقق من الملف وإضافته…</p>}
         </div>
       </motion.div>
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.2 }} className={`${cardClasses} p-5`}>
+<div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <h3 className="text-lg font-bold text-slate-900">
+            سجل النسخ الاحتياطية
+            <span className="block text-xs font-normal text-slate-500 mt-0.5">
+              {logFilter === 'all'
+                ? `${history.length} نسخة مسجّلة`
+                : `${filteredHistory.length} من ${history.length} نسخة`}
+            </span>
+          </h3>
+        </div>
+
+        {/*
+          The filter, in the card it filters.
+
+          It used to be its own card between the health panel and the settings, so the
+          control sat far away from the list it was supposed to narrow — and it was wired
+          to the same variable as the create button, so using it changed what that button
+          did and what it said. It now touches the list and nothing else.
+
+          Each option carries its count, because a filter that silently hides rows is
+          indistinguishable from backups that were never taken.
+        */}
+        <div className="mb-4 flex flex-wrap gap-2">
+          {BACKUP_FILTERS.map((filter) => {
+            const count = filter.value === 'all'
+              ? history.length
+              : archiveCounts[filter.value];
+            const selected = logFilter === filter.value;
+            return (
+              <button
+                key={filter.value}
+                type="button"
+                onClick={() => setLogFilter(filter.value)}
+                className={`px-3 py-1.5 rounded-lg border text-sm font-semibold transition ${
+                  selected
+                    ? 'border-blue-600 bg-blue-50 text-blue-700 shadow-sm'
+                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                {filter.label}
+                <span className={`mr-1.5 text-xs ${selected ? 'text-blue-500' : 'text-slate-400'}`}>
+                  ({count})
+                </span>
+              </button>
+            );
+          })}
+        </div>
         <h3 className="text-lg font-bold text-slate-900 mb-3">سجل النسخ الاحتياطية</h3>
 
         {loading ? (
@@ -693,4 +1112,3 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
 };
 
 export default BackupCenter;
-

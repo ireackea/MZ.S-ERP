@@ -52,6 +52,27 @@ export type BusinessAction =
   | 'BACKUP_CREATE'
   | 'BACKUP_RESTORE'
   | 'BACKUP_DELETE'
+  // B4 — the seven events the backup section must leave behind. The three above
+  // predate this and were never written by anything, so the section produced no
+  // audit rows at all: a restore of the whole database, and a deletion of the only
+  // copy, both left no trace.
+  //
+  // Separate actions rather than one `BACKUP_RESTORE` with a `metadata.stage`,
+  // because the question an investigator asks is "what did this account do to the
+  // backups", and a stage string buried in a free-form bag is a field that can be
+  // misspelled, dropped by redaction, or never set.
+  | 'BACKUP_CREATED'
+  | 'BACKUP_DELETED'
+  | 'BACKUP_DOWNLOADED'
+  | 'RESTORE_PREVIEW'
+  | 'RESTORE_APPLIED'
+  | 'RESTORE_FAILED'
+  | 'SCHEDULE_CHANGED'
+  // B21 — its own action, because provenance is a different question from creation.
+  // An archive that came from a file on an operator's desktop did not arrive the way
+  // a created backup does, and an auditor asking "how did this get here" is asking
+  // something a `BACKUP_CREATED` row cannot answer.
+  | 'BACKUP_IMPORTED'
   | 'INITIAL_ADMIN_CREATED'
   | 'CLIENT_ACTIVITY';
 

@@ -61,6 +61,12 @@ export class AuditController {
     return this.auditService.queryFacets();
   }
 
+  // This route was the only one in this controller without a gate, so the
+  // fail-closed refusal in `RbacGuard` answered it with 403 and the export was
+  // unreachable — a test for it had been failing since the guard was tightened.
+  // Fail-closed was the right behaviour; the route was simply never given the
+  // metadata its five siblings all carry.
+  @Permissions('users.audit')
   @Get('logs/export')
   @Header('Cache-Control', 'no-store')
   async exportLogs(

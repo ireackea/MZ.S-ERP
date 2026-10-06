@@ -9,6 +9,7 @@
 // ENTERPRISE FIX: Phase 0.2 – Full Runtime Docker Proof - 2026-03-13
 // ENTERPRISE FIX: Phase 0 - التنظيف الأساسي والتحضير - 2026-03-13
 import React, { Profiler, Suspense, lazy, useEffect, useRef, useState } from 'react';
+import { fetchBackupHealth, type BackupHealth } from './services/backupCenterApi';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { toast } from '@services/toastService';
@@ -679,10 +680,72 @@ const AppContent = () => {
     );
   };
 
+  // B5 — the backup health warning, beside the offline banner.
+  //
+  // This is the one place an operator is guaranteed to look, which is exactly why the
+  // absence of a warning here was the worst of the three gaps. A schedule that had
+  // silently stopped for a month looked identical to a schedule that had never
+  // failed, on every screen, and the only evidence would have been the `lastRunAt`
+  // field on a page nobody opens.
+  //
+  // Reads the same endpoint the dashboard and the reset screen read, so the three
+  // cannot say different things about the same archive. It is not polled on a timer:
+  // the endpoint memoises for half a minute, and a banner that re-asks on every
+  // keystroke would be a banner that flickers.
+  //
+  // Only shown to someone who holds `backup.view`, and only when there is something to
+  // say. A permanent green banner is noise, and noise is why real warnings get
+  // dismissed.
+  const BackupHealthBanner = () => {
+    const [health, setHealth] = useState<BackupHealth | null>(null);
+    const canSeeBackups = hasPermission(currentUser, 'backup.view');
+
+    useEffect(() => {
+      if (!canSeeBackups) return;
+      let cancelled = false;
+      void fetchBackupHealth().then((answer) => {
+        if (!cancelled) setHealth(answer);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, [canSeeBackups]);
+
+    if (!canSeeBackups || !health) return null;
+    if (health.verdict === 'ok') return null;
+
+    const error = health.verdict === 'unhealthy' || health.verdict === 'none';
+    const message =
+      health.problems.find((problem) => problem.severity === 'error')?.message ?? health.summary;
+
+    return (
+      <div
+        role="status"
+        style={{
+          backgroundColor: error ? '#dc2626' : '#d97706',
+          color: 'white',
+          padding: '8px',
+          textAlign: 'center',
+          fontWeight: 'bold',
+          zIndex: 9999,
+          position: 'relative',
+        }}
+      >
+        <span>تنبيه حماية البيانات: </span>
+        <span>{message}</span>
+        <span> — </span>
+        <a href="/backup" style={{ color: 'white', textDecoration: 'underline' }}>
+          افتح مركز النسخ الاحتياطية
+        </a>
+      </div>
+    );
+  };
+
   // ENTERPRISE FIX: Routes without BrowserRouter (already in index.tsx)
   return (
     <>
       <OfflineBanner />
+      <BackupHealthBanner />
       <Layout currentUser={currentUser} onLogout={handleLogout}>
       <Routes key={location.pathname}>
         <Route path="/" element={renderProtectedRoute('inventory.view.stocktaking', 'dashboard', withLazyFallback(<DashboardPage />))} />
