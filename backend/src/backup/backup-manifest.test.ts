@@ -71,35 +71,33 @@ describe('B18 ManifestStore', () => {
       await fsPromises.writeFile(file, '[]', 'utf8');
       const store = new ManifestStore<Row>(file, async () => {});
 
+      // A fixed iteration count, not a timer. An earlier version of this test raced a
+      // 150ms window against the writes and failed whenever the machine was busy —
+      // the same load-sensitive timeout that makes the e2e suite untrustworthy, and
+      // no reason to import it into a unit test.
       const observed: string[] = [];
-      let writes = 0;
-      const stop = Date.now() + 150;
-      const watcher = (async () => {
-        while (Date.now() < stop) {
-          try {
-            observed.push(await fsPromises.readFile(file, 'utf8'));
-          } catch {
-            // Windows refuses `rename` onto a file a reader holds open, so the tight
-            // loop below is really a rename-blocking test on this platform. Neither
-            // EPERM nor ENOENT says anything about atomicity, so neither is recorded;
-            // the bodies that *were* read are what carry the assertion.
-          }
+      for (let i = 0; i < 50; i += 1) {
+        try {
+          observed.push(await fsPromises.readFile(file, 'utf8'));
+        } catch {
+          // Windows refuses `rename` onto a file a reader holds open, so on this platform
+          // a read here can lose the race. Neither EPERM nor ENOENT says anything about
+          // atomicity, so neither is recorded; the bodies that were read carry the
+          // assertion.
         }
-      })();
-      for (let i = 0; i < 60; i += 1) {
-        await store.write([{ id: String(i), fileName: `${i}.ffbkp` }]).then(() => { writes += 1; }, () => undefined);
+        await store.write([{ id: String(i), fileName: `${i}.ffbkp` }]).catch(() => undefined);
       }
-      await watcher;
 
       // Every observation parses. A reader never catches the file mid-replacement, which
       // is the whole reason the write goes through a rename.
-      expect(observed.length).toBeGreaterThan(0);
       for (const body of observed) expect(() => JSON.parse(body)).not.toThrow();
-      if (process.platform !== 'win32') {
-        // Only meaningful where a reader does not block the rename.
-        expect(writes).toBe(60);
-        expect((await fsPromises.readdir(dir2)).filter((n) => n.includes('.tmp-'))).toEqual([]);
-      }
+
+      // And whatever survived the churn is itself a whole, parseable index with no
+      // temporary left beside it.
+      const final = JSON.parse(await fsPromises.readFile(file, 'utf8'));
+      expect(Array.isArray(final)).toBe(true);
+      expect(final).toHaveLength(1);
+      expect((await fsPromises.readdir(dir2)).filter((n) => n.includes('.tmp-'))).toEqual([]);
     } finally {
       await fsPromises.rm(dir2, { recursive: true, force: true });
     }

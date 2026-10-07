@@ -13,6 +13,7 @@ import {
   ServiceUnavailableException,
   NotFoundException,
   OnModuleDestroy,
+  OnModuleInit,
   Optional,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -73,7 +74,7 @@ import { planReconciliation } from './backup-reconcile';
 import { ManifestStore } from './backup-manifest';
 import { copyOffsite, countVerifiedOffsiteCopies, offsiteDirectory, type OffsiteCopyResult } from './offsite-copy';
 import { withManifestAdvisoryLock } from './manifest-lock';
-import { archiveIsRestorable, archiveMigrationNames, type DriftArchive } from './schema-drift';
+import { archiveIsRestorable, archiveMigrationNames, evaluateSchemaDrift, type DriftArchive } from './schema-drift';
 import { inspectEnvelope, isRefusal, judgeImport } from './archive-import';
 import {
   deriveArchiveKey,
@@ -467,6 +468,52 @@ export class BackupService implements OnModuleDestroy {
       );
     });
     this.startScheduler();
+  }
+
+  /**
+   * B14 — the drift check at boot, which is the entire point of B14.
+   *
+   * The logic (`evaluateSchemaDrift`) was written and unit-tested, and then nothing
+   * called it: `schema-drift` was reachable only from the restore path, which is the
+   * moment the archive is already needed. A schema that moved on while the newest
+   * archive did not was therefore discovered during the restore it was meant to guard.
+   *
+   * On `OnModuleInit`, deliberately not in the constructor. Started from the
+   * constructor this read the manifest at an arbitrary later moment, which raced with
+   * anything that wrote one in between — and because a corrupt manifest is *quarantined*
+   * on read, that race did not merely read too early, it renamed a file out from under
+   * its writer. A boot check must belong to boot.
+   *
+   * Two rules, both deliberate:
+   *
+   * *It never throws.* A server that will not start because an old archive cannot
+   * serve its own data is strictly worse than a server that starts and says so, and
+   * refusing to boot does not make the archive restorable.
+   *
+   * *It reports, it does not block.* Drift is a fact about the archives on disk. The
+   * refusal belongs where it always belonged — the restore path, where the operator is
+   * about to act on a specific archive.
+   *
+   * It logs on every outcome, including a clean one. A check that says nothing when it
+   * passes is indistinguishable from a check that did not run, and "did the drift check
+   * happen?" is the first question anyone asks when it matters. One line, once, at boot.
+   */
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.ensureWorkspace();
+      const report = evaluateSchemaDrift({
+        archives: await this.inspectArchiveMigrations(),
+        expected: this.currentMigrationNames(),
+      });
+      const line = `backup: schema drift at boot — ${report.message}`;
+      if (report.severity === 'error') this.logger.error(line);
+      else if (report.severity === 'warning') this.logger.warn(line);
+      else this.logger.log(line);
+    } catch (error) {
+      this.logger.warn(
+        `backup: schema drift check at boot did not complete: ${this.describeError(error)}`,
+      );
+    }
   }
 
   onModuleDestroy() {
