@@ -29,7 +29,7 @@ import {
 } from 'crypto';
 import type { Prisma } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
-import { base64ByteLength, dumpPostgres, isPostgresUrl, restorePostgres } from './pg-dump';
+import { base64ByteLength, dumpPostgres, isPostgresUrl, restorePostgres, streamPostgresDump } from './pg-dump';
 import { estimateArchiveBytes, judgeHeadroom } from './disk-headroom';
 import {
   ARCHIVE_VERSION_V2,
@@ -39,8 +39,13 @@ import {
   archiveFormatMessage,
   configuredWritableVersion,
   isReadableArchiveVersion,
+  isRestorableArchiveVersion,
 } from './archive-format';
-import { readArchiveFormat } from './archive-container';
+import {
+  ArchiveContainerWriter,
+  DEFAULT_CHUNK_BYTES,
+  readArchiveFormat,
+} from './archive-container';
 import {
   CONFIG_FILES_ALLOW_LIST,
   buildFileName,
@@ -1129,7 +1134,16 @@ export class BackupService implements OnModuleDestroy {
     return await restoreConfigFiles(files);
   }
 
-  private async buildPayload(type: BackupType, trigger: BackupTrigger, sourceBackupId?: string): Promise<BackupPayload> {
+  private async buildPayload(
+    type: BackupType,
+    trigger: BackupTrigger,
+    sourceBackupId?: string,
+    // B15-2 — a v3 archive streams the dump straight from `pg_dump` into an encrypted
+    // member, so there is nothing to put here. Taking it anyway and base64-ing it would
+    // rebuild exactly the six resident copies the container exists to remove, and the
+    // dump would immediately be decoded again.
+    options: { deferDatabaseDump?: boolean } = {},
+  ): Promise<BackupPayload> {
     const [users, items, balances, transactions] = await Promise.all([
       this.prisma.user.count(),
       this.prisma.item.count(),
@@ -1168,9 +1182,13 @@ export class BackupService implements OnModuleDestroy {
         // users and roles while the UI reported a stock backup, and the manifest
         // claimed completeness.
         const tables = type === 'inventory' ? [...INVENTORY_TABLES] : undefined;
-        const dump = await dumpPostgres(databaseUrl, { format: 'custom', tables });
-        payload.dbBase64 = dump.base64;
+        // B15-2 — recorded either way, because whether a restore replaces the database or
+        // the stock ledger is decided by this field and not by the archive's size.
         payload.partialTables = tables ?? null;
+        if (!options.deferDatabaseDump) {
+          const dump = await dumpPostgres(databaseUrl, { format: 'custom', tables });
+          payload.dbBase64 = dump.base64;
+        }
       } else {
         // A non-PostgreSQL deployment (e.g. a disposable SQLite test rig) still
         // gets the structured snapshot rather than an empty backup.
@@ -1636,6 +1654,96 @@ export class BackupService implements OnModuleDestroy {
     return { retained, plan: { ...plan, keep: retained, remove: removed } };
   }
 
+  /**
+   * B15-2 — write a v3 archive, with the dump streamed into an encrypted member.
+   *
+   * The dump is never a string and never a Buffer in this process: `pg_dump` writes into
+   * the member as it produces bytes and the ciphertext goes to disk. Everything else the
+   * archive carries — counts, config files, the partial-table list — is small and travels
+   * in one `meta` member as JSON.
+   *
+   * Returns only what the caller needs to describe the archive. The manifest row is still
+   * written by the caller, from one shape, so no other part of the service learns which
+   * format produced the file.
+   */
+  private async writeArchiveV3(params: {
+    payload: BackupPayload;
+    id: string;
+    createdAt: string;
+    type: BackupType;
+    trigger: BackupTrigger;
+    actor: BackupActor;
+    keyScope: KeyScope;
+    password?: string;
+    passwordProtected: boolean;
+  }): Promise<{ bytes: number; sha256: string }> {
+    const { payload, id, createdAt, type, trigger, actor, keyScope } = params;
+
+    const resolved = resolvePassphrase({
+      password: params.password,
+      masterSecret: this.getMasterSecret(),
+      scope: keyScope,
+    });
+    if (isPassphraseRefusal(resolved)) {
+      throw new BadRequestException({ code: resolved.code, message: resolved.message });
+    }
+    // B15-2 — the key is salted, and a salt that is not written into the archive is a
+    // salt that makes it unopenable forever. v2 carried it in the envelope; v3 carries it
+    // in the container header, which is what lets a reader derive the key after one seek.
+    const salt = randomBytes(16);
+    const key = deriveArchiveKey({
+      password: params.password,
+      masterSecret: this.getMasterSecret(),
+      scope: keyScope,
+      salt,
+    });
+
+    const fileName = this.buildFileName(type, id);
+    const filePath = path.join(this.backupDir, fileName);
+
+    const writer = await ArchiveContainerWriter.open({
+      filePath,
+      key,
+      chunkSize: DEFAULT_CHUNK_BYTES,
+      header: {
+        id,
+        type,
+        trigger,
+        createdAt,
+        actor: actor as unknown as Record<string, unknown>,
+        passwordProtected: params.passwordProtected,
+        keyScope,
+        masterSecretFingerprint: masterSecretFingerprint(this.getMasterSecret()),
+        saltBase64: salt.toString('base64'),
+        counts: payload.counts,
+      },
+    });
+
+    await writer.writeMember('meta', JSON.stringify(payload));
+
+    let bytes = 0;
+    let sha256 = '';
+    const databaseUrl = String(process.env.DATABASE_URL || '').trim();
+    if (isPostgresUrl(databaseUrl)) {
+      await writer.beginMember('database');
+      const tables = type === 'inventory' ? [...INVENTORY_TABLES] : undefined;
+      await streamPostgresDump(
+        databaseUrl,
+        { write: (chunk) => writer.writeChunk(chunk) },
+        { format: 'custom', tables },
+      );
+      const record = await writer.endMember();
+      bytes = record.plaintextLength;
+      sha256 = record.sha256;
+    }
+
+    // The only call that gives the file its real name. A failure anywhere above leaves a
+    // temp file that the writer removes, and nothing at `filePath` for a reader to find.
+    await writer.finalize();
+
+    return { bytes, sha256 };
+  }
+
   private retentionLimitsFrom(schedule: BackupScheduleState): RetentionLimits {
     return {
       retentionDays: schedule.retentionDays,
@@ -1672,7 +1780,13 @@ export class BackupService implements OnModuleDestroy {
     await this.ensureWorkspace();
 
     const schedule = await this.readSchedule();
-    const payload = await this.buildPayload(params.type, params.trigger, params.sourceBackupId);
+    // B15-2 — the format decides whether the dump is taken into memory here or streamed
+    // into an encrypted member a few lines below.
+    const writableVersion = configuredWritableVersion();
+    const streamDatabase = writableVersion === ARCHIVE_VERSION_V3;
+    const payload = await this.buildPayload(params.type, params.trigger, params.sourceBackupId, {
+      deferDatabaseDump: streamDatabase,
+    });
     const actor = this.normalizeActor(params.actor, params.trigger);
     const encryption = this.resolveEncryptionPassword(schedule, params.encryptionPassword);
     const keyScope: KeyScope = params.keyScope === 'archive-only' ? 'archive-only' : 'both';
@@ -1698,19 +1812,10 @@ export class BackupService implements OnModuleDestroy {
       payload,
       await this.estimateArchiveFootprint(payload, params.type),
     );
-    // B15-2 — S1 is write-ahead of read-back on purpose, and this is the line that makes
-    // that safe.
-    //
-    // `BACKUP_ARCHIVE_VERSION=3` selects a format this build cannot restore yet, and
-    // `verifyIntegrity` turns any read failure into `integrity: failed`. Writing v3 now
-    // would therefore produce an archive that is perfectly valid, is listed, and is
-    // reported as damaged — the one answer that sends an operator looking for corruption
-    // that is not there. So the write is refused, with the reason, instead.
-    //
-    // S2 adds 3 to `READABLE_ARCHIVE_VERSIONS` and this same switch starts working,
-    // with no other change.
-    const writableVersion = configuredWritableVersion();
-    if (!isReadableArchiveVersion(writableVersion)) {
+    // B15-2 — a build must not write what it cannot read. In S1 this refused v3 outright,
+    // and the refusal stays because the answer belongs to `READABLE_ARCHIVE_VERSIONS`
+    // rather than to a constant here, and because S3b is what moves v3 into that set.
+    if (!isRestorableArchiveVersion(writableVersion)) {
       throw new BadRequestException({
         code: 'BACKUP_FORMAT_NOT_WRITABLE',
         message:
@@ -1718,6 +1823,49 @@ export class BackupService implements OnModuleDestroy {
           `ولذلك لا يكتب هذا البناء الأرشيفات بصيغة ${writableVersion}: لا يستطيع فتحها بعد. ` +
           'اترك BACKUP_ARCHIVE_VERSION على 2، أو رقِّ الخادم الذي يقرأ الصيغة الجديدة.',
       });
+    }
+
+    /**
+     * Set only on the v3 path, and read below wherever a v2 caller would have looked at
+     * `payload.dbBase64`. Everything downstream — the manifest row, the health report, the
+     * list endpoint — keeps reading one shape, so nothing outside this method has to know
+     * which format produced the archive.
+     */
+    let streamedDatabase: { bytes: number; sha256: string } | null = null;
+
+    if (streamDatabase) {
+      // The identity comes from the envelope even though the envelope is not written,
+      // so the id and the timestamp in the manifest row are the ones inside the
+      // container's header. Two identities for one archive would make the row describe a
+      // file that does not exist.
+      streamedDatabase = await this.writeArchiveV3({
+        payload,
+        id: envelope.id,
+        createdAt: envelope.createdAt,
+        type: params.type,
+        trigger: params.trigger,
+        actor,
+        keyScope,
+        password: encryption.password,
+        passwordProtected: encryption.passwordProtected,
+      });
+      const databaseDump = payload.manifest?.databaseDump;
+      if (databaseDump && payload.manifest) {
+        // The dump's identity for a v3 archive is the member's, not a hash of a base64
+        // string that no longer exists. `checksums.database` therefore changes meaning
+        // between formats — which is why `encoding` is recorded on the manifest entry in
+        // S3b rather than left to whoever compares two archives and wonders.
+        payload.manifest.databaseDump = {
+          ...databaseDump,
+          included: streamedDatabase.bytes > 0,
+          byteLength: streamedDatabase.bytes,
+          sha256: streamedDatabase.sha256,
+        };
+        // v2 proved completeness by counting models inside the JSON payload. A v3 dump
+        // is never in memory, so the claim rests on `pg_dump` having exited 0 — which is
+        // a stronger statement than a count made before the dump ran.
+        if (streamedDatabase.bytes > 0) payload.manifest.missingModels = [];
+      }
     }
 
     // Written once. This line was duplicated in the source: `JSON.stringify(envelope)`
@@ -1751,7 +1899,9 @@ export class BackupService implements OnModuleDestroy {
     // What this archive is supposed to contain, versus what it actually does.
     const wantsDatabase =
       params.type === 'full' || params.type === 'inventory' || params.type === 'safety_snapshot';
-    const hasDatabase = typeof payload.dbBase64 === 'string' && payload.dbBase64.length > 0;
+    const hasDatabase = streamDatabase
+      ? (streamedDatabase?.bytes ?? 0) > 0
+      : typeof payload.dbBase64 === 'string' && payload.dbBase64.length > 0;
     const hasConfig = (payload.configFiles?.length ?? 0) > 0;
     const hasSnapshot = Boolean(payload.dataSnapshot);
 
@@ -1786,7 +1936,9 @@ export class BackupService implements OnModuleDestroy {
       // FC-OPS-001 — completeness and dump size are recorded per backup so the
       // UI can show whether a backup is actually restorable, and so storage
       // reporting reflects the real database footprint.
-      databaseBytes: payload.manifest?.databaseDump.byteLength,
+      databaseBytes: streamDatabase
+        ? streamedDatabase?.bytes ?? 0
+        : payload.manifest?.databaseDump.byteLength,
       complete: (payload.manifest?.missingModels?.length ?? 1) === 0,
       missingModels: payload.manifest?.missingModels ?? ['manifest-missing'],
       partialTables: payload.partialTables ?? null,

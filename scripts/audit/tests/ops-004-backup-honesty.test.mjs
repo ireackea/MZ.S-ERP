@@ -23,7 +23,22 @@ test('gate 1.2 backup integrity is derived, not asserted', () => {
     'integrity must be the answer to "does this archive contain what its type promises"',
   );
   assert.match(service, /wantsDatabase/, 'the check must know what the type is supposed to contain');
-  assert.match(service, /hasDatabase = typeof payload\.dbBase64 === 'string'/);
+  // The check must remain *computed*. It used to be pinned to the v2 expression exactly,
+  // which is what B15-2 had to widen: a v3 archive carries its dump as an encrypted
+  // member and has no `dbBase64` at all, so the v2-only form would report every v3
+  // archive as `incomplete` — a valid backup wearing the badge that means "written, but
+  // not the thing it claims to be". The invariant is that both shapes are consulted, so
+  // deleting the check cannot satisfy this.
+  assert.match(
+    service,
+    /hasDatabase = streamDatabase[\s\S]{0,120}dbBase64/,
+    'hasDatabase must consider the streamed member as well as the v2 payload field',
+  );
+  assert.doesNotMatch(
+    service,
+    /const hasDatabase = true\b/,
+    'hasDatabase must never be a constant; that is the defect this gate exists for',
+  );
 
   // `incomplete` is the state the old code had no way to express: the file is
   // fine, it is just not the thing it claims to be.

@@ -97,6 +97,15 @@ export type ArchiveHeader = {
   passwordProtected: boolean;
   keyScope: string;
   masterSecretFingerprint: string;
+  /**
+   * The PBKDF2 salt for the archive key.
+   *
+   * Present because the key derivation is salted, and a salt that is not written down is
+   * a salt that makes the archive unopenable forever. v2 carried it as `saltBase64` in
+   * the envelope; v3 has to carry it too, and carrying it in the header is what lets a
+   * reader derive the key after one seek to the front of the file.
+   */
+  saltBase64?: string;
   /** App version that produced the archive. */
   appVersion?: string;
   /** Prisma schema version, so a restore can refuse an incompatible dump. */

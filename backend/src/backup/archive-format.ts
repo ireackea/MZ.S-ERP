@@ -18,8 +18,8 @@
  *
  * ## Readable is not the same as writable
  *
- * `READABLE_ARCHIVE_VERSIONS` is deliberately narrower than the set of versions that
- * exist. A build may be able to *write* v3 while it cannot yet *restore* v3 — S1 of
+ * The two capability lists are deliberately different, and neither is the set of versions that
+ * exist. A build can inspect a format it cannot restore — S1 of
  * B15-2 is exactly that state — and the difference has to be visible in code rather
  * than discovered by an operator holding an archive the tool wrote and cannot open.
  */
@@ -34,13 +34,22 @@ export const ARCHIVE_VERSION_V3 = 3;
 export const BACKUP_EXTENSION = '.ffbkp';
 
 /**
- * The versions this build can restore, read, verify and import.
+ * The versions this build can verify and describe without restoring them.
  *
- * v3 joins this list in S2, when `pg_restore` is fed a member stream instead of a
- * string. Until then a v3 archive is written only if an operator asks for it by name,
- * and every path that needs its contents refuses with a message that says why.
+ * v3 belongs here as soon as `verifyIntegrity` can read a container trailer, which is
+ * earlier than the point at which it can be restored.
  */
-export const READABLE_ARCHIVE_VERSIONS: readonly number[] = [ARCHIVE_VERSION_V2];
+export const INSPECTABLE_ARCHIVE_VERSIONS: readonly number[] = [ARCHIVE_VERSION_V2];
+
+/**
+ * The versions this build can actually put back into a database.
+ *
+ * Strictly narrower than what it can inspect, and that gap is the whole reason the write
+ * is gated on *this* list rather than on the other one. Being able to look at an archive
+ * is not the same as being able to recover from it, and a system that conflated the two
+ * would let an operator switch formats and quietly collect archives it cannot restore.
+ */
+export const RESTORABLE_ARCHIVE_VERSIONS: readonly number[] = [ARCHIVE_VERSION_V2];
 
 /** v2, unless someone asks for v3 by name. */
 export const DEFAULT_WRITABLE_ARCHIVE_VERSION = ARCHIVE_VERSION_V2;
@@ -50,8 +59,21 @@ export type WritableArchiveVersion = typeof ARCHIVE_VERSION_V2 | typeof ARCHIVE_
 const isKnownVersion = (value: unknown): value is WritableArchiveVersion =>
   Number(value) === ARCHIVE_VERSION_V2 || Number(value) === ARCHIVE_VERSION_V3;
 
-export const isReadableArchiveVersion = (value: unknown): boolean =>
-  isKnownVersion(value) && READABLE_ARCHIVE_VERSIONS.includes(Number(value));
+export const isInspectableArchiveVersion = (value: unknown): boolean =>
+  isKnownVersion(value) && INSPECTABLE_ARCHIVE_VERSIONS.includes(Number(value));
+
+/** Kept as an alias so the many readers that ask "can I open this" keep their name. */
+export const isReadableArchiveVersion = (value: unknown): boolean => isInspectableArchiveVersion(value);
+
+/**
+ * The one question that gates writing.
+ *
+ * Restore, not inspection. An archive this build cannot restore is a file the operator
+ * believes is a backup and this deployment cannot use — so it is never written, however
+ * well it can be described.
+ */
+export const isRestorableArchiveVersion = (value: unknown): boolean =>
+  isKnownVersion(value) && RESTORABLE_ARCHIVE_VERSIONS.includes(Number(value));
 
 /**
  * The version new archives should be written in.
@@ -82,7 +104,7 @@ export const configuredVersionIsUnrecognised = (raw: string | undefined = proces
  * token" cannot tell whether their archive is damaged or their software is old.
  */
 export const archiveFormatMessage = (found: number | string | null | undefined): string => {
-  const readable = READABLE_ARCHIVE_VERSIONS.join(', ');
+  const readable = RESTORABLE_ARCHIVE_VERSIONS.join(', ');
   const foundText = found === null || found === undefined || found === '' ? 'غير معروف' : String(found);
   return (
     `صيغة الأرشيف ${foundText} لا يستطيع هذا الإصدار قراءتها. ` +
@@ -93,7 +115,8 @@ export const archiveFormatMessage = (found: number | string | null | undefined):
 
 export const describeArchiveVersions = () => ({
   configured: configuredWritableVersion(),
-  readable: [...READABLE_ARCHIVE_VERSIONS],
+  inspectable: [...INSPECTABLE_ARCHIVE_VERSIONS],
+  restorable: [...RESTORABLE_ARCHIVE_VERSIONS],
   defaultWritable: DEFAULT_WRITABLE_ARCHIVE_VERSION,
   configuredValueRecognised: !configuredVersionIsUnrecognised(),
 });
