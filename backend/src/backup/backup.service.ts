@@ -32,6 +32,16 @@ import { v4 as uuidv4 } from 'uuid';
 import { base64ByteLength, dumpPostgres, isPostgresUrl, restorePostgres } from './pg-dump';
 import { estimateArchiveBytes, judgeHeadroom } from './disk-headroom';
 import {
+  ARCHIVE_VERSION_V2,
+  ARCHIVE_VERSION_V3,
+  BACKUP_EXTENSION,
+  BACKUP_SIGNATURE_V2,
+  archiveFormatMessage,
+  configuredWritableVersion,
+  isReadableArchiveVersion,
+} from './archive-format';
+import { readArchiveFormat } from './archive-container';
+import {
   CONFIG_FILES_ALLOW_LIST,
   buildFileName,
   collectConfigFiles,
@@ -371,8 +381,9 @@ type RestorePreviewToken = {
   expiresAt: number;
 };
 
-const BACKUP_SIGNATURE = 'FFBKUP2';
-const BACKUP_EXTENSION = '.ffbkp';
+// B15-2 — the signature and the version are declared once, in ./archive-format.
+// `BACKUP_EXTENSION` moved with them.
+const BACKUP_SIGNATURE = BACKUP_SIGNATURE_V2;
 const MANIFEST_FILE = 'index.json';
 const SCHEDULE_FILE = 'schedule.json';
 const RESTORE_TOKEN_TTL_MS = 10 * 60 * 1000;
@@ -1537,10 +1548,32 @@ export class BackupService implements OnModuleDestroy {
       throw new NotFoundException(`Backup file ${entry.fileName} not found`);
     }
 
+    // B15-2 — the format is decided before anything is read into memory.
+    //
+    // A v3 container read as JSON is a parse error about a file that is perfectly
+    // valid, and "unexpected token" tells an operator nothing about whether their
+    // archive is damaged or their software is old. Detecting first also means the
+    // refusal is a refusal rather than an exception that a caller's `catch` turns into
+    // `integrity: failed` — a valid archive must never be reported as a corrupt one.
+    const format = await readArchiveFormat(filePath);
+    if (format === 'v3') {
+      throw new BadRequestException({
+        code: 'BACKUP_FORMAT_NOT_READABLE',
+        message: archiveFormatMessage(ARCHIVE_VERSION_V3),
+      });
+    }
+
     const raw = await fsPromises.readFile(filePath, 'utf8');
     const parsed = JSON.parse(raw) as BackupEnvelope;
-    if (parsed.signature !== BACKUP_SIGNATURE || parsed.version !== 2) {
-      throw new BadRequestException('Backup signature verification failed');
+    if (parsed.signature !== BACKUP_SIGNATURE || !isReadableArchiveVersion(parsed.version)) {
+      throw new BadRequestException({
+        code: 'BACKUP_SIGNATURE_INVALID',
+        // The archive may be intact and merely from a newer build, which is a different
+        // problem from a damaged file and needs a different message.
+        message: isReadableArchiveVersion(parsed.version)
+          ? 'توقيع الملف غير صحيح.'
+          : archiveFormatMessage(parsed.version),
+      });
     }
 
     return parsed;
@@ -1665,8 +1698,33 @@ export class BackupService implements OnModuleDestroy {
       payload,
       await this.estimateArchiveFootprint(payload, params.type),
     );
+    // B15-2 — S1 is write-ahead of read-back on purpose, and this is the line that makes
+    // that safe.
+    //
+    // `BACKUP_ARCHIVE_VERSION=3` selects a format this build cannot restore yet, and
+    // `verifyIntegrity` turns any read failure into `integrity: failed`. Writing v3 now
+    // would therefore produce an archive that is perfectly valid, is listed, and is
+    // reported as damaged — the one answer that sends an operator looking for corruption
+    // that is not there. So the write is refused, with the reason, instead.
+    //
+    // S2 adds 3 to `READABLE_ARCHIVE_VERSIONS` and this same switch starts working,
+    // with no other change.
+    const writableVersion = configuredWritableVersion();
+    if (!isReadableArchiveVersion(writableVersion)) {
+      throw new BadRequestException({
+        code: 'BACKUP_FORMAT_NOT_WRITABLE',
+        message:
+          `${archiveFormatMessage(writableVersion)} ` +
+          `ولذلك لا يكتب هذا البناء الأرشيفات بصيغة ${writableVersion}: لا يستطيع فتحها بعد. ` +
+          'اترك BACKUP_ARCHIVE_VERSION على 2، أو رقِّ الخادم الذي يقرأ الصيغة الجديدة.',
+      });
+    }
+
+    // Written once. This line was duplicated in the source: `JSON.stringify(envelope)`
+    // ran twice over a string that is 1.778x the dump, so the second call allocated a
+    // second full-size copy of the largest object in the process. The outcome was the
+    // same file — the write is atomic — which is why nothing ever reported it.
     await this.writeArchiveAtomically(filePath, JSON.stringify(envelope));
-await this.writeArchiveAtomically(filePath, JSON.stringify(envelope));
 
     // B19 — the second copy, if one is configured, and only ever verified after the fact.
     //

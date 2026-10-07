@@ -217,8 +217,15 @@ describe('B18/S1 disk and cryptography primitives', () => {
     it('keeps only the first eight characters of the id', () => {
       // The id is a UUID and the filename is a directory entry, not an identifier to
       // reconstruct from; the manifest row carries the whole id.
-      expect(buildFileName('full', 'abcdef0123456789')).toContain('abcdef01');
-      expect(buildFileName('full', 'abcdef0123456789')).not.toContain('9');
+      //
+      // A fixed clock, because the timestamp segment legitimately contains digits and
+      // asserting on the whole string would be a test of the clock.
+      const when = new Date('2026-10-07T02:00:00.000Z');
+      expect(buildFileName('full', 'abcdef0123456789', when)).toBe(
+        'full_2026-10-07T02-00-00-000Z_abcdef01.ffbkp',
+      );
+      expect(buildFileName('full', 'abcdef0123456789', when)).not.toContain('23456789');
+      expect(buildFileName('full', 'short', when)).toBe('full_2026-10-07T02-00-00-000Z_short.ffbkp');
     });
 
     it('replaces the characters a filename cannot carry', () => {

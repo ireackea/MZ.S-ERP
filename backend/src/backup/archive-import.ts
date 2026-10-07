@@ -47,6 +47,16 @@
  * section ends up unable to accept anything at all.
  */
 
+// B15-2 — the one import this module now has, and it is worth it. `./archive-format`
+// declares no dependencies of its own, and it is the only place a format is described:
+// while the signature and version were declared here too, the two copies already
+// disagreed about whether `"2"` was a version.
+import {
+  BACKUP_SIGNATURE_V2,
+  archiveFormatMessage,
+  isReadableArchiveVersion,
+} from './archive-format';
+
 export type ImportCandidate = {
   /** Decrypted payload, already authenticated. */
   payload: {
@@ -68,8 +78,10 @@ export type ImportVerdict =
       message: string;
     };
 
-const BACKUP_SIGNATURE = 'FFBKUP2';
-const BACKUP_VERSION = 2;
+// B15-2 — these were declared here as a second copy of the same two facts, and the two
+// copies already disagreed: this file compared `Number(envelope.version)` while the
+// service compared `parsed.version !== 2`, so a `"2"` passed one and failed the other.
+// `./archive-format` is now the only place a format is described.
 const KNOWN_TYPES = new Set(['full', 'inventory', 'config', 'safety_snapshot']);
 
 export type ImportRefusal = { ok: false; code: string; message: string };
@@ -102,10 +114,18 @@ export function inspectEnvelope(raw: unknown): ImportVerdict {
   }
 
   const envelope = raw as Record<string, unknown>;
-  if (envelope.signature !== BACKUP_SIGNATURE || Number(envelope.version) !== BACKUP_VERSION) {
+  // Readable, not merely known: a version this build cannot open has to be refused as
+  // such, because the message an operator needs is "your software is old", not
+  // "unexpected signature".
+  if (
+    envelope.signature !== BACKUP_SIGNATURE_V2 ||
+    !isReadableArchiveVersion(envelope.version)
+  ) {
     return refuse(
       'BACKUP_IMPORT_BAD_SIGNATURE',
-      `توقيع الملف غير معروف. المتوقّع ${BACKUP_SIGNATURE} الإصدار ${BACKUP_VERSION}.`,
+      envelope.signature === BACKUP_SIGNATURE_V2
+        ? archiveFormatMessage(Number(envelope.version))
+        : `توقيع الملف غير معروف. المتوقّع ${BACKUP_SIGNATURE_V2}.`,
     );
   }
 

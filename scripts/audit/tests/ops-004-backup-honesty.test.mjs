@@ -835,6 +835,19 @@ test('gate 16a the archive is written atomically, never straight to its final pa
     /private async writeArchiveAtomically/,
     'the atomic write is what keeps a failed write from occupying the final name',
   );
+
+  // Exactly once per archive. This line was duplicated in the source, and every backup
+  // paid for it twice: the file was written twice, and `JSON.stringify(envelope)` ran
+  // twice over a string 1.778x the dump, so the second call allocated a second full-size
+  // copy of the largest object in the process. The result was the same file, because the
+  // write is atomic — which is exactly why nothing reported it and why a presence
+  // assertion cannot catch it.
+  const writeCalls = service.match(/await this\.writeArchiveAtomically\(/g) || [];
+  assert.equal(
+    writeCalls.length,
+    1,
+    `the archive must be written once, and it is currently written ${writeCalls.length} times`,
+  );
   // temp write, then rename. Without the rename the temp name is what a reader sees.
   assert.match(service, /writeFile\(temp, body, 'utf8'\)/);
   assert.match(service, /rename\(temp, filePath\)/);
