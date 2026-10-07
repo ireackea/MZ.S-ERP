@@ -213,18 +213,14 @@ const runTool = async (tool: string, args: string[], parsed: ParsedDatabaseUrl, 
 };
 
 /**
- * Takes a consistent, restorable dump.
+ * The one place `pg_dump` is told what to do.
  *
- * `--format=custom` is required: only the custom format can be restored by
- * `pg_restore` with selective object control, which the restore path needs.
+ * There were two callers that each built their own argument list, and a partial dump is
+ * a security-relevant decision — `--table=Item` is the difference between a stock backup
+ * and one that also replaces users and roles. Two builders is two chances for that to
+ * differ, so the streaming path and the buffered path share this function.
  */
-export const dumpPostgres = async (
-  rawUrl: string,
-  options: { format?: PgDumpFormat; tables?: string[] } = {},
-): Promise<PgDumpResult> => {
-  const parsed = parsePostgresUrl(rawUrl);
-  const format = options.format ?? 'custom';
-
+const dumpArgs = (format: PgDumpFormat, tables?: readonly string[]): string[] => {
   const args = [
     '--no-password',
     '--no-owner',
@@ -238,13 +234,30 @@ export const dumpPostgres = async (
   // inventory and safety_snapshot, so an inventory archive was byte-for-byte a
   // whole-database dump, and restoring it with --clean replaced users and roles
   // while the UI called it a stock backup.
-  if (options.tables?.length) {
-    for (const table of options.tables) args.push(`--table=${table}`);
+  if (tables?.length) {
+    for (const table of tables) args.push(`--table=${table}`);
   }
   if (format === 'plain') {
     // Keep the dump reloadable by a plain `psql` too.
     args.push('--inserts', '--clean');
   }
+  return args;
+};
+
+/**
+ * Takes a consistent, restorable dump.
+ *
+ * `--format=custom` is required: only the custom format can be restored by
+ * `pg_restore` with selective object control, which the restore path needs.
+ */
+export const dumpPostgres = async (
+  rawUrl: string,
+  options: { format?: PgDumpFormat; tables?: string[] } = {},
+): Promise<PgDumpResult> => {
+  const parsed = parsePostgresUrl(rawUrl);
+  const format = options.format ?? 'custom';
+
+  const args = dumpArgs(format, options.tables);
 
   const buffer = await runTool('pg_dump', args, parsed, MAX_DUMP_BYTES);
   if (!buffer || buffer.length === 0) {
@@ -264,6 +277,201 @@ export const dumpPostgres = async (
   return { base64: buffer.toString('base64'), format, byteLength: buffer.length };
 };
 
+export type StreamResult = { bytes: number; format: PgDumpFormat };
+
+/**
+ * A destination for streamed bytes.
+ *
+ * `write` may return a promise and is awaited, which is how backpressure reaches the
+ * child process: the container writer awaits `drain` internally, so a slow disk slows
+ * `pg_dump` instead of filling a queue in this process.
+ */
+export type StreamSink = { write: (chunk: Buffer) => void | Promise<void> };
+
+/**
+ * B15-2 — `pg_dump` as a stream.
+ *
+ * `dumpPostgres` buffers the whole dump because `execFile` has no other mode, and then
+ * hands back base64. Six resident copies later that becomes a hard wall at ~288 MiB.
+ * Here the dump is never resident: it is pumped into `sink` and the only thing this
+ * function returns is how many bytes went past.
+ *
+ * Three things this has to get right, and each of them was a bug in the buffered form:
+ *
+ * 1. **The ceiling is enforced while pumping.** `maxBuffer` could only refuse a dump
+ *    that was already in memory. Crossing the limit here kills the child rather than
+ *    waiting for it to finish producing something that is going to be thrown away.
+ * 2. **A failure is a failure.** A non-zero exit rejects with pg_dump's own stderr, so
+ *    "the archive is corrupt" is never reported for a dump that never started.
+ * 3. **The child is always reaped.** Every exit path awaits `close`, which on Windows
+ *    is what actually releases the handle; a killed child left unreaped holds the
+ *    stdout pipe open and the promise never settles.
+ */
+export const streamPostgresDump = async (
+  rawUrl: string,
+  sink: StreamSink,
+  options: { format?: PgDumpFormat; tables?: string[]; maxBytes?: number } = {},
+): Promise<StreamResult> => {
+  const parsed = parsePostgresUrl(rawUrl);
+  const format = options.format ?? 'custom';
+  const maxBytes = options.maxBytes ?? MAX_DUMP_BYTES;
+  const { spawn } = await import('node:child_process');
+
+  const child = spawn('pg_dump', dumpArgs(format, options.tables), {
+    env: baseEnv(parsed),
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  let bytes = 0;
+  let stderr = '';
+  let failure: Error | null = null;
+
+  const pump = new Promise<void>((resolve) => {
+    child.stdout.on('data', (chunk: Buffer) => {
+      if (failure) return;
+      bytes += chunk.length;
+      if (maxBytes && bytes > maxBytes) {
+        failure = new DatabaseDumpError(dumpTooLargeMessage(bytes));
+        // SIGTERM first: the child is mid-write and deserves the chance to stop. The
+        // archive writer discards its temp file on this rejection either way.
+        child.kill('SIGTERM');
+        return;
+      }
+      Promise.resolve(sink.write(chunk)).catch((error: any) => {
+        failure = failure ?? new DatabaseDumpError(`writing the dump failed: ${error?.message || error}`, error);
+        child.kill('SIGTERM');
+      });
+    });
+    child.stderr.on('data', (chunk: Buffer) => {
+      if (stderr.length < 8000) stderr += chunk.toString();
+    });
+    child.on('error', (error: any) => {
+      failure = failure ?? new DatabaseDumpError(`pg_dump could not start: ${error?.message || error}`, error);
+    });
+    // `close`, not `exit`: `exit` fires while stdio may still be open, and on Windows
+    // the handle is only released at close.
+    child.on('close', (code) => {
+      if (!failure && code !== 0) {
+        failure = new DatabaseDumpError(`pg_dump exited ${code}: ${stderr.slice(0, 500)}`);
+      }
+      resolve();
+    });
+  });
+
+  await pump;
+  if (failure) throw failure;
+  if (bytes === 0) {
+    throw new DatabaseDumpError('pg_dump produced an empty dump');
+  }
+  return { bytes, format };
+};
+
+/**
+ * The one place `pg_restore` is told what to do.
+ *
+ * The same reason as `dumpArgs`: `--clean` and `--single-transaction` are not style
+ * choices, they decide whether a restore replaces a schema or half of one.
+ *
+ * `forceSingleTransaction` exists because the streamed path must never be told otherwise
+ * — see `restorePostgresFromStream`. It is a parameter rather than a second builder so
+ * the two paths cannot drift into disagreeing about whether the restore is atomic.
+ */
+export const restoreArgs = (
+  database: string,
+  options: RestoreOptions,
+  forceSingleTransaction = false,
+): string[] => {
+  const args: string[] = ['--no-password', '--no-owner', '--no-privileges'];
+  // `clean` drops and recreates the objects it names. Correct for a full dump, wrong for
+  // a subset: it is the difference between "restore these tables" and "replace the
+  // schema". A partial restore therefore never passes it.
+  if (options.clean !== false && !options.tables?.length) args.push('--clean', '--if-exists');
+  if (options.exitOnError !== false) args.push('--exit-on-error');
+  if (forceSingleTransaction) args.push('--single-transaction');
+  else if (options.singleTransaction) args.push('--single-transaction');
+  for (const table of options.tables ?? []) args.push(`--table=${table}`);
+  args.push('--dbname', database);
+  return args;
+};
+
+/**
+ * B15-2 — restore from a stream.
+ *
+ * The dump is fed to `pg_restore` chunk by chunk, so restoring a large archive no
+ * longer needs the payload, the ciphertext, the plaintext and the tool's input to exist
+ * at the same time.
+ *
+ * `--single-transaction` is not optional here and is forced on regardless of what the
+ * caller passed. The stream's integrity tag is only verified when the stream *ends*, so
+ * a dump that turns out to be corrupt can fail after `pg_restore` has already applied
+ * most of it. In one transaction that failure rolls the whole thing back; without it the
+ * database is left half-replaced by the tool that was recovering it — and a
+ * half-replaced database is the state nobody notices until it is too late to compare.
+ */
+export const restorePostgresFromStream = async (
+  rawUrl: string,
+  source: AsyncIterable<Buffer>,
+  options: RestoreOptions = {},
+): Promise<{ bytes: number }> => {
+  const parsed = parsePostgresUrl(options.targetUrl || rawUrl);
+  const { spawn } = await import('node:child_process');
+
+  // Forced, not defaulted. See above.
+  const args = restoreArgs(parsed.database, options, true);
+
+  let bytes = 0;
+  let stderr = '';
+  let failure: Error | null = null;
+
+  await new Promise<void>((resolve) => {
+    const child = spawn('pg_restore', args, { env: baseEnv(parsed), windowsHide: true, stdio: ['pipe', 'ignore', 'pipe'] });
+    child.stderr.on('data', (chunk: Buffer) => {
+      if (stderr.length < 8000) stderr += chunk.toString();
+    });
+    child.on('error', (error: any) => {
+      failure = failure ?? new DatabaseDumpError(`pg_restore could not start: ${error?.message || error}`, error);
+      resolve();
+    });
+    child.on('close', (code) => {
+      if (!failure && code !== 0) {
+        failure = new DatabaseDumpError(`pg_restore exited ${code}: ${stderr.slice(0, 500)}`);
+      }
+      resolve();
+    });
+
+    (async () => {
+      try {
+        for await (const chunk of source) {
+          if (child.stdin.destroyed) break;
+          bytes += chunk.length;
+          if (!child.stdin.write(chunk)) {
+            await new Promise((r) => child.stdin.once('drain', r));
+          }
+        }
+      } catch (error: any) {
+        // A stream that fails its integrity tag fails here, mid-restore. The transaction
+        // is what makes that survivable.
+        failure = failure ?? new DatabaseDumpError(`the dump stream failed: ${error?.message || error}`, error);
+        child.kill('SIGTERM');
+        return;
+      } finally {
+        child.stdin.end();
+      }
+    })();
+  });
+
+  if (failure) throw failure;
+  return { bytes };
+};
+
+/**
+ * Where and how a restore writes.
+ *
+ * Declared after the functions above on purpose: `restorePostgresFromStream` documents
+ * why it overrides two of these fields, and the reader should meet that reasoning before
+ * the type it is reasoning about.
+ */
 export type RestoreOptions = {
   /**
    * Restores into a target database. Defaults to the configured one, which is
@@ -309,15 +517,7 @@ export const restorePostgres = async (
   // full-size copy, allocated to read five bytes, on the path an operator reaches
   // when the database is already broken.
   if (isCustomDumpBuffer(buffer)) {
-    const args: string[] = ['--no-password', '--no-owner', '--no-privileges'];
-    // `clean` drops and recreates the objects it names. Correct for a full dump,
-    // wrong for a subset: it is the difference between "restore these tables" and
-    // "replace the schema". A partial restore therefore never passes it.
-    if (options.clean !== false && !options.tables?.length) args.push('--clean', '--if-exists');
-    if (options.exitOnError !== false) args.push('--exit-on-error');
-    if (options.singleTransaction) args.push('--single-transaction');
-    for (const table of options.tables ?? []) args.push(`--table=${table}`);
-    args.push('--dbname', parsed.database);
+    const args = restoreArgs(parsed.database, options);
 
     try {
       await new Promise<void>((resolve, reject) => {

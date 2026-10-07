@@ -185,6 +185,32 @@ describe('B15-2 the streaming archive container', () => {
       expect((await drain(read.plaintext)).length).toBe(total);
     });
 
+    it('reads back a member that was pushed chunk by chunk', async () => {
+      // This is the interface `pg_dump` needs: it produces bytes as it goes, so a sink
+      // that had to pull would either buffer the dump or refuse to start.
+      const filePath = path.join(workspace, 'pushed.ffbkp');
+      const secret = key();
+      const writer = await ArchiveContainerWriter.open({ filePath, header: header(), key: secret, chunkSize: 4096 });
+      await writer.writeMember('meta', '{}');
+      await writer.beginMember('database');
+      for (let i = 0; i < 20; i += 1) await writer.writeChunk(Buffer.alloc(1024, i));
+      const record = await writer.endMember();
+      await writer.finalize();
+
+      expect(record.name).toBe('database');
+      expect(record.plaintextLength).toBe(20 * 1024);
+      const read = await readContainerMember(filePath, 'database', secret, { chunkSize: 4096 });
+      expect((await drain(read.plaintext)).length).toBe(20 * 1024);
+    });
+
+    it('refuses a chunk with no member open, rather than writing one', async () => {
+      const filePath = path.join(workspace, 'closed.ffbkp');
+      const writer = await ArchiveContainerWriter.open({ filePath, header: header(), key: key() });
+      await expect(writer.writeChunk(Buffer.alloc(16))).rejects.toThrow(/no member is open/);
+      await expect(writer.endMember()).rejects.toThrow(/no member is open/);
+      await writer.discard();
+    });
+
     it('enforces the byte ceiling while writing and leaves no archive behind', async () => {
       const filePath = path.join(workspace, 'capped.ffbkp');
       const writer = await ArchiveContainerWriter.open({
@@ -235,6 +261,39 @@ describe('B15-2 the streaming archive container', () => {
       await expect(writer.writeMember('database', dies())).rejects.toThrow('pg_dump exited 1');
       expect(existsSync(filePath)).toBe(false);
       expect(readdirSync(workspace).filter((name) => name.includes('.tmp-'))).toEqual([]);
+    });
+
+    it('does not leave an unhandled rejection behind after discarding', async () => {
+      // The failure above leaves the stream's `open` in flight. When the directory is
+      // removed before it lands — which is what a test's cleanup does — the open rejects
+      // with ENOENT and nobody is listening, so it surfaces as an unhandled error against
+      // whatever test is running at the time. That is how a suite that passes on its own
+      // fails inside the chain, and it cost a real diagnosis to find.
+      const seen: unknown[] = [];
+      const onUnhandled = (reason: unknown) => seen.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        for (let i = 0; i < 3; i += 1) {
+          const dir = mkdtempSync(path.join(tmpdir(), 'ffbkp3-unhandled-'));
+          const writer = await ArchiveContainerWriter.open({
+            filePath: path.join(dir, 'x.ffbkp'),
+            header: header(),
+            key: key(),
+          });
+          async function* dies() {
+            yield Buffer.alloc(64, 7);
+            throw new Error('pg_dump exited 1');
+          }
+          await expect(writer.writeMember('database', dies())).rejects.toThrow();
+          rmSync(dir, { recursive: true, force: true });
+        }
+        // Give the event loop the turns it needs to deliver anything pending.
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+      }
+
+      expect(seen, 'discarding a writer must not raise an unhandled rejection').toEqual([]);
     });
 
     it('refuses a duplicate member rather than writing two with one nonce table', async () => {

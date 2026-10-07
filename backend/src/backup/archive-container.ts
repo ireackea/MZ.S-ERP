@@ -175,7 +175,13 @@ export type ContainerWriterOptions = {
   maxBytes?: number;
 };
 
-type OpenMember = { cipher: ReturnType<typeof createCipheriv>; hash: ReturnType<typeof createHash>; plaintextLength: number };
+type OpenMember = {
+  name: string;
+  nonce: Buffer;
+  cipher: ReturnType<typeof createCipheriv> & { getAuthTag: () => Buffer };
+  hash: ReturnType<typeof createHash>;
+  plaintextLength: number;
+};
 
 export class ArchiveContainerWriter {
   private readonly chunkSize: number;
@@ -196,6 +202,13 @@ export class ArchiveContainerWriter {
     // to a file that was written completely.
     this.tempPath = `${options.filePath}.tmp-${process.pid}-${Date.now()}`;
     this.out = createWriteStream(this.tempPath);
+    // The stream's errors are this class's business, and an `error` event with no
+    // listener is an uncaught exception. That is not hypothetical: abandoning a writer
+    // leaves its `open` in flight, so if the directory goes first the open fails with
+    // ENOENT — asynchronously, with nobody waiting, and vitest reports it against
+    // whichever test happened to be running. A file we are discarding has nothing to tell
+    // us that the failure path does not already know.
+    this.out.on('error', () => undefined);
   }
 
   static async open(options: ContainerWriterOptions): Promise<ArchiveContainerWriter> {
@@ -213,8 +226,26 @@ export class ArchiveContainerWriter {
   /**
    * Adds one member. The source may be a Buffer, a string, or any async iterable of
    * Buffers — which is how `pg_dump` arrives, once S2 replaces `execFile`.
+   *
+   * For a source that pushes rather than pulls — a subprocess's stdout — use
+   * `beginMember` / `writeChunk` / `endMember`, which is what this composes.
    */
   async writeMember(name: ArchiveMemberName, source: Buffer | string | AsyncIterable<Buffer>): Promise<ArchiveMemberRecord> {
+    await this.beginMember(name);
+    for await (const chunk of toChunks(source, this.chunkSize)) {
+      await this.writeChunk(chunk);
+    }
+    return await this.endMember();
+  }
+
+  /**
+   * Opens a member that will be fed chunk by chunk.
+   *
+   * Separate from `writeMember` because `pg_dump` does not produce a collection: it
+   * produces bytes as it goes, and a sink that had to pull would either buffer the dump
+   * or refuse to start.
+   */
+  async beginMember(name: ArchiveMemberName): Promise<void> {
     if (this.finalised) throw new ArchiveFormatError('this archive is already finalised', 'FINALISED');
     if (this.open) throw new ArchiveFormatError('a member is still being written', 'MEMBER_OPEN');
     if (this.records.some((entry) => entry.name === name)) {
@@ -227,20 +258,51 @@ export class ArchiveContainerWriter {
     }
 
     const nonce = randomBytes(NONCE_BYTES);
-    const cipher = createCipheriv('aes-256-gcm', this.options.key, nonce);
-    const member: OpenMember = { cipher, hash: createHash('sha256'), plaintextLength: 0 };
+    const member: OpenMember = {
+      name,
+      nonce,
+      cipher: createCipheriv('aes-256-gcm', this.options.key, nonce),
+      hash: createHash('sha256'),
+      plaintextLength: 0,
+    };
     this.open = member;
 
     try {
       await this.emit(Buffer.concat([uint16(nameBytes.length), nameBytes, nonce]));
-      for await (const chunk of toChunks(source, this.chunkSize)) {
-        await this.emit(cipher.update(chunk));
-        member.hash.update(chunk);
-        member.plaintextLength += chunk.length;
-        this.payloadHash.update(chunk);
-      }
-      const tail = cipher.final();
+    } catch (error) {
+      // A failed frame header leaves nothing to abandon but the temp file, and the same
+      // reasoning as a failed chunk applies: the archive is not going to be finished.
+      await this.discard();
+      throw error;
+    }
+  }
+
+  /** One chunk of the open member. */
+  async writeChunk(chunk: Buffer): Promise<void> {
+    const member = this.open;
+    if (!member) throw new ArchiveFormatError('no member is open', 'MEMBER_CLOSED');
+    try {
+      await this.emit(member.cipher.update(chunk));
+      member.hash.update(chunk);
+      member.plaintextLength += chunk.length;
+      this.payloadHash.update(chunk);
+    } catch (error) {
+      await this.discard();
+      throw error;
+    }
+  }
+
+  /** Closes the open member and writes its authentication tag. */
+  async endMember(): Promise<ArchiveMemberRecord> {
+    const member = this.open;
+    if (!member) throw new ArchiveFormatError('no member is open', 'MEMBER_CLOSED');
+
+    let authTag: Buffer;
+    try {
+      const tail = member.cipher.final();
       if (tail.length) await this.emit(tail);
+      authTag = member.cipher.getAuthTag();
+      await this.emit(authTag);
     } catch (error) {
       // Abandoned rather than finished: a tag written over an incomplete member would
       // authenticate a member that is not there. The temp file goes with it, because a
@@ -249,14 +311,12 @@ export class ArchiveContainerWriter {
       throw error;
     }
 
-    const authTag = cipher.getAuthTag();
-    await this.emit(authTag);
     this.open = null;
 
     const record: ArchiveMemberRecord = {
-      name,
+      name: member.name,
       plaintextLength: member.plaintextLength,
-      nonce: nonce.toString('base64'),
+      nonce: member.nonce.toString('base64'),
       authTag: authTag.toString('base64'),
       sha256: member.hash.digest('hex'),
     };

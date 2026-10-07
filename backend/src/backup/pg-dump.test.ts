@@ -14,6 +14,7 @@ import {
   base64ByteLength,
   describeDumpCeiling,
   dumpTooLargeMessage,
+  restoreArgs,
   isCustomDumpBuffer,
   isPostgresUrl,
   isValidCustomDump,
@@ -150,9 +151,14 @@ describe('FC-OPS-001 PostgreSQL dump contract', () => {
   describe('B15-0 the restore path decodes the dump once, not twice', () => {
     const source = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), 'pg-dump.ts'), 'utf8');
     const restoreBody = source.slice(
-      source.indexOf('export const restorePostgres'),
-      source.indexOf('/**', source.indexOf('export const restorePostgres')),
+      // The ` = async` is load-bearing. `restorePostgresFromStream` shares this name as a
+      // prefix and sits earlier in the file, so a looser slice silently measures the
+      // streamed function instead — which has no base64 decode at all and would report
+      // zero and look like a pass about nothing.
+      source.indexOf('export const restorePostgres = async'),
+      source.indexOf('/**', source.indexOf('export const restorePostgres = async')),
     );
+    expect(restoreBody, 'the slice must actually cover restorePostgres').toContain('dumpBase64');
 
     // Comments are stripped first: the note explaining the replacement names the
     // function it replaced, and a guard that cannot tell prose from code is a guard
@@ -186,6 +192,71 @@ describe('FC-OPS-001 PostgreSQL dump contract', () => {
       // The string form still answers the same, for a caller holding only base64.
       expect(isValidCustomDump(header.toString('base64'))).toBe(true);
       expect(isCustomDumpBuffer(Buffer.from(header.toString('base64'), 'base64'))).toBe(true);
+    });
+  });
+
+  describe('B15-2 one builder per tool, because two builders is two answers', () => {
+    it('both dump paths share `dumpArgs`', () => {
+      // `--table=Item` is the difference between a stock backup and one that also
+      // replaces users and roles. A second argument builder is a second chance for the
+      // two paths to disagree about that.
+      const code = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), 'pg-dump.ts'), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\/\/[^\n]*/g, '');
+      expect(code, 'the streaming path must build its arguments with dumpArgs').toMatch(
+        /spawn\('pg_dump',\s*dumpArgs\(/,
+      );
+      const literalBuilders = code.match(/'--serializable-deferrable'/g) || [];
+      expect(
+        literalBuilders.length,
+        '`--serializable-deferrable` appears more than once, so the snapshot guarantee is declared twice',
+      ).toBe(1);
+    });
+
+    it('both restore paths share `restoreArgs`', () => {
+      const code = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), 'pg-dump.ts'), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\/\/[^\n]*/g, '');
+      expect(code).toMatch(/restoreArgs\(parsed\.database, options\)/);
+      expect(code).toMatch(/restoreArgs\(parsed\.database, options, true\)/);
+      // Counted by call site rather than by flag: every flag here is shared with at
+      // least one other tool — `--no-owner` is also `pg_dump`'s, `--exit-on-error` and
+      // `--if-exists` are also `psql`'s — so counting flags asserts a coincidence rather
+      // than the invariant. The invariant is that no `pg_restore` is spawned without the
+      // one builder.
+      const spawned = (code.match(/spawn\('pg_restore'/g) || []).length;
+      const built = (code.match(/restoreArgs\(/g) || []).length;
+      expect(spawned, 'every pg_restore must be given its arguments by restoreArgs').toBe(built);
+      expect(spawned).toBe(2);
+    });
+  });
+
+  describe('B15-2 a streamed restore is always one transaction', () => {
+    it('forces --single-transaction, whatever the caller asked for', () => {
+      // The integrity tag is verified when the stream ends. A dump that turns out to be
+      // corrupt therefore fails *after* pg_restore has applied most of it, and the only
+      // thing standing between that and a half-replaced database is the transaction the
+      // tool that is recovering it rolls back.
+      expect(restoreArgs('db', {})).not.toContain('--single-transaction');
+      expect(restoreArgs('db', { singleTransaction: false })).not.toContain('--single-transaction');
+      // The streamed path asks for it unconditionally.
+      expect(restoreArgs('db', { singleTransaction: false }, true)).toContain('--single-transaction');
+      expect(restoreArgs('db', {}, true)).toContain('--single-transaction');
+    });
+
+    it('still never passes --clean to a subset restore', () => {
+      // The pairing that keeps an inventory restore from taking the identity tables.
+      expect(restoreArgs('db', { tables: ['Item'] })).not.toContain('--clean');
+      expect(restoreArgs('db', { tables: ['Item'] }, true)).not.toContain('--clean');
+      expect(restoreArgs('db', {})).toContain('--clean');
+      expect(restoreArgs('db', { clean: false })).not.toContain('--clean');
+    });
+
+    it('names the tables and the database it was given', () => {
+      const args = restoreArgs('feed_factory_db', { tables: ['Item', 'Transaction'] }, true);
+      expect(args).toContain('--table=Item');
+      expect(args).toContain('--table=Transaction');
+      expect(args.slice(-2)).toEqual(['--dbname', 'feed_factory_db']);
     });
   });
 
