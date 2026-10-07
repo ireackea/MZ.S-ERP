@@ -5,7 +5,13 @@ const controlOrMarkerRegex = /[\x00-\x08\x0B\x0C\x0E-\x1F]|ï؟½|⬑|␦|7"7/u;
 const ignoreLineMarker = 'encoding-check-ignore-line';
 
 const projectRoot = process.cwd();
-const extensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.json', '.mjs', '.cjs', '.html']);
+// `.md` is scanned because the remediation plans are written in Arabic prose by an
+// editor rather than by a compiler, and they are where this repository's encoding
+// damage actually accumulated: `archive-key.ts` had lost its leading letter to a
+// U+0007, and `backup-reconcile.ts` its `b` to a U+0008, in a file no gate ever
+// opened. Nothing in a Markdown file can fail a build, so the gate is the only
+// thing that will ever notice.
+const extensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.json', '.mjs', '.cjs', '.html', '.md']);
 const ignoredDirs = new Set([
   'node_modules',
   'dist',
@@ -70,6 +76,40 @@ function collectFiles(entryPath, out = []) {
     }
   }
   return out;
+}
+
+/**
+ * A control character anywhere in the file, reported on its own.
+ *
+ * The tokenized heuristic below already looks for control characters, but only
+ * inside comments and string literals that also contain two of `[78]` and a marker —
+ * which is the shape a mis-decode leaves. A control character that arrives any other
+ * way is invisible to it: the U+0007 that ate the `a` of `archive-key.ts` in a
+ * JSDoc comment, and the U+0008 that ate the `b` of `backup-reconcile.ts` in a
+ * table, both sat in files this gate passed, because neither sat next to a digit.
+ *
+ * They are never legitimate in a text file, so they are checked unconditionally.
+ * `\t`, `\n` and `\r` are the three that are.
+ */
+function findControlCharacters(text) {
+  const findings = [];
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i += 1) {
+    if (lines[i].includes(ignoreLineMarker)) continue;
+    for (let col = 0; col < lines[i].length; col += 1) {
+      const code = lines[i].charCodeAt(col);
+      const isControl = code < 0x20 && code !== 0x09 && code !== 0x0d;
+      if (!isControl) continue;
+      findings.push({
+        line: i + 1,
+        col: col + 1,
+        code: `U+${code.toString(16).toUpperCase().padStart(4, '0')}`,
+        context: lines[i].slice(Math.max(0, col - 24), col + 25),
+      });
+      if (findings.length >= 8) return findings;
+    }
+  }
+  return findings;
 }
 
 function findSuspiciousChars(text) {
@@ -208,14 +248,45 @@ for (const filePath of files) {
   }
 
   const text = raw.toString('utf8');
+  const isMarkdown = path.extname(filePath) === '.md';
   const charFindings = findSuspiciousChars(text);
+  const controlFindings = findControlCharacters(text);
   const mojibake = findArabicMojibake(text);
   const tokenizedMojibake = findTokenizedMojibake(text);
-  if (charFindings.length > 0 || mojibake || tokenizedMojibake) {
+
+  // In Markdown the Windows-1252 signature characters are reported, not fatal.
+  //
+  // They are fatal in source, where U+00A7 has no legitimate reading. In a document
+  // written in Arabic prose they can be exactly that — and this file has already
+  // been wrong about that once: four entries were removed from the signature list
+  // in 2026-09-29 after they turned out to be legitimate typography, and their
+  // presence made `ci:verify` fail on ten files nobody had edited. A gate that
+  // cannot tell the difference between damage and punctuation is a gate that gets
+  // deleted. What stays fatal in Markdown is the two signals that have no innocent
+  // reading at all: a control character, and U+FFFD, which is the replacement
+  // character — the one a lossy decode leaves when the original bytes are already
+  // gone.
+  //
+  // U+00A7 is named by code point rather than written literally, for the reason the
+  // note above gives about this file scanning itself.
+  const fatalCharFindings = charFindings.filter(
+    (finding) => !isMarkdown || finding.code === 'U+FFFD',
+  );
+  const advisoryCharFindings = isMarkdown ? charFindings.filter((f) => f.code !== 'U+FFFD') : [];
+
+  if (
+    fatalCharFindings.length > 0 ||
+    controlFindings.length > 0 ||
+    mojibake ||
+    tokenizedMojibake ||
+    advisoryCharFindings.length > 0
+  ) {
     issues.push({
       file: path.relative(projectRoot, filePath),
       bom: false,
-      charFindings,
+      charFindings: fatalCharFindings,
+      advisoryCharFindings,
+      controlFindings,
       mojibake,
       tokenizedMojibake,
     });
@@ -223,14 +294,32 @@ for (const filePath of files) {
 }
 
 if (issues.length > 0) {
+  let fatal = 0;
+  let advisory = 0;
+
   console.error('\nFound text-encoding issues:\n');
   for (const issue of issues) {
-    console.error(`- ${issue.file}`);
+    const soft = (issue.charFindings || []).length === 0 && (issue.controlFindings || []).length === 0 && !issue.mojibake && !issue.tokenizedMojibake;
+    if (soft) advisory += 1;
+    else fatal += 1;
+
+    console.error(`- ${issue.file}${soft ? '  (advisory)' : ''}`);
     if (issue.bom) {
       console.error('  UTF-8 BOM detected (must be UTF-8 without BOM)');
     }
     for (const finding of issue.charFindings) {
       console.error(`  at ${finding.line}:${finding.col} -> ${finding.code} (${JSON.stringify(finding.char)})`);
+    }
+    for (const finding of issue.advisoryCharFindings || []) {
+      console.error(
+        `  at ${finding.line}:${finding.col} -> ${finding.code} (${JSON.stringify(finding.char)}) — ` +
+          '1252 signature in Markdown: may be legitimate typography, reported not enforced',
+      );
+    }
+    for (const finding of issue.controlFindings || []) {
+      console.error(
+        `  at ${finding.line}:${finding.col} -> ${finding.code} control character in: ${JSON.stringify(finding.context)}`,
+      );
     }
     if (issue.mojibake) {
       console.error(`  Arabic mojibake signal: ${(issue.mojibake.ratio * 100).toFixed(1)}% suspicious pairs`);
@@ -245,8 +334,16 @@ if (issues.length > 0) {
       }
     }
   }
-  console.error('\nFix encoding issues before commit/build.\n');
-  process.exit(1);
-}
+  if (advisory > 0) {
+    console.error(`\n${advisory} file(s) reported only. Advisory: a 1252 signature in Markdown is not necessarily damage.\n`);
+  }
+  if (fatal > 0) {
+    console.error('\nFix encoding issues before commit/build.\n');
+    process.exit(1);
+  }
 
-console.log('Text encoding check passed.');
+  console.log('Text encoding check passed.');
+  console.log(`(${advisory} file(s) reported above as advisory.)`);
+} else {
+  console.log('Text encoding check passed.');
+}

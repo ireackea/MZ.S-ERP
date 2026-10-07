@@ -96,6 +96,44 @@ test('the characters removed as legitimate typography stay removed', () => {
   }
 });
 
+test('the gate scans Markdown, and a control character fails it anywhere', () => {
+  const source = read('scripts/check-text-encoding.mjs');
+
+  // `.md` was missing from the extension set, so the two remediation plans had never
+  // been opened by this gate — and that is where the damage was: a U+0007 had eaten
+  // the `a` of `archive-key.ts`, and a U+0008 the `b` of `backup-reconcile.ts`, in a
+  // file nothing else reads.
+  const extensions = /const extensions = new Set\(\[([^\]]+)\]\)/.exec(source);
+  assert.ok(extensions, 'the extension set was restructured; point this guard at its new form.');
+  assert.ok(
+    extensions[1].includes("'.md'"),
+    "'.md' must be in the gate's extension set. Nothing else opens a Markdown file, so a plan " +
+      'document can accumulate encoding damage indefinitely and still pass every check.',
+  );
+
+  // The tokenized heuristic only fires on control characters sitting next to two
+  // digits and a marker, which is the shape a mis-decode leaves. A control character
+  // arriving any other way was invisible: the two in this repository arrived inside a
+  // JSDoc comment and a table row, with no digit nearby.
+  assert.match(source, /function findControlCharacters\(text\)/);
+  const body = /function findControlCharacters\(text\)\s*\{[\s\S]*?\n\}/.exec(source);
+  assert.ok(body, 'findControlCharacters was restructured; point this guard at its new form.');
+  assert.match(body[0], /code !== 0x09 && code !== 0x0d/, 'tab and carriage return are the two legitimate controls');
+  assert.match(body[0], /ignoreLineMarker/, 'the per-line escape hatch must survive');
+});
+
+test('a Markdown typography hit is reported without failing the gate', () => {
+  const source = read('scripts/check-text-encoding.mjs');
+
+  // The asymmetry is deliberate and it is the second time this gate has been wrong
+  // about typography: a Windows-1252 half is unambiguous in source and legitimate
+  // in Arabic prose, so in Markdown it is reported and the file is not failed.
+  // What stays fatal is the replacement character, which has no innocent reading.
+  assert.match(source, /advisoryCharFindings/);
+  assert.match(source, /finding\.code === 'U\+FFFD'/);
+  assert.match(source, /\(advisory\)/);
+});
+
 test('the gate still runs first in the verification chain', () => {
   const scripts = JSON.parse(read('package.json')).scripts || {};
   const verify = String(scripts['ci:verify'] || '');

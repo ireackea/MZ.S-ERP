@@ -1825,7 +1825,7 @@ await this.writeArchiveAtomically(filePath, JSON.stringify(envelope));
     type: Exclude<BackupType, 'safety_snapshot'>;
     actor?: Partial<BackupActor>;
     encryptionPassword?: string;
-    /** B11 - rchive-only seals with the passphrase alone, so the archive survives a rebuild. */
+    /** B11 - archive-only seals with the passphrase alone, so the archive survives a rebuild. */
     keyScope?: KeyScope;
   }): Promise<BackupListItem> {
     const created = await this.createBackupInternal({
