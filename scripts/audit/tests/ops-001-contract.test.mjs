@@ -56,12 +56,22 @@ test('a restore refuses an incomplete or corrupt backup before it is destructive
   assert.match(service, /assertManifestChecksums/);
 
   // The completeness gate must run before the restore step, not after.
-  const restoreFlow = service.slice(service.indexOf('const payload = this.decryptEnvelope'));
+  //
+  // B15-2 replaced `this.decryptEnvelope` with `this.openArchive`, so the slice anchor
+  // moved. What is being protected is the *order*, and the restore step now has two
+  // forms — a v2 dump in the payload and a v3 member stream — so both are searched.
+  const restoreFlow = service.slice(service.indexOf('const opened = await this.openArchive(target'));
   const gateIndex = restoreFlow.indexOf('assertManifestIsRestorable');
-  const restoreIndex = restoreFlow.indexOf('restoreDatabaseFromBase64');
+  const checksumIndex = restoreFlow.indexOf('assertManifestChecksums');
+  const restoreIndex = Math.max(
+    restoreFlow.indexOf('restoreDatabaseFromBase64'),
+    restoreFlow.indexOf('restoreDatabaseFromStream'),
+  );
   assert.ok(gateIndex > -1, 'the completeness gate is missing');
+  assert.ok(checksumIndex > -1, 'the checksum gate is missing');
   assert.ok(restoreIndex > -1, 'the restore step is missing');
   assert.ok(gateIndex < restoreIndex, 'verification must run BEFORE the destructive restore');
+  assert.ok(checksumIndex < restoreIndex, 'the checksum gate must run BEFORE the destructive restore');
 
   assert.match(service, /is incomplete\. Missing tables/);
   assert.match(service, /checksum mismatch/);
@@ -137,7 +147,15 @@ test('a complete, checksummed backup is actually restorable', () => {
   assert.match(gate, /databaseDump\.included && !manifest\.databaseDump\.sha256/,
     'a dump with no checksum is still refused');
   // The real verification must remain, and it must be the checksum comparison.
-  assert.match(service, /assertManifestChecksums\(payload\)/);
+  //
+  // B15-2 changed the shape: a v3 archive's dump is not in the payload at all, so the
+  // call now carries the opened archive and the comparison uses the digest the
+  // container's trailer records for its `database` member. The v2 branch is still the
+  // one that hashes `dbBase64`, and both are asserted — pinning either alone would let
+  // the other format restore an unverified dump.
+  assert.match(service, /assertManifestChecksums\(payload, opened\)/);
   assert.match(service, /Database dump checksum mismatch/);
   assert.match(service, /createHash\('sha256'\)\.update\(payload\.dbBase64\)/);
+  assert.match(service, /opened\.databaseSha256 !== expected/,
+    'a v3 dump must still be checked against the digest the archive recorded');
 });

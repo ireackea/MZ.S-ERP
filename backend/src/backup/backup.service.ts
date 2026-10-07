@@ -29,7 +29,14 @@ import {
 } from 'crypto';
 import type { Prisma } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
-import { base64ByteLength, dumpPostgres, isPostgresUrl, restorePostgres, streamPostgresDump } from './pg-dump';
+import {
+  base64ByteLength,
+  dumpPostgres,
+  isPostgresUrl,
+  restorePostgres,
+  restorePostgresFromStream,
+  streamPostgresDump,
+} from './pg-dump';
 import { estimateArchiveBytes, judgeHeadroom } from './disk-headroom';
 import {
   ARCHIVE_VERSION_V2,
@@ -45,6 +52,9 @@ import {
   ArchiveContainerWriter,
   DEFAULT_CHUNK_BYTES,
   readArchiveFormat,
+  readContainerHeader,
+  readContainerMember,
+  readContainerTrailer,
 } from './archive-container';
 import {
   CONFIG_FILES_ALLOW_LIST,
@@ -224,6 +234,23 @@ type BackupListItem = BackupManifestEntry & {
   integrityLabel: BackupIntegrity;
 };
 
+/**
+ * B15-2 — what an opener hands back, for either format.
+ *
+ * `databaseSha256` is the dump's digest as the *archive itself* records it: for v2 a hash
+ * of a base64 string, for v3 a hash of the raw bytes. Comparing that against
+ * `manifest.checksums.database` is what lets the check mean the same thing on both — and
+ * why the manifest entry records which encoding it is in, so nobody compares the two
+ * formats' digests and concludes the archive is corrupt.
+ */
+type OpenedArchive = {
+  format: number;
+  payload: BackupPayload;
+  /** v3 only. A fresh decrypting stream of the dump; undefined for v2. */
+  databaseStream?: () => Promise<AsyncIterable<Buffer>>;
+  databaseSha256: string;
+};
+
 // B18/S1 — `ConfigSnapshot` moved to ./backup-files with the two functions that produce
 // and consume it. It was private here and is now the module's own, which is where a
 // reader looking for "what shape is a captured config file" will find it first.
@@ -338,6 +365,15 @@ type BackupManifest = {
     format?: string;
     byteLength?: number;
     sha256?: string;
+    /**
+     * FC-OPS-001 — which bytes `sha256` was taken over.
+     *
+     * `base64` for v2 (the digest covers the base64 text as stored) and `raw` for v3
+     * (the digest covers the dump bytes themselves). Stated rather than inferred,
+     * because the two are both sha256 and both named `database` while disagreeing on
+     * their input — and a verifier that assumed the wrong one condemns a sound archive.
+     */
+    checksumEncoding?: 'base64' | 'raw';
   };
   /** FC-OPS-001 — whether a `full` backup also carries uploaded attachments. */
   attachments: { included: boolean; fileCount: number; reason: string };
@@ -1298,6 +1334,12 @@ export class BackupService implements OnModuleDestroy {
         format: payload.dbBase64 ? 'custom' : undefined,
         byteLength: payload.dbBase64 ? base64ByteLength(payload.dbBase64) : undefined,
         sha256: checksums.database,
+        // FC-OPS-001 — say out loud what was hashed. The v2 digest is taken over the
+        // base64 *text*, the v3 digest over the raw dump bytes. Both are sha256, both
+        // are called `database`, and they are not interchangeable — so a reader that
+        // guessed wrong would compare a valid archive against a digest that can never
+        // match, and report corruption that is not there.
+        checksumEncoding: payload.dbBase64 ? 'base64' : 'raw',
       },
       attachments: {
         // FC-OPS-001 — attachments live on a volume, not in Postgres, so a
@@ -1602,8 +1644,19 @@ export class BackupService implements OnModuleDestroy {
     if (!fs.existsSync(filePath)) return false;
 
     try {
-      const envelope = await this.readEnvelope(entry);
-      if (!envelope.payloadBase64 || !envelope.authTagBase64) return false;
+      // B15-2 — the file checksum is the authority for both formats; what differs is the
+      // structural check beside it. For v3 that is reading the container's trailer, which
+      // proves the header, the member table and the trailing length agree. Decrypting a
+      // member here would be wrong: integrity does not have the passphrase, and an
+      // archive whose passphrase is lost is intact, not corrupt.
+      const format = await readArchiveFormat(filePath);
+      if (format === 'v3') {
+        const trailer = await readContainerTrailer(filePath);
+        if (!Array.isArray(trailer.members) || trailer.members.length === 0) return false;
+      } else {
+        const envelope = await this.readEnvelope(entry);
+        if (!envelope.payloadBase64 || !envelope.authTagBase64) return false;
+      }
       const checksum = await this.computeFileChecksum(filePath);
       return checksum === entry.checksumSha256;
     } catch {
@@ -1670,6 +1723,9 @@ export class BackupService implements OnModuleDestroy {
     payload: BackupPayload;
     id: string;
     createdAt: string;
+    /** Derived once by the caller. Never re-derived here — see the call site. */
+    fileName: string;
+    filePath: string;
     type: BackupType;
     trigger: BackupTrigger;
     actor: BackupActor;
@@ -1677,7 +1733,7 @@ export class BackupService implements OnModuleDestroy {
     password?: string;
     passwordProtected: boolean;
   }): Promise<{ bytes: number; sha256: string }> {
-    const { payload, id, createdAt, type, trigger, actor, keyScope } = params;
+    const { payload, id, createdAt, fileName, filePath, type, trigger, actor, keyScope } = params;
 
     const resolved = resolvePassphrase({
       password: params.password,
@@ -1697,9 +1753,6 @@ export class BackupService implements OnModuleDestroy {
       scope: keyScope,
       salt,
     });
-
-    const fileName = this.buildFileName(type, id);
-    const filePath = path.join(this.backupDir, fileName);
 
     const writer = await ArchiveContainerWriter.open({
       filePath,
@@ -1742,6 +1795,180 @@ export class BackupService implements OnModuleDestroy {
     await writer.finalize();
 
     return { bytes, sha256 };
+  }
+
+  /**
+   * B15-2 — one opener for both formats.
+   *
+   * Every reader used to take a v2 envelope. This is the single place that decides which
+   * format an archive is, derives the key for it, and hands back the payload plus — for
+   * v3 — a way to stream the dump. The point is that the restore path below does not
+   * branch on format at all: it asks for the payload, and separately for a dump stream,
+   * and a v2 archive simply has none.
+   *
+   * The two refusals that matter are copied from `decryptEnvelope` rather than
+   * duplicated in spirit: a rotated master secret and an `archive-only` scope with no
+   * passphrase are both refused *before* a key is derived, with the reason, because the
+   * difference between "your software is old", "your secret changed" and "that password
+   * is wrong" is the entire content of the message an operator gets.
+   */
+  private async openArchive(entry: BackupManifestEntry, password?: string): Promise<OpenedArchive> {
+    const filePath = path.join(this.backupDir, entry.fileName);
+    if (!fs.existsSync(filePath)) {
+      throw new NotFoundException(`Backup file ${entry.fileName} not found`);
+    }
+    return await this.openArchiveFromPath(filePath, password);
+  }
+
+  /**
+   * B15-2 — the same opener, addressed by path.
+   *
+   * Split from `openArchive` because an imported archive has no manifest row yet: it is
+   * a file on its way in, and the import path has to decide what it is before anything
+   * describes it.
+   */
+  private async openArchiveFromPath(filePath: string, password?: string): Promise<OpenedArchive> {
+    if ((await readArchiveFormat(filePath)) === 'v3') {
+      const header = await readContainerHeader(filePath);
+      const scope: KeyScope = (header.keyScope as KeyScope) ?? 'both';
+      const supplied = String(password || '').trim();
+
+      if (header.passwordProtected && !supplied) {
+        throw new BadRequestException('Backup decryption password is required');
+      }
+      const readiness = explainOpenFailure({
+        sealedWith: header.masterSecretFingerprint ?? null,
+        current: masterSecretFingerprint(this.getMasterSecret()),
+        scope,
+        hasPassphrase: Boolean(supplied),
+      });
+      if (readiness.code === 'SECRET_ROTATED') {
+        throw new BadRequestException({ code: 'BACKUP_SECRET_ROTATED', message: readiness.message });
+      }
+      if (scope === 'archive-only' && !supplied) {
+        throw new BadRequestException({ code: readiness.code, message: readiness.message });
+      }
+      if (!header.saltBase64) {
+        // A container with no salt cannot be keyed, and an archive that was written
+        // without one can never be opened again. Said plainly, rather than as a
+        // decryption failure the operator would read as a wrong password.
+        throw new BadRequestException({
+          code: 'BACKUP_SALT_MISSING',
+          message: 'الأرشيف لا يحتوي على ملح المفتاح، ولذلك لا يمكن فتحه. نسخة من بناء أقدم أو تالفة.',
+        });
+      }
+
+      const key = deriveArchiveKey({
+        password,
+        masterSecret: this.getMasterSecret(),
+        scope,
+        salt: Buffer.from(header.saltBase64, 'base64'),
+      });
+
+      const meta = await readContainerMember(filePath, 'meta', key);
+      const plain = await this.readStreamToString(meta.plaintext);
+      let payload: BackupPayload;
+      try {
+        payload = JSON.parse(plain) as BackupPayload;
+      } catch {
+        throw new BadRequestException({
+          code: 'BACKUP_PAYLOAD_INVALID',
+          message: 'بيانات الأرشيف لا تصلح للاستخدام. الأرشيف تالف أو ليس نسخة هذا النظام.',
+        });
+      }
+
+      const trailer = await readContainerTrailer(filePath);
+      const databaseMember = trailer.members.find((member) => member.name === 'database');
+
+      // The manifest that travelled inside the archive was written before the database
+      // member existed, so it cannot carry that member's digest — and a manifest that
+      // guessed one would be a second place for the two to disagree. The trailer is the
+      // authority, so the manifest is completed from it on the way out.
+      if (payload.manifest?.databaseDump) {
+        payload.manifest.databaseDump.checksumEncoding = 'raw';
+        payload.manifest.databaseDump.sha256 = databaseMember?.sha256;
+        payload.manifest.databaseDump.byteLength = databaseMember?.plaintextLength;
+      }
+
+      return {
+        format: ARCHIVE_VERSION_V3,
+        payload,
+        databaseSha256: databaseMember?.sha256 ?? '',
+        databaseStream: databaseMember
+          // A fresh member read per call: a stream is consumed once, and the restore
+          // path reads the archive twice — once to verify, once to feed pg_restore.
+          ? async () => (await readContainerMember(filePath, 'database', key)).plaintext
+          : undefined,
+      };
+    }
+
+    // The v2 branch needs the archive's own directory context to find the file, and the
+    // import path has no manifest row to give it — so it reads the file it was handed.
+    const raw = await fsPromises.readFile(filePath, 'utf8');
+    const parsed = JSON.parse(raw) as BackupEnvelope;
+    if (parsed.signature !== BACKUP_SIGNATURE || !isReadableArchiveVersion(parsed.version)) {
+      throw new BadRequestException({
+        code: 'BACKUP_SIGNATURE_INVALID',
+        message: isReadableArchiveVersion(parsed.version)
+          ? 'توقيع الملف غير صحيح.'
+          : archiveFormatMessage(parsed.version),
+      });
+    }
+    const payload = this.decryptEnvelope(parsed, password);
+    return {
+      format: ARCHIVE_VERSION_V2,
+      payload,
+      databaseSha256: payload.dbBase64 ? this.hashSha256(payload.dbBase64) : '',
+      databaseStream: undefined,
+    };
+  }
+
+  private async readStreamToString(source: AsyncIterable<Buffer>): Promise<string> {
+    const chunks: Buffer[] = [];
+    for await (const chunk of source) chunks.push(chunk);
+    return Buffer.concat(chunks).toString('utf8');
+  }
+
+  /**
+   * B15-2 — restore a dump that is still encrypted, without ever holding it.
+   *
+   * `--single-transaction` is forced by `restorePostgresFromStream`, and that is the
+   * whole reason a streamed restore is safe: the dump's tag is verified when the stream
+   * ends, so a corrupt archive fails after `pg_restore` has applied most of it, and the
+   * transaction is what rolls that back.
+   */
+  private async restoreDatabaseFromStream(
+    source: () => Promise<AsyncIterable<Buffer>>,
+    tables?: readonly string[] | null,
+  ) {
+    const databaseUrl = String(process.env.DATABASE_URL || '').trim();
+    if (!isPostgresUrl(databaseUrl)) {
+      throw new BadRequestException('Restore needs a PostgreSQL DATABASE_URL');
+    }
+    // Awaited here rather than handed over: the member read opens the file, and doing
+    // that inside `pg_restore`'s lifetime would leave a stream open across the spawn.
+    return await restorePostgresFromStream(databaseUrl, await source(), {
+      tables: tables ? [...tables] : undefined,
+      singleTransaction: true,
+    });
+  }
+
+  /**
+   * B15-2 — the facts a v3 container states about itself before anything is decrypted.
+   *
+   * One seek and one small read. The salt is deliberately not returned: readiness asks
+   * whether this server *can* open the archive, not whether the operator has typed the
+   * password yet, and handing the salt around invites it into a response.
+   */
+  private async readContainerHead(filePath: string): Promise<{
+    keyScope: KeyScope;
+    masterSecretFingerprint: string | null;
+  }> {
+    const header = await readContainerHeader(filePath);
+    return {
+      keyScope: (header.keyScope as KeyScope) ?? 'both',
+      masterSecretFingerprint: header.masterSecretFingerprint ?? null,
+    };
   }
 
   private retentionLimitsFrom(schedule: BackupScheduleState): RetentionLimits {
@@ -1834,14 +2061,17 @@ export class BackupService implements OnModuleDestroy {
     let streamedDatabase: { bytes: number; sha256: string } | null = null;
 
     if (streamDatabase) {
-      // The identity comes from the envelope even though the envelope is not written,
-      // so the id and the timestamp in the manifest row are the ones inside the
-      // container's header. Two identities for one archive would make the row describe a
-      // file that does not exist.
+      // The name and the path come from the caller, which derived them once from the
+      // envelope id. Deriving them again here meant a second `new Date()` and therefore
+      // a *different* filename a second later: the container was written under one name
+      // and the manifest row, the checksum and the stat all addressed another — the row
+      // describing a file that does not exist, and a 500 on the way to finding out.
       streamedDatabase = await this.writeArchiveV3({
         payload,
         id: envelope.id,
         createdAt: envelope.createdAt,
+        fileName,
+        filePath,
         type: params.type,
         trigger: params.trigger,
         actor,
@@ -1868,11 +2098,16 @@ export class BackupService implements OnModuleDestroy {
       }
     }
 
-    // Written once. This line was duplicated in the source: `JSON.stringify(envelope)`
-    // ran twice over a string that is 1.778x the dump, so the second call allocated a
-    // second full-size copy of the largest object in the process. The outcome was the
-    // same file — the write is atomic — which is why nothing ever reported it.
-    await this.writeArchiveAtomically(filePath, JSON.stringify(envelope));
+    // Written once, and only on the v2 path.
+    //
+    // B15-2 found this by producing an archive that was a valid 5 KB JSON envelope
+    // describing a 225 KB dump: the v3 branch wrote its container to `filePath`, and
+    // the line below then overwrote it with the dump-less envelope. Both writes
+    // succeeded, the manifest row was consistent with what the container said, and the
+    // file on disk was the wrong format — so the skip is the fix, not the branch.
+    if (!streamDatabase) {
+      await this.writeArchiveAtomically(filePath, JSON.stringify(envelope));
+    }
 
     // B19 — the second copy, if one is configured, and only ever verified after the fact.
     //
@@ -2509,12 +2744,11 @@ export class BackupService implements OnModuleDestroy {
         // path. An archive sealed with an `archive-only` key the schedule does not hold
         // therefore fails to open here, which is reported rather than guessed at.
         const schedule = await this.readSchedule();
-        const envelope = await this.readEnvelope(entry);
-        const payload = this.decryptEnvelope(
-          envelope,
+        const opened = await this.openArchive(
+          entry,
           schedule.encryptionEnabled ? schedule.encryptedPassword : undefined,
         );
-        const names = archiveMigrationNames(payload?.manifest);
+        const names = archiveMigrationNames(opened.payload?.manifest);
         migrations = names.length > 0 ? names : null;
       } catch (error) {
         // Named, not swallowed: the operator is told this archive could not be read, so
@@ -2571,9 +2805,21 @@ export class BackupService implements OnModuleDestroy {
    * FC-OPS-001 — per-section checksum verification. Any mismatch means the
    * payload was altered after the backup was written.
    */
-  private assertManifestChecksums(payload: BackupPayload) {
+  private assertManifestChecksums(payload: BackupPayload, opened?: OpenedArchive) {
     const manifest = payload.manifest;
     if (!manifest) return;
+
+    // B15-2 — for a v3 archive the dump is not in the payload, so the comparison uses
+    // the digest the container's trailer records for its `database` member. That is the
+    // same value the manifest was written with, and it is verified against bytes that
+    // are still encrypted rather than against a decoded copy nobody can afford to hold.
+    if (opened?.databaseSha256) {
+      const expected = manifest.checksums?.database;
+      if (expected && opened.databaseSha256 !== expected) {
+        throw new BadRequestException('Database dump checksum mismatch; the backup is corrupt');
+      }
+      return;
+    }
 
     if (payload.dbBase64) {
       const expected = manifest.checksums?.database;
@@ -2926,15 +3172,15 @@ export class BackupService implements OnModuleDestroy {
       throw new BadRequestException('Backup integrity verification failed; restore blocked');
     }
 
-    const envelope = await this.readEnvelope(target);
-    const payload = this.decryptEnvelope(envelope, params.decryptionPassword);
+    const opened = await this.openArchive(target, params.decryptionPassword);
+    const payload = opened.payload;
 
     // FC-OPS-001 — verify completeness and per-section checksums BEFORE any
     // destructive step, so a partial or tampered dump is refused while the
     // database is still intact.
     if (payload.type !== 'config') {
       this.assertManifestIsRestorable(payload.manifest, params.backupId);
-      this.assertManifestChecksums(payload);
+      this.assertManifestChecksums(payload, opened);
     }
 
     // FC-OPS-002 - an archive carries a schema as well as data, and restoring an
@@ -2960,6 +3206,11 @@ export class BackupService implements OnModuleDestroy {
     if (payload.type !== 'config') {
       if (payload.dbBase64) {
         await this.restoreDatabaseFromBase64(payload.dbBase64, payload.partialTables);
+      } else if (opened.databaseStream) {
+        // B15-2 — the dump is still encrypted and is fed to `pg_restore` a chunk at a
+        // time. Nothing in this process ever holds it: not the payload, not the
+        // ciphertext, not the tool's input.
+        await this.restoreDatabaseFromStream(opened.databaseStream, payload.partialTables);
       } else if (payload.dataSnapshot) {
         await this.restorePrismaSnapshot(payload.dataSnapshot, payload.type);
       } else {
@@ -3051,9 +3302,23 @@ export class BackupService implements OnModuleDestroy {
     }> = [];
 
     for (const entry of manifest) {
-      let envelope: BackupEnvelope | null = null;
+      // B15-2 — readiness asks the header, whichever format wrote it. Both formats put
+      // the scope, the secret fingerprint and the created-at in their first bytes, so
+      // the question "can this server open this?" is answerable without decrypting
+      // anything and without knowing the passphrase. Reading a v2 envelope here is what
+      // made every v3 archive report `BACKUP_ENVELOPE_UNREADABLE` — an intact archive
+      // described as damaged, which is the answer that sends an operator looking for
+      // corruption that is not there.
+      let head: { keyScope: KeyScope; masterSecretFingerprint: string | null } | null = null;
       try {
-        envelope = await this.readEnvelope(entry);
+        const filePath = path.join(this.backupDir, entry.fileName);
+        head =
+          (await readArchiveFormat(filePath)) === 'v3'
+            ? await this.readContainerHead(filePath)
+            : await this.readEnvelope(entry).then((envelope) => ({
+                keyScope: envelope.keyScope ?? 'both',
+                masterSecretFingerprint: envelope.masterSecretFingerprint ?? null,
+              }));
       } catch {
         // An unreadable envelope is itself an answer, and it is the worst one.
         archives.push({
@@ -3069,9 +3334,10 @@ export class BackupService implements OnModuleDestroy {
         continue;
       }
 
-      const keyScope: KeyScope = envelope.keyScope ?? 'both';
+      const keyScope: KeyScope = head.keyScope ?? 'both';
+      const sealedWith = head.masterSecretFingerprint ?? null;
       const verdict = explainOpenFailure({
-        sealedWith: envelope.masterSecretFingerprint ?? null,
+        sealedWith,
         current,
         scope: keyScope,
         // An `archive-only` archive needs a passphrase at restore time, which is not
@@ -3084,9 +3350,8 @@ export class BackupService implements OnModuleDestroy {
         id: entry.id,
         createdAt: entry.createdAt,
         keyScope,
-        sealedWith: envelope.masterSecretFingerprint ?? null,
-        sealedOnThisServer:
-          Boolean(envelope.masterSecretFingerprint) && envelope.masterSecretFingerprint === current,
+        sealedWith,
+        sealedOnThisServer: Boolean(sealedWith) && sealedWith === current,
         restorable: verdict.restorable,
         code: verdict.code,
         message: verdict.message,
@@ -3735,25 +4000,68 @@ try {
     warnings: string[];
   }> {
     // 1. Shape.
-    const raw = await fsPromises.readFile(params.filePath, 'utf8');
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      throw new BadRequestException({
-        code: 'BACKUP_IMPORT_NOT_AN_ARCHIVE',
-        message: 'الملف ليس أرشيف نسخة احتياطية: محتواه ليس JSON صالحاً.',
-      });
-    }
-    const shape = inspectEnvelope(parsed);
-    if (isRefusal(shape)) {
-      throw new BadRequestException({ code: shape.code, message: shape.message });
-    }
-    const envelope = parsed as BackupEnvelope;
+    //
+    // B15-2 — the format is decided from the first bytes, not by asking whether the
+    // file parses as JSON. A v3 container is a valid archive that is not JSON, and
+    // refusing it as "not valid JSON" told an operator with a perfectly good backup
+    // that their file was damaged. It is the same wrong answer as reporting a v3
+    // archive as `integrity: failed`, from the other direction.
+    const format = await readArchiveFormat(params.filePath);
+    let envelopeIdentity: { id: string; type: string; createdAt: string; keyScope: KeyScope; passwordProtected: boolean; metadata: BackupMetaCounts | null; saltBase64?: string; masterSecretFingerprint: string | null };
+    let payload: BackupPayload;
 
-    // 2. Authenticity. Throws on a wrong key, a corrupt body, or a payload whose
-    //    own checksum does not match.
-    const payload = this.decryptEnvelope(envelope, params.decryptionPassword);
+    if (format === 'v3') {
+      const header = await readContainerHeader(params.filePath);
+      if (!header.saltBase64) {
+        throw new BadRequestException({
+          code: 'BACKUP_SALT_MISSING',
+          message: 'الأرشيف لا يحتوي على ملح المفتاح، ولذلك لا يمكن فتحه.',
+        });
+      }
+      const opened = await this.openArchiveFromPath(params.filePath, params.decryptionPassword);
+      payload = opened.payload;
+      envelopeIdentity = {
+        id: header.id,
+        type: header.type,
+        createdAt: header.createdAt,
+        keyScope: (header.keyScope as KeyScope) ?? 'both',
+        passwordProtected: Boolean(header.passwordProtected),
+        metadata: (payload.counts ?? null) as BackupMetaCounts | null,
+        saltBase64: header.saltBase64,
+        masterSecretFingerprint: header.masterSecretFingerprint ?? null,
+      };
+    } else {
+      const raw = await fsPromises.readFile(params.filePath, 'utf8');
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        throw new BadRequestException({
+          code: 'BACKUP_IMPORT_NOT_AN_ARCHIVE',
+          message: 'الملف ليس أرشيف نسخة احتياطية: محتواه ليس JSON صالحاً.',
+        });
+      }
+      const shape = inspectEnvelope(parsed);
+      if (isRefusal(shape)) {
+        throw new BadRequestException({ code: shape.code, message: shape.message });
+      }
+      const envelope = parsed as BackupEnvelope;
+
+      // 2. Authenticity. Throws on a wrong key, a corrupt body, or a payload whose
+      //    own checksum does not match.
+      payload = this.decryptEnvelope(envelope, params.decryptionPassword);
+      envelopeIdentity = {
+        id: envelope.id,
+        type: envelope.type,
+        createdAt: envelope.createdAt,
+        keyScope: envelope.keyScope ?? 'both',
+        passwordProtected: Boolean(envelope.passwordProtected),
+        metadata: (envelope.metadata ?? null) as BackupMetaCounts | null,
+        saltBase64: envelope.saltBase64,
+        masterSecretFingerprint: envelope.masterSecretFingerprint ?? null,
+      };
+    }
+    const envelope = envelopeIdentity;
 
     // 3. Identity, from inside the authenticated envelope.
     const verdict = judgeImport({
@@ -3829,7 +4137,7 @@ try {
       const entry: BackupManifestEntry = {
         id: envelope.id,
         fileName,
-        type: envelope.type,
+        type: envelope.type as BackupType,
         // Provenance is recorded as its own value, not folded into `manual`: "who
         // pressed the button" and "where did this file come from" are different
         // questions, and an imported archive that claims to be manual is a lie an
@@ -3846,7 +4154,7 @@ try {
         complete: verdict.restorable,
         missingModels: payload.manifest?.missingModels ?? (verdict.restorable ? undefined : ['manifest-missing']),
         partialTables: payload.partialTables ?? null,
-        safetySnapshotForId: envelope.sourceBackupId || null,
+        safetySnapshotForId: payload.sourceBackupId || null,
       };
 
       // The age is the archive's own, so retention may want to delete it

@@ -38,6 +38,10 @@ services:
       NODE_OPTIONS: ${NODE_OPTIONS:---enable-source-maps --max-old-space-size=${BACKUP_MAX_OLD_SPACE_MB:-3072}}
       # B15-0 — one backup's memory budget. The dump ceiling is derived from it.
       BACKUP_MAX_PEAK_BYTES: ${BACKUP_MAX_PEAK_BYTES:-3221225472}
+      # B15-2 — the format new archives are written in. Passed through explicitly so the
+      # production deployment chooses its own archive format instead of inheriting a
+      # developer's shell; archives already on disk stay readable either way.
+      BACKUP_ARCHIVE_VERSION: ${BACKUP_ARCHIVE_VERSION:-3}
     restart: unless-stopped
     volumes:
       - backups-data:/app/backups

@@ -40,6 +40,16 @@ services:
       # from this, so raising it is what makes a larger database copyable; it is not a
       # reservation, and exceeding it is refused with a message rather than an OOM.
       BACKUP_MAX_PEAK_BYTES: ${BACKUP_MAX_PEAK_BYTES:-3221225472}
+      # B15-2 — the archive format new backups are written in.
+      # 2 = the historical JSON envelope (every archive already on disk).
+      # 3 = the streaming container: no base64, 1.00x the dump instead of 1.78x, and
+      # nothing in the process is ever held whole. Both are readable and restorable, so
+      # flipping this does not strand anything already written.
+      # B15-2 — kept in step with DEFAULT_WRITABLE_ARCHIVE_VERSION. These two defaults
+      # were allowed to drift once, and the result was a code default of 3 that compose
+      # silently pinned back to 2: the flip looked applied in review and never reached a
+      # running container.
+      BACKUP_ARCHIVE_VERSION: ${BACKUP_ARCHIVE_VERSION:-3}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       BACKUP_ENCRYPTION_SECRET: ${BACKUP_ENCRYPTION_SECRET:?BACKUP_ENCRYPTION_SECRET is required}

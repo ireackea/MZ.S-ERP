@@ -51,14 +51,15 @@ describe('B15-2 archive format authority', () => {
     it('knows both versions, and reads only the ones it can open', () => {
       expect(ARCHIVE_VERSION_V2).toBe(2);
       expect(ARCHIVE_VERSION_V3).toBe(3);
-      // v3 enters these lists when this build can act on it: `restorable` in S3b, once
-      // `pg_restore` is fed a member stream, and `inspectable` earlier, as soon as the
-      // integrity check can read a container trailer. The gap between them is declared
-      // here rather than discovered in production.
-      expect(RESTORABLE_ARCHIVE_VERSIONS).toEqual([ARCHIVE_VERSION_V2]);
-      expect(INSPECTABLE_ARCHIVE_VERSIONS).toEqual([ARCHIVE_VERSION_V2]);
+      // S3b: this build now restores v3 by streaming members into `pg_restore`, so v3
+      // joins both lists. v2 stays — every archive already on disk is v2, and support
+      // for it is not optional while those files exist.
+      expect(RESTORABLE_ARCHIVE_VERSIONS).toEqual([ARCHIVE_VERSION_V2, ARCHIVE_VERSION_V3]);
+      expect(INSPECTABLE_ARCHIVE_VERSIONS).toEqual([ARCHIVE_VERSION_V2, ARCHIVE_VERSION_V3]);
       expect(isReadableArchiveVersion(ARCHIVE_VERSION_V2)).toBe(true);
-      expect(isReadableArchiveVersion(ARCHIVE_VERSION_V3)).toBe(false);
+      expect(isReadableArchiveVersion(ARCHIVE_VERSION_V3)).toBe(true);
+      // Still not openable: an unknown version is refused whatever the lists say.
+      expect(isReadableArchiveVersion(99)).toBe(false);
     });
 
     it('accepts the version as a number or the string a JSON file may carry', () => {
@@ -69,43 +70,53 @@ describe('B15-2 archive format authority', () => {
       expect(isReadableArchiveVersion('2')).toBe(true);
     });
 
-    it('refuses anything else', () => {
-      for (const value of [1, 3, '3', 0, null, undefined, '', 'two', {}]) {
+    it('refuses anything that is not a version this build knows', () => {
+      // `3` is no longer in this list: S3b made it restorable. The refusal is about
+      // unknown values, not about v3 specifically — an archive claiming a version this
+      // build has never heard of is the case the check exists for.
+      for (const value of [1, 0, 4, '4', null, undefined, '', 'two', {}]) {
         expect(isReadableArchiveVersion(value)).toBe(false);
       }
     });
   });
 
   describe('the switch', () => {
-    it('defaults to v2, because a build that cannot restore v3 must not write it', () => {
-      expect(DEFAULT_WRITABLE_ARCHIVE_VERSION).toBe(ARCHIVE_VERSION_V2);
-      expect(configuredWritableVersion(undefined)).toBe(ARCHIVE_VERSION_V2);
-      expect(configuredWritableVersion('')).toBe(ARCHIVE_VERSION_V2);
-      expect(configuredWritableVersion('   ')).toBe(ARCHIVE_VERSION_V2);
+    it('defaults to v3, because the round trip has been measured rather than assumed', () => {
+      // The default moved off v2 only after a v3 archive written by the product's own
+      // API was verified, previewed through the restore endpoint, and restored — with
+      // and without a passphrase — to matching row counts. The gate is still
+      // RESTORABLE_ARCHIVE_VERSIONS, so a build that cannot restore v3 cannot write it.
+      expect(DEFAULT_WRITABLE_ARCHIVE_VERSION).toBe(ARCHIVE_VERSION_V3);
+      expect(configuredWritableVersion(undefined)).toBe(ARCHIVE_VERSION_V3);
+      expect(configuredWritableVersion('')).toBe(ARCHIVE_VERSION_V3);
+      expect(configuredWritableVersion('   ')).toBe(ARCHIVE_VERSION_V3);
     });
 
-    it('honours an explicit 3', () => {
-      expect(configuredWritableVersion('3')).toBe(ARCHIVE_VERSION_V3);
+    it('honours an explicit 2', () => {
+      // v2 stays selectable on purpose: the archives already on disk are v2, and
+      // rolling the format back must not become a data-loss event.
+      expect(configuredWritableVersion('2')).toBe(ARCHIVE_VERSION_V2);
       expect(configuredWritableVersion(' 2 ')).toBe(ARCHIVE_VERSION_V2);
+      expect(configuredWritableVersion('3')).toBe(ARCHIVE_VERSION_V3);
     });
 
     it('reports a value it did not recognise instead of swallowing it', () => {
-      // `v3` is the typo somebody types. If it quietly meant v2, the change would appear
-      // not to work for a year with nobody able to say why.
+      // `v3` is the typo somebody types. If it quietly meant the default, the change
+      // would appear not to work for a year with nobody able to say why.
       expect(configuredVersionIsUnrecognised('v3')).toBe(true);
       expect(configuredVersionIsUnrecognised('4')).toBe(true);
       expect(configuredVersionIsUnrecognised('2')).toBe(false);
       expect(configuredVersionIsUnrecognised('')).toBe(false);
       expect(configuredVersionIsUnrecognised(undefined)).toBe(false);
-      expect(configuredWritableVersion('v3')).toBe(ARCHIVE_VERSION_V2);
+      expect(configuredWritableVersion('v3')).toBe(DEFAULT_WRITABLE_ARCHIVE_VERSION);
     });
 
     it('describes itself for the health endpoint', () => {
       expect(describeArchiveVersions()).toEqual({
-        configured: ARCHIVE_VERSION_V2,
-        inspectable: [ARCHIVE_VERSION_V2],
-        restorable: [ARCHIVE_VERSION_V2],
-        defaultWritable: ARCHIVE_VERSION_V2,
+        configured: ARCHIVE_VERSION_V3,
+        inspectable: [ARCHIVE_VERSION_V2, ARCHIVE_VERSION_V3],
+        restorable: [ARCHIVE_VERSION_V2, ARCHIVE_VERSION_V3],
+        defaultWritable: ARCHIVE_VERSION_V3,
         configuredValueRecognised: true,
       });
     });
@@ -134,29 +145,35 @@ describe('B15-2 archive format authority', () => {
 
   describe('inspectable is not restorable, and the write is gated on the second', () => {
     it('declares both capabilities separately', () => {
-      // "Readable" was one word standing for two different abilities. An archive can be
-      // verified without being recoverable, and conflating them is how a system ends up
-      // accepting archives it cannot restore — the operator's only copy, useless.
-      expect(INSPECTABLE_ARCHIVE_VERSIONS).toEqual([ARCHIVE_VERSION_V2]);
-      expect(RESTORABLE_ARCHIVE_VERSIONS).toEqual([ARCHIVE_VERSION_V2]);
-      expect(isRestorableArchiveVersion(ARCHIVE_VERSION_V3)).toBe(false);
-      expect(isInspectableArchiveVersion(ARCHIVE_VERSION_V3)).toBe(false);
+      // "Readable" was one word standing for two different abilities. They are separate
+      // lists because an archive can be verified without being recoverable, and the
+      // write is gated on the second so a build can never accept a format it cannot put
+      // back into a database.
+      expect(INSPECTABLE_ARCHIVE_VERSIONS).toContain(ARCHIVE_VERSION_V2);
+      expect(RESTORABLE_ARCHIVE_VERSIONS).toContain(ARCHIVE_VERSION_V2);
+      // The property that matters is that the gate never falls back to the weaker list.
+      expect(isRestorableArchiveVersion(ARCHIVE_VERSION_V3)).toBe(true);
+      expect(isRestorableArchiveVersion(ARCHIVE_VERSION_V2)).toBe(true);
+      expect(isRestorableArchiveVersion(99)).toBe(false);
+      // v2 is never dropped while archives in that format exist on disk.
+      expect(RESTORABLE_ARCHIVE_VERSIONS).toContain(ARCHIVE_VERSION_V2);
     });
 
     it('gates writing on restorability, not on inspectability', () => {
       // The whole point of the split: if the gate asked "can I look at this?", adding v3
-      // to the inspectable list would start producing archives this build cannot put back.
-      expect(isRestorableArchiveVersion(ARCHIVE_VERSION_V2)).toBe(true);
+      // to the inspectable list would have started producing archives this build cannot
+      // put back — the operator's only copy, useless, with a green badge on it.
       expect(isRestorableArchiveVersion('2')).toBe(true);
-      expect(isRestorableArchiveVersion(99)).toBe(false);
+      expect(isRestorableArchiveVersion('3')).toBe(true);
+      expect(isRestorableArchiveVersion('v3')).toBe(false);
     });
 
     it('describes both lists for the health endpoint', () => {
       expect(describeArchiveVersions()).toEqual({
-        configured: ARCHIVE_VERSION_V2,
-        inspectable: [ARCHIVE_VERSION_V2],
-        restorable: [ARCHIVE_VERSION_V2],
-        defaultWritable: ARCHIVE_VERSION_V2,
+        configured: ARCHIVE_VERSION_V3,
+        inspectable: [ARCHIVE_VERSION_V2, ARCHIVE_VERSION_V3],
+        restorable: [ARCHIVE_VERSION_V2, ARCHIVE_VERSION_V3],
+        defaultWritable: ARCHIVE_VERSION_V3,
         configuredValueRecognised: true,
       });
     });

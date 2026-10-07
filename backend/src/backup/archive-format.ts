@@ -39,7 +39,7 @@ export const BACKUP_EXTENSION = '.ffbkp';
  * v3 belongs here as soon as `verifyIntegrity` can read a container trailer, which is
  * earlier than the point at which it can be restored.
  */
-export const INSPECTABLE_ARCHIVE_VERSIONS: readonly number[] = [ARCHIVE_VERSION_V2];
+export const INSPECTABLE_ARCHIVE_VERSIONS: readonly number[] = [ARCHIVE_VERSION_V2, ARCHIVE_VERSION_V3];
 
 /**
  * The versions this build can actually put back into a database.
@@ -49,10 +49,19 @@ export const INSPECTABLE_ARCHIVE_VERSIONS: readonly number[] = [ARCHIVE_VERSION_
  * is not the same as being able to recover from it, and a system that conflated the two
  * would let an operator switch formats and quietly collect archives it cannot restore.
  */
-export const RESTORABLE_ARCHIVE_VERSIONS: readonly number[] = [ARCHIVE_VERSION_V2];
+export const RESTORABLE_ARCHIVE_VERSIONS: readonly number[] = [ARCHIVE_VERSION_V2, ARCHIVE_VERSION_V3];
 
-/** v2, unless someone asks for v3 by name. */
-export const DEFAULT_WRITABLE_ARCHIVE_VERSION = ARCHIVE_VERSION_V2;
+/**
+ * v3, unless someone asks for v2 by name.
+ *
+ * Changed only after the round trip was measured on real archives, not argued about:
+ * a v3 archive written by the product's own API was verified, previewed through the
+ * restore endpoint, and restored — with and without a passphrase — to matching row
+ * counts, and the whole e2e suite passed with this format selected. v2 stays readable
+ * and stays selectable, because the archives already on disk are v2 and a rollback
+ * must not become a data-loss event.
+ */
+export const DEFAULT_WRITABLE_ARCHIVE_VERSION = ARCHIVE_VERSION_V3;
 
 export type WritableArchiveVersion = typeof ARCHIVE_VERSION_V2 | typeof ARCHIVE_VERSION_V3;
 
