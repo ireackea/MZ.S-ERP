@@ -70,6 +70,7 @@ import {
   type ConfigSnapshot,
 } from './backup-files';
 import { planReconciliation } from './backup-reconcile';
+import { ManifestStore } from './backup-manifest';
 import { copyOffsite, countVerifiedOffsiteCopies, offsiteDirectory, type OffsiteCopyResult } from './offsite-copy';
 import { withManifestAdvisoryLock } from './manifest-lock';
 import { archiveIsRestorable, archiveMigrationNames, type DriftArchive } from './schema-drift';
@@ -859,30 +860,16 @@ export class BackupService implements OnModuleDestroy {
     }
   }
 
+  /** B18 — the index lives in `./backup-manifest`; this is the wiring, not the logic. */
+  private readonly manifestStore = new ManifestStore<BackupManifestEntry>(
+    this.manifestFile,
+    async () => {
+      await this.ensureWorkspace();
+    },
+  );
+
   private async readManifest(): Promise<BackupManifestEntry[]> {
-    await this.ensureWorkspace();
-    let raw: string;
-    try {
-      raw = await fsPromises.readFile(this.manifestFile, 'utf8');
-    } catch {
-      // Absent is a legitimate first-run state; unreadable is not.
-      return [];
-    }
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed as BackupManifestEntry[];
-      throw new Error('manifest is not an array');
-    } catch (error: any) {
-      // Gate 1.4 — a corrupt index used to return `[]`, so every backup vanished
-      // from the UI with no error anywhere. It now refuses, and keeps the damaged
-      // file for inspection instead of overwriting it on the next write.
-      const quarantine = `${this.manifestFile}.corrupt-${Date.now()}`;
-      await fsPromises.rename(this.manifestFile, quarantine).catch(() => undefined);
-      throw new Error(
-        `Backup manifest is unreadable (${error?.message ?? 'parse error'}). `
-        + `The damaged file was kept at ${path.basename(quarantine)}; it has not been overwritten.`,
-      );
-    }
+    return await this.manifestStore.read();
   }
 
   /**
@@ -1041,15 +1028,7 @@ export class BackupService implements OnModuleDestroy {
   }
 
   private async writeManifest(entries: BackupManifestEntry[]) {
-    const temp = `${this.manifestFile}.tmp-${process.pid}-${Date.now()}`;
-    const body = JSON.stringify(entries, null, 2);
-    await fsPromises.writeFile(temp, body, 'utf8');
-    try {
-      await fsPromises.rename(temp, this.manifestFile);
-    } catch (error) {
-      await fsPromises.unlink(temp).catch(() => undefined);
-      throw error;
-    }
+    await this.manifestStore.write(entries);
   }
 
   /**

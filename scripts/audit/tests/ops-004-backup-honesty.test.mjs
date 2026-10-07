@@ -6,6 +6,11 @@ import { join } from 'node:path';
 
 const repoRoot = process.cwd();
 const service = readFileSync(join(repoRoot, 'backend/src/backup/backup.service.ts'), 'utf8');
+// B18 — the index itself moved to its own module. The gate is unchanged in what it
+// demands: the same patterns, the same strictness, just read from the file that owns
+// the logic now. Leaving them pointed at the service would have meant either keeping
+// dead code in a four-thousand-line file or weakening the gate to match the refactor.
+const manifestStore = readFileSync(join(repoRoot, 'backend/src/backup/backup-manifest.ts'), 'utf8');
 const pgDump = readFileSync(join(repoRoot, 'backend/src/backup/pg-dump.ts'), 'utf8');
 const headroom = readFileSync(join(repoRoot, 'backend/src/backup/disk-headroom.ts'), 'utf8');
 const reconcile = readFileSync(join(repoRoot, 'backend/src/backup/backup-reconcile.ts'), 'utf8');
@@ -89,14 +94,17 @@ test('gate 1.4 the manifest is written atomically and never silently empties', (
     'two read-modify-write cycles overlapped and a listing erased a backup it never saw',
   );
   assert.match(
-    service,
+    manifestStore,
     /writeFile\(temp,[\s\S]{0,200}rename\(temp, this\.manifestFile\)/,
     'write through a temp file and rename: a truncated index made every backup vanish',
   );
   // Corruption is a refusal now, and the damaged file is kept.
-  assert.doesNotMatch(service, /JSON\.parse\(raw\)[\s\S]{0,120}catch \{\s*return \[\];/, );
-  assert.match(service, /manifest is unreadable/);
-  assert.match(service, /rename\(this\.manifestFile, quarantine\)/);
+  assert.doesNotMatch(manifestStore, /JSON\.parse\(raw\)[\s\S]{0,120}catch \{\s*return \[\];/, );
+  assert.match(manifestStore, /manifest is unreadable/);
+  assert.match(manifestStore, /rename\(this\.manifestFile, quarantine\)/);
+  // And the service still goes through the store rather than keeping a private copy.
+  assert.match(service, /new ManifestStore</);
+  assert.match(service, /await this\.manifestStore\.write\(entries\)/);
 });
 
 test('gate 1.5 restores are serialised', () => {
