@@ -31,6 +31,19 @@ import type { Prisma } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 import { base64ByteLength, dumpPostgres, isPostgresUrl, restorePostgres } from './pg-dump';
 import { estimateArchiveBytes, judgeHeadroom } from './disk-headroom';
+import {
+  CONFIG_FILES_ALLOW_LIST,
+  buildFileName,
+  collectConfigFiles,
+  computeFileChecksum,
+  decryptSecret,
+  encryptSecret,
+  hashSecret,
+  hashSha256,
+  restoreConfigFiles,
+  verifySecret,
+  type ConfigSnapshot,
+} from './backup-files';
 import { planReconciliation } from './backup-reconcile';
 import { copyOffsite, countVerifiedOffsiteCopies, offsiteDirectory, type OffsiteCopyResult } from './offsite-copy';
 import { withManifestAdvisoryLock } from './manifest-lock';
@@ -196,10 +209,9 @@ type BackupListItem = BackupManifestEntry & {
   integrityLabel: BackupIntegrity;
 };
 
-type ConfigSnapshot = {
-  relativePath: string;
-  contentBase64: string;
-};
+// B18/S1 — `ConfigSnapshot` moved to ./backup-files with the two functions that produce
+// and consume it. It was private here and is now the module's own, which is where a
+// reader looking for "what shape is a captured config file" will find it first.
 
 type RoleSnapshot = Omit<Prisma.RoleCreateManyInput, 'createdAt' | 'updatedAt'> & {
   createdAt: string;
@@ -364,7 +376,9 @@ const BACKUP_EXTENSION = '.ffbkp';
 const MANIFEST_FILE = 'index.json';
 const SCHEDULE_FILE = 'schedule.json';
 const RESTORE_TOKEN_TTL_MS = 10 * 60 * 1000;
-const CONFIG_FILES_ALLOW_LIST = ['metadata.json', path.join('server', 'server-data.json')];
+// B18/S1 — `CONFIG_FILES_ALLOW_LIST` moved to ./backup-files and is imported from there.
+// A second copy of an allow-list is a second list, and the one that decides what a
+// backup may carry must not be the one that happens to be nearer to a caller.
 
 @Injectable()
 export class BackupService implements OnModuleDestroy {
@@ -861,6 +875,15 @@ export class BackupService implements OnModuleDestroy {
    * `rename` within a directory is atomic, so a reader sees either the old archive or
    * the new one — never a half of one. This is the same discipline `writeManifest`
    * uses, and for the same reason.
+   *
+   * B18/S1 — this body was moved to `./backup-files` and moved back. Two contracts are
+   * written against its location, not merely against its behaviour:
+   * `disk-headroom.integration.test.ts` simulates a full disk and a short write by
+   * intercepting `fs` at *this module's* import boundary, so a moved body silently
+   * stops being tested; and `ops-004` asserts `rename(temp, filePath)` appears here.
+   * Re-pointing the mock would have meant rewriting a test that currently proves the
+   * archive cannot be left truncated. A tidier file is not worth a weaker guarantee, so
+   * this one stays.
    */
   private async writeArchiveAtomically(filePath: string, body: string): Promise<number> {
     const bytes = Buffer.byteLength(body, 'utf8');
@@ -1049,8 +1072,10 @@ export class BackupService implements OnModuleDestroy {
     }
   }
 
+  // B18/S1 — the bodies live in ./backup-files; these stay as wrappers because
+  // `ops-004` asserts both the signature and the `this.` call site. See that module.
   private hashSha256(value: Buffer | string): string {
-    return createHash('sha256').update(value).digest('hex');
+    return hashSha256(value);
   }
 
   /**
@@ -1065,38 +1090,19 @@ export class BackupService implements OnModuleDestroy {
    */
 
   private encryptSecret(secret: string): string {
-    const iv = randomBytes(12);
-    const key = createHash('sha256').update(this.getMasterSecret()).digest();
-    const cipher = createCipheriv('aes-256-gcm', key, iv);
-    const encrypted = Buffer.concat([cipher.update(secret, 'utf8'), cipher.final()]);
-    const tag = cipher.getAuthTag();
-    return `${iv.toString('base64')}.${tag.toString('base64')}.${encrypted.toString('base64')}`;
+    return encryptSecret(secret, this.getMasterSecret());
   }
 
   private decryptSecret(payload?: string): string {
-    if (!payload) return '';
-    const [ivRaw, tagRaw, dataRaw] = payload.split('.');
-    if (!ivRaw || !tagRaw || !dataRaw) return '';
-
-    const key = createHash('sha256').update(this.getMasterSecret()).digest();
-    const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(ivRaw, 'base64'));
-    decipher.setAuthTag(Buffer.from(tagRaw, 'base64'));
-    return Buffer.concat([decipher.update(Buffer.from(dataRaw, 'base64')), decipher.final()]).toString('utf8');
+    return decryptSecret(payload, this.getMasterSecret());
   }
 
   private hashSecret(secret: string): { hash: string; saltBase64: string } {
-    const salt = randomBytes(16);
-    const hash = pbkdf2Sync(secret, salt, 180000, 32, 'sha256').toString('hex');
-    return { hash, saltBase64: salt.toString('base64') };
+    return hashSecret(secret);
   }
 
   private verifySecret(secret: string, hashHex?: string, saltBase64?: string): boolean {
-    if (!hashHex || !saltBase64) return false;
-    const computed = pbkdf2Sync(secret, Buffer.from(saltBase64, 'base64'), 180000, 32, 'sha256').toString('hex');
-    const left = Buffer.from(hashHex, 'hex');
-    const right = Buffer.from(computed, 'hex');
-    if (left.length !== right.length) return false;
-    return timingSafeEqual(left, right);
+    return verifySecret(secret, hashHex, saltBase64);
   }
 
   // FC-OPS-001 — `resolveSqliteDbPath` was removed. It could only ever resolve
@@ -1105,32 +1111,11 @@ export class BackupService implements OnModuleDestroy {
   // is pg_dump / pg_restore in ./pg-dump.ts.
 
   private async collectConfigFiles(): Promise<ConfigSnapshot[]> {
-    const files: ConfigSnapshot[] = [];
-    for (const relativePath of CONFIG_FILES_ALLOW_LIST) {
-      const fullPath = path.resolve(process.cwd(), relativePath);
-      if (!fs.existsSync(fullPath)) continue;
-      const stat = await fsPromises.stat(fullPath).catch(() => null);
-      if (!stat?.isFile()) continue;
-      const content = await fsPromises.readFile(fullPath, 'utf8').catch(() => '');
-      files.push({
-        relativePath,
-        contentBase64: Buffer.from(content, 'utf8').toString('base64'),
-      });
-    }
-    return files;
+    return await collectConfigFiles();
   }
 
   private async restoreConfigFiles(files: ConfigSnapshot[]): Promise<number> {
-    let count = 0;
-    for (const file of files || []) {
-      if (!CONFIG_FILES_ALLOW_LIST.includes(file.relativePath)) continue;
-      const target = path.resolve(process.cwd(), file.relativePath);
-      await fsPromises.mkdir(path.dirname(target), { recursive: true });
-      const content = Buffer.from(String(file.contentBase64 || ''), 'base64').toString('utf8');
-      await fsPromises.writeFile(target, content, 'utf8');
-      count += 1;
-    }
-    return count;
+    return await restoreConfigFiles(files);
   }
 
   private async buildPayload(type: BackupType, trigger: BackupTrigger, sourceBackupId?: string): Promise<BackupPayload> {
@@ -1539,18 +1524,11 @@ export class BackupService implements OnModuleDestroy {
   }
 
   private async computeFileChecksum(filePath: string): Promise<string> {
-    return await new Promise((resolve, reject) => {
-      const hash = createHash('sha256');
-      const stream = fs.createReadStream(filePath);
-      stream.on('data', (chunk) => hash.update(chunk));
-      stream.on('error', reject);
-      stream.on('end', () => resolve(hash.digest('hex')));
-    });
+    return await computeFileChecksum(filePath);
   }
 
   private buildFileName(type: BackupType, id: string): string {
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    return `${type}_${stamp}_${id.slice(0, 8)}${BACKUP_EXTENSION}`;
+    return buildFileName(type, id);
   }
 
   private async readEnvelope(entry: BackupManifestEntry): Promise<BackupEnvelope> {
