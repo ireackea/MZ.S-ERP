@@ -1,0 +1,2 @@
+./backend/src/realtime/realtime.gateway.ts:122:  @SubscribeMessage('realtime:ping')
+./backend/src/realtime/realtime.gateway.ts:123:  handlePing(@ConnectedSocket() client: Socket, @MessageBody() payload?: Record<string, unknown>) {

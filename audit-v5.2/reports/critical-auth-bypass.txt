@@ -1,0 +1,6 @@
+./backend/src/users/users.controller.ts:86:  @Public()
+./backend/src/users/users.controller.ts:92:  @Public()
+./backend/src/auth/auth.controller.ts:27:  @Public()
+./backend/src/auth/auth.controller.ts:56:  @Public()
+./backend/src/auth/auth.controller.ts:68:  // SECURITY FIX: 2026-03-28 - Removed @Public() decorator
+./backend/src/monitoring/monitoring.controller.ts:16:  @Public()

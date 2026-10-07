@@ -1,0 +1,4 @@
+./backend/prisma/seed.ts:168:  .catch(e => { console.error(e); process.exit(1); })
+./frontend/src/shared/context/ThemeContext.tsx:40:    } catch (e) { /* ignore */ }
+./frontend/src/shared/context/ThemeContext.tsx:55:      void themeApi.updateUserTheme(theme, userId).catch(() => {});
+./frontend/src/services/toastService.ts:31:	} catch {}
