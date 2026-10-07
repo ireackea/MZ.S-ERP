@@ -301,10 +301,14 @@ export const restorePostgres = async (
 
   const { spawn } = await import('node:child_process');
   const env = baseEnv(parsed);
-  const maxBuffer = MAX_DUMP_BYTES;
 
   // A custom-format archive is replayed by pg_restore, which reads stdin.
-  if (isValidCustomDump(dumpBase64)) {
+  //
+  // Checked against `buffer`, which is already decoded. This used to call
+  // `isValidCustomDump(dumpBase64)`, which decoded the payload a second time — a
+  // full-size copy, allocated to read five bytes, on the path an operator reaches
+  // when the database is already broken.
+  if (isCustomDumpBuffer(buffer)) {
     const args: string[] = ['--no-password', '--no-owner', '--no-privileges'];
     // `clean` drops and recreates the objects it names. Correct for a full dump,
     // wrong for a subset: it is the difference between "restore these tables" and
@@ -361,8 +365,22 @@ export const restorePostgres = async (
   return { bytes: buffer.length };
 };
 
-/** FC-OPS-001 — verifies the dump is structurally readable before trusting it. */
-export const isValidCustomDump = (base64: string): boolean => {
-  const buffer = Buffer.from(String(base64 || ''), 'base64');
-  return buffer.length > 0 && buffer.subarray(0, 5).toString('ascii') === 'PGDMP';
+/**
+ * FC-OPS-001 — the custom-format magic, read from bytes already in hand.
+ *
+ * Five bytes, and the caller almost always holds the decoded dump. Taking a string
+ * here meant the only production caller decoded a payload a second time to use it.
+ */
+export const isCustomDumpBuffer = (buffer: Buffer | Uint8Array | null | undefined): boolean => {
+  if (!buffer || buffer.length < 5) return false;
+  return Buffer.from(buffer.buffer, buffer.byteOffset, 5).toString('ascii') === 'PGDMP';
 };
+
+/**
+ * FC-OPS-001 — verifies the dump is structurally readable before trusting it.
+ *
+ * Kept as the string form for callers that hold base64 and nothing else; anything
+ * that already has the bytes should call `isCustomDumpBuffer`.
+ */
+export const isValidCustomDump = (base64: string): boolean =>
+  isCustomDumpBuffer(Buffer.from(String(base64 || ''), 'base64'));

@@ -14,6 +14,7 @@ import {
   base64ByteLength,
   describeDumpCeiling,
   dumpTooLargeMessage,
+  isCustomDumpBuffer,
   isPostgresUrl,
   isValidCustomDump,
   parsePostgresUrl,
@@ -143,6 +144,48 @@ describe('FC-OPS-001 PostgreSQL dump contract', () => {
       // The expression this replaced, on a padded input, is two bytes out.
       expect(Math.floor((4 * 3) / 4)).toBe(3);
       expect(base64ByteLength('YQ==')).toBe(1);
+    });
+  });
+
+  describe('B15-0 the restore path decodes the dump once, not twice', () => {
+    const source = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), 'pg-dump.ts'), 'utf8');
+    const restoreBody = source.slice(
+      source.indexOf('export const restorePostgres'),
+      source.indexOf('/**', source.indexOf('export const restorePostgres')),
+    );
+
+    // Comments are stripped first: the note explaining the replacement names the
+    // function it replaced, and a guard that cannot tell prose from code is a guard
+    // that has to be deleted the first time somebody documents their fix.
+    const code = restoreBody.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+
+    it('decodes the payload exactly once inside restorePostgres', () => {
+      // One decode is the payload the operator handed in. A second one was
+      // `isValidCustomDump(dumpBase64)`, which rebuilt the whole dump from base64 to
+      // compare five bytes of header — on the path reached when the database is
+      // already broken and memory is the last thing that should be spent.
+      const decodes = code.match(/Buffer\.from\([^)]*base64/gi) ?? [];
+      expect(decodes).toHaveLength(1);
+      expect(code).not.toMatch(/isValidCustomDump\(/);
+    });
+
+    it('reads the custom-format header from bytes already in hand', () => {
+      const header = Buffer.concat([Buffer.from('PGDMP', 'ascii'), Buffer.alloc(64, 0)]);
+      expect(isCustomDumpBuffer(header)).toBe(true);
+      // A view into a larger buffer must not read from the wrong offset.
+      const padded = Buffer.concat([Buffer.alloc(3, 0x20), header]);
+      expect(isCustomDumpBuffer(padded.subarray(3))).toBe(true);
+      expect(isCustomDumpBuffer(padded)).toBe(false);
+
+      expect(isCustomDumpBuffer(Buffer.from('CREATE TABLE items (id int);', 'ascii'))).toBe(false);
+      expect(isCustomDumpBuffer(Buffer.alloc(0))).toBe(false);
+      expect(isCustomDumpBuffer(Buffer.from('PGD', 'ascii'))).toBe(false);
+      expect(isCustomDumpBuffer(null)).toBe(false);
+      expect(isCustomDumpBuffer(undefined)).toBe(false);
+
+      // The string form still answers the same, for a caller holding only base64.
+      expect(isValidCustomDump(header.toString('base64'))).toBe(true);
+      expect(isCustomDumpBuffer(Buffer.from(header.toString('base64'), 'base64'))).toBe(true);
     });
   });
 
