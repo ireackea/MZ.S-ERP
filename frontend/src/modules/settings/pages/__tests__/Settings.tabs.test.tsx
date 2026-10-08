@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -50,17 +51,22 @@ beforeEach(() => {
   mocks.hasPermission.mockImplementation((permission: string) => mocks.permissions.includes(permission));
 });
 
+// In a Router, because the page reads `?tab=` for gate 3.6. Rendering it bare throws on
+// the first `useSearchParams` call, which says nothing about the permissions under test.
+const renderPage = (element: React.ReactElement) =>
+  render(<MemoryRouter initialEntries={['/settings']}>{element}</MemoryRouter>);
+
 describe('#14 the settings page reads one source of truth for permissions', () => {
   it('shows a tab the session grants', async () => {
     mocks.permissions = ['settings.view.general'];
-    render(<SettingsPage {...baseProps()} />);
+    renderPage(<SettingsPage {...baseProps()} />);
     expect(await screen.findByText(TABS['settings.view.general'])).toBeInTheDocument();
   });
 
   it('shows nothing at all when the session grants nothing', async () => {
     // FC-SEC-005 fail-closed: an empty list means no tabs, never a fallback.
     mocks.permissions = [];
-    render(<SettingsPage {...baseProps()} currentUser={{ permissions: ['*'] } as never} />);
+    renderPage(<SettingsPage {...baseProps()} currentUser={{ permissions: ['*'] } as never} />);
     expect(screen.queryByText(TABS['settings.view.general'])).toBeNull();
     expect(screen.queryByText(TABS['backup.view'])).toBeNull();
   });
@@ -70,13 +76,13 @@ describe('#14 the settings page reads one source of truth for permissions', () =
     // permission removed from a role stayed visible until the next sign-in — the
     // fail-open direction — while every call inside the tab returned 403.
     mocks.permissions = [];
-    render(<SettingsPage {...baseProps()} currentUser={{ permissions: ['backup.view'] } as never} />);
+    renderPage(<SettingsPage {...baseProps()} currentUser={{ permissions: ['backup.view'] } as never} />);
     await waitFor(() => expect(screen.queryByText(TABS['backup.view'])).toBeNull());
   });
 
   it('keeps hiding a tab the union would have revived', async () => {
     mocks.permissions = ['settings.view.general'];
-    render(
+    renderPage(
       <SettingsPage
         {...baseProps()}
         currentUser={{ permissions: ['admin.reset_system', 'backup.view'] } as never}

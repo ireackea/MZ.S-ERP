@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { backendUrl, e2ePassword as adminPassword, e2eUsername as adminUsername } from './support/runtimeConfig';
 import { backdateInvitation, cleanupFixtures, readInvitationRow } from './support/dbCleanup';
 
@@ -77,6 +78,8 @@ const adminLogin = async (): Promise<string> => {
 
 const createdUserIds: string[] = [];
 const createdRoleIds: string[] = [];
+/** Items this file created, removed in teardown so a failure cannot leave them behind. */
+const createdItemIds: string[] = [];
 
 const PASSWORD = 'MatrixRole2026!';
 
@@ -112,8 +115,31 @@ const createUserWithPermissions = async (
 // `docker compose exec psql`, and with twenty fixtures the teardown alone
 // exceeded vitest's 10s afterAll timeout — which surfaced as a single failing
 // test in an otherwise green run.
-afterAll(() => {
+afterAll(async () => {
   cleanupFixtures(createdUserIds, createdRoleIds);
+
+  // The probe item goes too. Its opening-balance rows are `RESTRICT`-linked, so they are
+  // removed first; leaving either behind would make the next run's reconciliation read a
+  // balance nobody asked for — which is precisely the litter this test stopped creating.
+  const psql = (statement: string): string => {
+    try {
+      return execFileSync(
+        'docker',
+        ['compose', '-f', `${process.cwd()}\\docker-compose.yml`, 'exec', '-T', 'postgres',
+          'psql', '-U', process.env.POSTGRES_USER || 'feedfactory',
+          '-d', process.env.POSTGRES_DB || 'feed_factory_db',
+          '-At', '-F', '|', '-v', 'ON_ERROR_STOP=1', '-c', statement],
+        { encoding: 'utf8', timeout: 120_000 },
+      ).trim();
+    } catch {
+      return '';
+    }
+  };
+  for (const publicId of createdItemIds) {
+    const safe = publicId.replace(/'/g, "''");
+    psql(`DELETE FROM "OpeningBalance" WHERE "itemId" IN (SELECT id FROM "Item" WHERE "publicId" = '${safe}');`);
+    psql(`DELETE FROM "Item" WHERE "publicId" = '${safe}';`);
+  }
 });
 
 describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
@@ -644,11 +670,38 @@ describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
     // type-checked cleanly and then returned 500 for every caller. The only thing
     // that catches it is driving the endpoint.
     const adminCookie = await adminLogin();
-    const items = await request('/items?limit=1', { headers: { Cookie: adminCookie } });
-    const list = data(items.body) as Array<{ publicId: string }>;
-    const item = list[0];
-    expect(item?.publicId, 'the suite needs at least one item').toBeTruthy();
     const suffix = randomUUID().slice(0, 8);
+
+    // Its own item, not `list[0]`.
+    //
+    // This borrowed whichever item the catalogue returned first and wrote an opening
+    // balance onto it. On a database that holds real stock that is the operator's
+    // inventory being overwritten with 4 units at 1.25 for a random fiscal year — and the
+    // damage is silent: the write succeeds, the audit row names the administrator, and
+    // the cached stock moves away from the ledger with nothing reporting it.
+    //
+    // It surfaced as a *different* spec failing. `stock-adjustment` asserts that
+    // `/balances/reconciliation` is globally consistent, and this test had left a real
+    // item inconsistent, so a test that touched nothing was failing because of another
+    // test's litter. Measured: four `OPENING_BALANCE_SET` audit rows on one operator item
+    // carrying test quantities, and reconciliation reporting `cachedStock 1` against
+    // `ledgerStock 0`.
+    //
+    // The prefix is on the list in `scripts/cleanup-e2e-items.mjs`, so a probe this test
+    // fails to delete is still swept by the deliberate cleanup script.
+    const createdItem = await request('/items', {
+      method: 'POST',
+      headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        publicId: `zz-e2e-matbal-${suffix}`,
+        name: `مسبار رصيد افتتاحي ${suffix}`,
+        unit: 'kg',
+        category: 'probe',
+      }),
+    });
+    expect(createdItem.response.status, JSON.stringify(createdItem.body).slice(0, 200)).toBe(201);
+    const item = { publicId: String(data(createdItem.body).publicId) };
+    createdItemIds.push(item.publicId);
     // A fresh year per run. setBalance deliberately does not overwrite createdBy on
     // update, so a leftover row from an earlier run keeps its old author (or null,
     // after that author was deleted) and this test would read a stale value rather
@@ -697,8 +750,10 @@ describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
     createdUserIds.push(authorId);
 
     const authorCookie = await login(`matrix_author_${suffix}`, PASSWORD);
-    const second = await request('/items?limit=2', { headers: { Cookie: authorCookie } });
-    const secondItem = (data(second.body) as Array<{ publicId: string }>)[1] ?? item;
+    // The second write uses the same probe item rather than `items?limit=2`[1] — the
+    // author's own account is not scoped to a warehouse, so index 1 of the catalogue is
+    // just as likely to be operator stock.
+    const secondItem = item;
 
     const byAuthor = await request('/opening-balances', {
       method: 'POST',

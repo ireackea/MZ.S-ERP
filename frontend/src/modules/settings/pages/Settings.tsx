@@ -3,6 +3,7 @@
 // ENTERPRISE FIX: Phase 3 – الاختبار + المراقبة + النشر الرسمي - 2026-03-13
 // ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
 import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { DatabaseBackup, FileText, Globe2, LayoutGrid, Package, RefreshCcw, Settings2, Shield, Users } from 'lucide-react';
 import { usePermissions } from '@hooks/usePermissions';
 import type { ReportColumnConfig, SystemSettings, User } from '../../../types';
@@ -83,6 +84,39 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     [permissions],
   );
   const [activeTab, setActiveTab] = useState<SettingsTabKey>(visibleTabs[0]?.key || 'general');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Gate 3.6 — the tab is in the URL.
+  //
+  // `?tab=audit` used to be ignored, so reloading landed on "general" and a link to a
+  // colleague opened the wrong screen. That matters most for the two tabs somebody is
+  // asked to *check*: an auditor arriving at the log tab and landing on general settings
+  // has to go looking, and an operator who reports "the audit tab is empty" is talking
+  // about a tab they may never have opened.
+  const requestedTab = searchParams.get('tab');
+
+  // Applied once the tab list is known, because the requested key is only meaningful
+  // against tabs this session may see — an unpermitted key resolves to the first visible
+  // tab rather than opening one.
+  useEffect(() => {
+    if (!requestedTab) return;
+    const match = visibleTabs.find((tab) => tab.key === requestedTab);
+    if (match && match.key !== activeTab) setActiveTab(match.key);
+    if (!match && requestedTab !== visibleTabs[0]?.key) {
+      // Replace rather than push: a typo in the query string should not become a
+      // history entry the back button walks through.
+      const next = new URLSearchParams(searchParams);
+      next.set('tab', visibleTabs[0]?.key || 'general');
+      setSearchParams(next, { replace: true });
+    }
+  }, [requestedTab, visibleTabs, activeTab, searchParams, setSearchParams]);
+
+  const selectTab = (key: SettingsTabKey) => {
+    setActiveTab(key);
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', key);
+    setSearchParams(next, { replace: true });
+  };
 
   useEffect(() => {
     if (!visibleTabs.some((tab) => tab.key === activeTab)) {
@@ -180,10 +214,10 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                     : (index - 1 + visibleTabs.length) % visibleTabs.length;
                 const next = visibleTabs[nextIndex];
                 if (!next) return;
-                setActiveTab(next.key);
+                selectTab(next.key);
                 document.getElementById(`settings-tab-${next.key}`)?.focus();
               }}
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => selectTab(tab.key)}
               className={`inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold transition ${active ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
             >
               <Icon size={16} aria-hidden="true" />

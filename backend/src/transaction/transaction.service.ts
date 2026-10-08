@@ -344,11 +344,27 @@ export class TransactionService {
           ...(Number.isInteger(asNumber) ? [{ id: asNumber }] : []),
         ],
       },
-      select: { id: true },
+      select: { id: true, isArchived: true, name: true },
     });
 
     if (!item) {
       throw new NotFoundException(`Item not found for identifier: ${normalized}`);
+    }
+
+    // Archiving has to be enforced at the use site, not only where a list happens to
+    // filter. `item.service` hides archived items from every list, `formulation` refuses
+    // them and `import-batch` rejects them — and this path, the one that *writes* the
+    // movement, checked neither. Measured: a movement was recorded against an item with
+    // `isArchived = true`, so a retired item kept accumulating stock, which then fed
+    // balances, deficits and every report downstream. Hiding it from a dropdown is not
+    // the same as refusing it.
+    //
+    // Same reasoning, and same shape of message, as `resolveUnloadingRuleId` below.
+    if (item.isArchived) {
+      throw new BadRequestException(
+        `Item "${item.name || normalized}" is archived and cannot receive movements. `
+        + 'Restore it first if it is back in use.',
+      );
     }
 
     return item.id;
@@ -421,20 +437,35 @@ export class TransactionService {
       select: {
         id: true,
         publicId: true,
+        isArchived: true,
+        name: true,
       },
     });
 
     const resolved = new Map<string, number>();
+    const archived = new Map<string, string>();
     for (const item of items) {
       resolved.set(String(item.id), item.id);
       if (item.publicId) {
         resolved.set(item.publicId, item.id);
+      }
+      if (item.isArchived) {
+        archived.set(String(item.id), item.name || String(item.id));
+        if (item.publicId) archived.set(item.publicId, item.name || String(item.id));
       }
     }
 
     for (const identifier of normalizedIdentifiers) {
       if (!resolved.has(identifier)) {
         throw new NotFoundException(`Item not found for identifier: ${identifier}`);
+      }
+      // Reported per item and named, because a bulk import of 200 rows that dies with
+      // "archived" and no name leaves the operator to work out which of the 200 it was.
+      if (archived.has(identifier)) {
+        throw new BadRequestException(
+          `Item "${archived.get(identifier)}" is archived and cannot receive movements. `
+          + 'Restore it first if it is back in use.',
+        );
       }
     }
 
