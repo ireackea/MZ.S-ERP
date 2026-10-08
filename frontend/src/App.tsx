@@ -22,7 +22,7 @@ import { Transaction, Partner, Order, User, Tag, SystemSettings, OperationAppear
 import { v4 as uuidv4 } from 'uuid';
 import apiClient from '@api/client';
 import { clearAllAuthData, logout, setAuthUser } from '@services/authService';
-import { filterByDataScope, getIamConfig, hasPermission, logUserActivity, normalizeUsers, upsertCurrentSession } from './services/iamService';
+import { filterByDataScope, hasPermission, logUserActivity, normalizeUsers, upsertCurrentSession } from './services/iamService';
 import { isInboundOperationType, isOutboundOperationType } from './utils/operationTypes';
 import { recordBootstrapRenderCommit } from '@utils/bootstrapMetrics';
 import { useRealtimeSyncStore, type RealtimeScope } from '@/shared/store/realtimeSync.store';

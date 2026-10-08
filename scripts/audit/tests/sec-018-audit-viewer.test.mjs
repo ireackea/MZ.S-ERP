@@ -79,7 +79,10 @@ test('gate 3.2 the filters reach the server, and the page is not the total', () 
     /const filteredLogs = logs\.filter\(/,
     'a second client-side definition of the same query is how the two disagreed',
   );
-  assert.match(ui, /const filteredLogs = logs;/);
+  // The alias existed to say "the server already filtered this, so this is just the
+  // page". Renamed to `pageRows`, which says the same thing without the word `filtered`
+  // — an auditor reading `filteredLogs` reasonably assumes a local filter ran.
+  assert.match(ui, /const pageRows = logs;/);
 
   // "X of 50" where 50 was the page size: the number an auditor read as the size
   // of the trail was the size of the window.

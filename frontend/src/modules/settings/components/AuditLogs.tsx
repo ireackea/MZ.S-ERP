@@ -220,37 +220,68 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ }) => {
   }, [loadAuditLogs]);
 
   // Phase 6: Export to CSV
+  /**
+   * Export the whole filtered result, not the page in memory.
+   *
+   * This built the CSV from `filteredLogs` — the fifty rows the table happened to hold —
+   * while `total` on screen came from the server. So an auditor filtered to a quarter of
+   * `LOGIN_FAILED` events, saw "412 results", exported, and received one page, with a
+   * success message: a compliance artefact that is silently incomplete and looks
+   * complete. `GET /audit/logs/export` has accepted the same filters all along and was
+   * called from nowhere.
+   */
   const exportToCSV = async () => {
     try {
       setIsExporting(true);
-      const headers = ['التوقيت', 'المستخدم', 'الدور', 'الإجراء', 'الكيان', 'المعرف', 'الحالة', 'المستخدم المستهدف', 'التفاصيل'];
-      const rows = filteredLogs.map(log => [
-        formatDateTime(log.timestamp),
-        log.actorUsername,
-        log.actorRole,
-        log.action,
-        log.entityType,
-        log.entityId,
-        log.status,
-        log.targetUserId || '-',
-        // `message` is already the human-readable line. It used to be
-        // `JSON.parse(log.details).message`, which throws during render for any
-        // non-JSON value, and the field was never present anyway.
-        log.message || '-',
-      ]);
 
-      const csvContent = [
-        headers.join(','),
-        ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-      ].join('\n');
+      const response = await apiClient.get('/audit/logs/export', {
+        params: {
+          ...(filterAction !== 'all' ? { action: filterAction } : {}),
+          ...(filterStatus !== 'all' ? { status: filterStatus } : {}),
+          ...(dateRangeStart ? { from: new Date(dateRangeStart).toISOString() } : {}),
+          ...(dateRangeEnd
+            ? { to: new Date(`${dateRangeEnd}T23:59:59.999`).toISOString() }
+            : {}),
+          ...(searchTerm.trim() ? { search: searchTerm.trim() } : {}),
+        },
+        responseType: 'blob',
+      });
 
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' });
+      const href = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
+      link.href = href;
       link.download = `audit-logs-${new Date().toISOString().slice(0, 10)}.csv`;
       link.click();
-      URL.revokeObjectURL(link.href);
-      toast.success('تم تصدير CSV بنجاح');
+      URL.revokeObjectURL(href);
+
+      // Say what was exported. "تم" after a filtered export that returned one page was
+      // the specific lie; the count is the cheapest way to stop it being tellable.
+      // `response.data` is a Blob when `responseType: 'blob'`, so the row count is read
+      // from the text rather than guessed at.
+      const text = typeof (response.data as Blob)?.text === 'function'
+        ? await (response.data as Blob).text()
+        : String(response.data ?? '');
+      const rowsExported = text.split('\n').filter((line) => line.trim().length > 0).length - 1;
+
+      if (rowsExported <= 0) {
+        toast.success('لم تُوجد سجلات مطابقة للتصدير.');
+        return;
+      }
+
+      // The endpoint clamps to 1000 rows, so a wide filter exports a truncated file.
+      // Saying "تم تصدير 1000 سجل" is true and still leaves an auditor holding an
+      // incomplete compliance artefact with no sign it is incomplete — so the shortfall
+      // is named, with the number that was left behind.
+      if (total > rowsExported) {
+        toast.warning(
+          `تم تصدير ${rowsExported} سجل من ${total}. `
+          + `التصدير محدود بـ1000 سجل لكل طلب — ضيّق المدى أو التاريخ لإكمال الباقي.`,
+        );
+        return;
+      }
+
+      toast.success(`تم تصدير ${rowsExported} سجل.`);
     } catch (error: any) {
       toast.error(error?.message || 'فشل التصدير');
     } finally {
@@ -271,7 +302,9 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ }) => {
   // harmless before because nothing was sent; now it would be a second, subtly
   // different definition of the same query, which is the arrangement that produced
   // the wrong answers in the first place.
-  const filteredLogs = logs;
+  // The page's rows. Not filtered locally any more — the server applied every filter,
+  // so this is exactly what the current page holds and nothing else.
+  const pageRows = logs;
 
   // The filter options come from the server rather than from the rows on screen.
   // Deriving them from the page meant an action that exists in the database but not
@@ -297,7 +330,10 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ }) => {
           </button>
           <button 
             onClick={exportToCSV} 
-            disabled={isExporting || filteredLogs.length === 0}
+            // Keyed on `total`, not on the page. The export now goes to the server for the whole
+            // filtered result, so an empty *page* (you are past the end, or a filter
+            // narrowed things) is not a reason to refuse an export that has rows.
+            disabled={isExporting || total === 0}
             className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100 disabled:opacity-50"
           >
             <Download size={14} />
@@ -393,7 +429,7 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ }) => {
               "X of 50", where 50 was the page size — so the number an auditor took
               for the size of the trail was the size of the window they were
               looking through. */}
-          عرض {filteredLogs.length} من {total} سجل
+          عرض {pageRows.length} من {total} سجل
         </span>
       </div>
 
@@ -441,10 +477,10 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ }) => {
               <tr><td colSpan={6} className="p-8 text-center text-slate-400">جاري التحميل...</td></tr>
             ) : error ? (
               <tr><td colSpan={6} className="p-8 text-center text-red-600">{error}</td></tr>
-            ) : filteredLogs.length === 0 ? (
+            ) : pageRows.length === 0 ? (
               <tr><td colSpan={6} className="p-8 text-center text-slate-400">لا توجد سجلات تطابق التصفية.</td></tr>
             ) : (
-              [...filteredLogs].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((log) => (
+              [...pageRows].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((log) => (
                 <tr key={log.id} className="hover:bg-slate-50 font-mono">
                   <td className="p-4 text-slate-600 dir-ltr">
                     <div className="flex items-center gap-2">

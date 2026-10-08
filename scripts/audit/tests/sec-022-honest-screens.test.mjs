@@ -2,7 +2,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { globSync } from 'node:fs';
 
 const repoRoot = process.cwd();
 const read = (rel) => readFileSync(join(repoRoot, rel), 'utf8');
@@ -25,6 +26,31 @@ test('gate 3.3 the permissions matrix reads the server, not localStorage', () =>
   assert.doesNotMatch(code, /getIamConfig/);
   assert.match(code, /fetchRoles/);
   assert.match(matrix, /useEffect/);
+
+  // The second authority is still defined in `iamService` — `getIamConfig` and
+  // `saveIamConfig` over `localStorage['feed_factory_iam_config']` — and no screen calls
+  // them any more. Leaving the functions is defensible; leaving them *reachable* is not,
+  // because that is the state #16 was in. `App.tsx` was still importing `getIamConfig`
+  // without calling it, which is enough to tell the next reader that browser-stored roles
+  // are live.
+  //
+  // Checked by import source rather than by call site: `UnifiedIAM` legitimately calls
+  // `updateRolePermissions`, from `usersService` — the server — so a name-based sweep
+  // reports the one correct caller as the defect. Paths are normalised because `globSync`
+  // yields Windows separators.
+  const importers = globSync(resolve(repoRoot, 'frontend/src/**/*.ts*'))
+    .map((file) => file.replace(/\\/g, '/'))
+    .filter((file) => !file.endsWith('/services/iamService.ts'))
+    .filter((file) =>
+      /\b(getIamConfig|saveIamConfig)\b[\s\S]{0,400}?from\s+['"][^'"]*iamService['"]/.test(
+        codeOf(readFileSync(file, 'utf8')),
+      ),
+    );
+  assert.deepEqual(
+    importers.map((file) => file.replace(`${repoRoot}/`, '.')),
+    [],
+    'roles come from the server; nothing may read the browser-stored copy',
+  );
 
   // A load failure must not become an empty matrix, which reads as "these roles
   // hold nothing" — the same confident wrong answer for a different reason.

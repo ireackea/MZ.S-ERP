@@ -59,59 +59,79 @@ const CATEGORY = 'zz-e2e-order-profile';
 const created: { profileIds: string[]; publicIds: string[] } = { profileIds: [], publicIds: [] };
 
 const cleanup = async () => {
-  if (created.profileIds.length > 0) {
-    // Profiles first: the entries cascade from them, and from the items too, but
-    // the ids are known here so nothing relies on a wildcard.
-    //
-    // Deactivating is not optional housekeeping. The seeded profile is the
-    // catalogue's only active order, and the partial unique index means the test
-    // cannot delete it. So the deletion has to hand the role back, and a run that
-    // skipped that step would leave the catalogue showing an order nothing
-    // remembers — which is exactly the state the feature exists to prevent.
-    psql(
-      `UPDATE "ItemOrderProfile" SET "isActive" = false WHERE "id" IN (${created.profileIds
-        .map((id) => `'${id}'`)
-        .join(',')});`,
-    );
-    psql(`DELETE FROM "ItemOrderProfile" WHERE "id" IN (${created.profileIds.map((id) => `'${id}'`).join(',')});`);
-    created.profileIds.length = 0;
-
-    // Hand the role back to a surviving order, so the catalogue is never left
-    // with no active order after a test run.
-    //
-    // Through the API, with a session, rather than by flipping the column: the
-    // endpoint is the only thing that also re-materialises `Item.sortOrder`, and
-    // a raw `UPDATE` would leave the column describing an order that is not
-    // active. The first version of this called the API with no cookie and got a
-    // 401, which is how the catalogue was left with nothing active and the run
-    // still looked clean.
-    const remaining = psql(`SELECT count(*) FROM "ItemOrderProfile" WHERE "isActive" = true;`);
-    if (Number(remaining) === 0) {
-      const fallback = psql(
-        `SELECT "id" FROM "ItemOrderProfile" ORDER BY "createdAt" ASC LIMIT 1;`,
+  // The probe sweep is the part that must always happen, so it goes in a `finally`.
+  //
+  // It used to be the last statement, which meant the hand-back below could throw —
+  // an auth-limit 429 on its own `login()`, or an `apply` returning 4xx — and take the
+  // sweep with it. The `afterAll` swallowed that with a comment saying "the next run
+  // sweeps too", and the next run failed identically, because the throw was upstream of
+  // the sweep both times. So eleven items survived every run of this file, with a green
+  // suite: reproduced by running this file alone.
+  //
+  // A hand-back failure is still worth reporting. It is reported from its own catch
+  // rather than by abandoning the cleanup.
+  try {
+    if (created.profileIds.length > 0) {
+      // Profiles first: the entries cascade from them, and from the items too, but
+      // the ids are known here so nothing relies on a wildcard.
+      //
+      // Deactivating is not optional housekeeping. The seeded profile is the
+      // catalogue's only active order, and the partial unique index means the test
+      // cannot delete it. So the deletion has to hand the role back, and a run that
+      // skipped that step would leave the catalogue showing an order nothing
+      // remembers — which is exactly the state the feature exists to prevent.
+      psql(
+        `UPDATE "ItemOrderProfile" SET "isActive" = false WHERE "id" IN (${created.profileIds
+          .map((id) => `'${id}'`)
+          .join(',')});`,
       );
-      if (fallback) {
-        const cookie = await login();
-        const restored = await request(`/items/order-profiles/${fallback.trim()}/apply`, {
-          method: 'POST',
-          headers: { Cookie: cookie, 'Content-Type': 'application/json' },
-        });
-        if (restored.response.status >= 400) {
-          throw new Error(
-            `could not restore an active saved order: ${restored.response.status} ${JSON.stringify(restored.body).slice(0, 200)}`,
+      psql(`DELETE FROM "ItemOrderProfile" WHERE "id" IN (${created.profileIds.map((id) => `'${id}'`).join(',')});`);
+      created.profileIds.length = 0;
+
+      // Hand the role back to a surviving order, so the catalogue is never left
+      // with no active order after a test run.
+      //
+      // Through the API, with a session, rather than by flipping the column: the
+      // endpoint is the only thing that also re-materialises `Item.sortOrder`, and
+      // a raw `UPDATE` would leave the column describing an order that is not
+      // active. The first version of this called the API with no cookie and got a
+      // 401, which is how the catalogue was left with nothing active and the run
+      // still looked clean.
+      try {
+        const remaining = psql(`SELECT count(*) FROM "ItemOrderProfile" WHERE "isActive" = true;`);
+        if (Number(remaining) === 0) {
+          const fallback = psql(
+            `SELECT "id" FROM "ItemOrderProfile" ORDER BY "createdAt" ASC LIMIT 1;`,
           );
+          if (fallback) {
+            const cookie = await login();
+            const restored = await request(`/items/order-profiles/${fallback.trim()}/apply`, {
+              method: 'POST',
+              headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+            });
+            if (restored.response.status >= 400) {
+              throw new Error(
+                `could not restore an active saved order: ${restored.response.status} ${JSON.stringify(restored.body).slice(0, 200)}`,
+              );
+            }
+          }
         }
+      } catch (error) {
+        // Loud, and contained: the catalogue is left without an active order, which
+        // somebody has to know about, and the probe sweep below must still run.
+        console.error('saved-order cleanup could not restore an active profile', error);
       }
     }
+  } finally {
+    if (created.publicIds.length > 0) {
+      psql(`DELETE FROM "Item" WHERE "publicId" IN (${created.publicIds.map((id) => `'${id}'`).join(',')});`);
+      created.publicIds.length = 0;
+    }
+    // Any probe left by a run that failed midway, removed by category rather than
+    // by a publicId prefix — the import path assigns its own ids, so a prefix is
+    // not something these rows can be found by.
+    psql(`DELETE FROM "Item" WHERE category = '${CATEGORY}';`);
   }
-  if (created.publicIds.length > 0) {
-    psql(`DELETE FROM "Item" WHERE "publicId" IN (${created.publicIds.map((id) => `'${id}'`).join(',')});`);
-    created.publicIds.length = 0;
-  }
-  // Any probe left by a run that failed midway, removed by category rather than
-  // by a publicId prefix — the import path assigns its own ids, so a prefix is
-  // not something these rows can be found by.
-  psql(`DELETE FROM "Item" WHERE category = '${CATEGORY}';`);
 };
 
 const seed = async (cookie: string, count: number) => {
