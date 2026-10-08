@@ -44,6 +44,17 @@ export class SettingValueDto {
 
   @IsOptional() @IsIn(SETTING_VALUE_TYPES) valueType?: SettingValueType;
 
+  /**
+   * The `updatedAt` the client read for this key.
+   *
+   * Compare-and-set rather than a blind write: two administrators with the screen open
+   * would otherwise have the second save erase the first one's company name, and the
+   * audit log would show two correct saves with the wrong final value. Declared with a
+   * validator because the global pipe runs `forbidNonWhitelisted` and would otherwise
+   * reject the request with "property expectedUpdatedAt should not exist".
+   */
+  @IsOptional() @IsString() @MaxLength(40) expectedUpdatedAt?: string;
+
   @IsOptional() @IsString() @MaxLength(500) reason?: string;
 }
 

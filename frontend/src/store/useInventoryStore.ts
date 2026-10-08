@@ -42,6 +42,7 @@ import {
   deleteUnitInApi,
 } from '@services/referenceDataService';
 import { fetchRoles, fetchUsers, type RoleDto, type UserDto } from '@services/usersService';
+import { loadSystemSettingsForm } from '@services/systemSettingsApi';
 import apiClient from '@api/client';
 import { normalizeUsers } from '../services/iamService';
 import {
@@ -171,6 +172,15 @@ type Store = {
   transactionsLoadedAt: number | null;
   usersAndRolesLoadedAt: number | null;
   unloadingRulesLoadedAt: number | null;
+  /** When the company settings were last read from the server. */
+  systemSettingsLoadedAt: number | null;
+  /**
+   * Why the company settings could not be read.
+   *
+   * Separate from the shared "error" field, which the offline settings screen reads:
+   * one screen's failure must not be reported in another's slot.
+   */
+  systemSettingsLoadError: string | null;
   formulasLoadedAt: number | null;
   soft: SoftMap;
   sortMode: ItemSortMode;
@@ -205,6 +215,16 @@ type Store = {
   loadOpeningBalances: (financialYear?: number, options?: LoaderOptions) => Promise<void>;
   loadFormulas: () => Promise<void>;
   loadUnloadingRules: (options?: LoaderOptions) => Promise<void>;
+  /**
+   * Reads the company settings from the server into the store.
+   *
+   * It used to be that the store held `DEFAULT_SYSTEM_SETTINGS` — every field empty —
+   * until an administrator saved from the settings screen, and that save was blocked by
+   * a bug in the reader. So every report header printed a blank company name while the
+   * real one sat in the database. Loaded at boot now, because a printed document is
+   * exactly the thing that must not depend on someone visiting a screen first.
+   */
+  loadSystemSettings: (options?: LoaderOptions) => Promise<void>;
   syncFromServer: (target?: SyncTarget) => Promise<void>;
   setTransactions: (transactions: Transaction[]) => void;
   setOpeningBalances: (financialYear: number, rows: OpeningBalanceRow[]) => void;
@@ -810,6 +830,8 @@ export const useInventoryStore = create<Store>()(
       transactionsLoadedAt: null,
       usersAndRolesLoadedAt: null,
       unloadingRulesLoadedAt: null,
+      systemSettingsLoadedAt: null,
+      systemSettingsLoadError: null,
       formulasLoadedAt: null,
       soft: {},
       sortMode: initialSort.mode,
@@ -1000,6 +1022,32 @@ export const useInventoryStore = create<Store>()(
         }
       },
 
+      loadSystemSettings: async (options) => {
+        const current = get();
+        if (!shouldReload(current.systemSettingsLoadedAt, options)) {
+          return;
+        }
+
+        try {
+          const form = await loadSystemSettingsForm();
+          const loadedAt = Date.now();
+          // The server's answer, merged over the defaults rather than replacing them, so
+          // a key it has never heard of leaves the field as the client already had it.
+          set({
+            systemSettings: { ...current.systemSettings, ...form },
+            systemSettingsLoadError: null,
+            systemSettingsLoadedAt: loadedAt,
+          });
+        } catch (error: unknown) {
+          // Deliberately NOT the shared `error`: that field is read by the offline
+          // settings screen, so a company-settings failure would surface there as a
+          // message about something else — the same defect shape this whole change is
+          // about, just with the two screens swapped.
+          set({ systemSettingsLoadError: getErrorMessage(error, 'تعذر تحميل إعدادات الشركة من الخادم.') });
+          throw error;
+        }
+      },
+
       syncFromServer: async (target = 'all') => {
         if (get().syncing) return;
         set({ syncing: true, error: null });
@@ -1160,7 +1208,10 @@ export const useInventoryStore = create<Store>()(
       },
 
       setSystemSettings: (settings) => {
-        set({ systemSettings: { ...DEFAULT_SYSTEM_SETTINGS, ...settings } });
+        set({
+          systemSettings: { ...DEFAULT_SYSTEM_SETTINGS, ...settings },
+          systemSettingsLoadedAt: Date.now(),
+        });
       },
 
       setUnloadingRules: (rules) => {

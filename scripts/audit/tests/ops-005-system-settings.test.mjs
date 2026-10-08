@@ -81,12 +81,66 @@ test('gate 2.1 the settings screen reports what the server did', () => {
   // The defect: `onUpdateSettings(form); toast.success(...)` — a client-side write
   // and a success message, on a value printed on every report.
   assert.doesNotMatch(iam, /toast\.success\('تم حفظ الإعدادات العامة بنجاح\.'\)/);
-  assert.match(iam, /await saveSystemSettings\(form\)/);
-  assert.match(iam, /catch \(error: any\)[\s\S]{0,120}toast\.error/);
-  assert.match(iam, /await loadSystemSettings\(\)/, 'the form must open on the server, not on a default');
-  // Re-read after saving rather than trusting the form, so a value the server
-  // coerced is what the screen shows.
-  assert.match(iam, /setForm\(\(current\) => \(\{ \.\.\.current, \.\.\.fresh \}\)\)/);
+  assert.match(iam, /await saveSystemSettings\(form, meta, reason\)/);
+  // Wide enough for the conflict branch that now precedes the generic failure report:
+  // a 409 has to say "somebody else saved" rather than fall through to a bare 400.
+  assert.match(iam, /catch \(error: any\)[\s\S]{0,600}toast\.error/);
+  // `void … .then()` rather than `await`: the load must not block first paint, and the
+  // operator sees a loading state instead of an empty form pretending to be an answer.
+  assert.match(iam, /loadSystemSettings\(\)/, 'the form must open on the server, not on a default');
+  // …and the server's answer must actually reach the form. This is the assertion whose
+  // letter the array/object mismatch satisfied while the value never arrived.
+  assert.match(iam, /setForm\(\(current\) =>/);
+  assert.match(iam, /snapshot\.form/);
+  // The form is refreshed from the server's own answer, so a value the server coerced
+  // is what the screen shows.
+  assert.match(iam, /setBaseline\(\(current\) => \(\{ \.\.\.current, \.\.\.snapshot\.form \}\)\)/);
+});
+
+test('gate 2.1 the reader handles the shape the server actually returns', () => {
+  // The second, quieter failure of the same shape: `getAll` returns `settings` as an
+  // ARRAY, the reader indexed it as an object, so `settings['company.name']` was
+  // `undefined` for every key and the load returned `{}`. The form kept the empty
+  // client-side defaults and the required-field guard then refused the save before a
+  // request was sent — so a screen with a server behind it could not save anything.
+  //
+  // Every assertion in this file is a source-text match, which is why that survived:
+  // the code satisfied all of them while provably doing nothing. The behaviour is
+  // covered by `frontend/src/services/systemSettingsApi.test.ts`, which was verified to
+  // fail when this defect is reintroduced. What is asserted here is the two decisions
+  // that stop it recurring: normalise both shapes, and refuse anything else loudly
+  // instead of returning an empty form.
+  assert.match(api, /if \(Array\.isArray\(raw\)\)/, 'the array shape must be handled explicitly');
+  assert.match(api, /typeof raw === 'object'/, 'a keyed-object shape must be tolerated too');
+  assert.match(
+    api,
+    /SETTINGS_SHAPE_UNRECOGNISED/,
+    'an unknown shape must be an error, never a silently empty form',
+  );
+  assert.doesNotMatch(
+    api,
+    /settings\?\.\[binding\.settingKey\]/,
+    'indexing the payload by key is the exact expression that read undefined on an array',
+  );
+});
+
+test('every catalogue key has a form binding, and every binding a catalogue key', () => {
+  // The two lists are a duplicated authority until something checks them. A key added
+  // server-side with no binding is a setting nobody can edit; a binding for a key that
+  // is not in the catalogue is a write the server refuses at runtime.
+  const catalogueKeys = [...service.matchAll(/key: '([a-z]+\.[A-Za-z]+)'/g)].map((m) => m[1]);
+  const bindingKeys = [...api.matchAll(/settingKey: '([a-z]+\.[A-Za-z]+)'/g)].map((m) => m[1]);
+
+  assert.ok(catalogueKeys.length > 0, 'the catalogue must not parse as empty');
+  assert.deepEqual(
+    bindingKeys.slice().sort(),
+    catalogueKeys.slice().sort(),
+    'the frontend bindings and the backend catalogue have drifted apart',
+  );
+
+  // And every one of them must be reachable: a key that is declared but can never be
+  // written is a place values go to be lost.
+  assert.match(service, /requireDefinition/, 'an unknown key must be refused');
 });
 
 test('gate 2.1 the settings write is attributable', () => {
@@ -136,7 +190,16 @@ test('the values printed on every document cannot be blanked', () => {
 
 test('a parent re-render must not discard what the operator typed', () => {
   // `useEffect(() => setForm(settings), [settings])` reset the form on every new
-  // prop object, including one that carried no change.
-  assert.match(iam, /sameSettings/);
-  assert.match(iam, /synced\.current/);
+  // prop object, including one that carried no change. That comparison against the last
+  // prop values was `sameSettings` + a `synced` ref; it is now a `baseline` holding what
+  // the server last answered, because the prop is the *client default* — empty for every
+  // field — and comparing against it would have reset the form to blank values the
+  // moment the parent re-rendered.
+  assert.match(iam, /baseline/);
+  assert.match(iam, /const dirty = useMemo/);
+  assert.doesNotMatch(iam, /setForm\(settings\)\s*;\s*\}\s*,\s*\[settings\]\)/);
+
+  // And the values the server sent must not overwrite what is being typed while the
+  // request is still in flight — that window is where keystrokes used to vanish.
+  assert.match(iam, /touchedFields/);
 });

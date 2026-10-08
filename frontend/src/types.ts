@@ -40,6 +40,10 @@ export interface SystemSettings {
   address: string;
   phone: string;
   logoUrl?: string;
+  /** Printed on documents alongside the name; optional so older callers still type-check. */
+  email?: string;
+  /** الرقم الضريبي — on invoices and stock cards. Absent means "never set". */
+  taxId?: string;
   defaultUnloadingDuration?: number;
   defaultDelayPenalty?: number;
 }

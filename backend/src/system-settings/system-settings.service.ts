@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { AuditService } from '../audit/audit.service';
 import type { UpdateSystemSettingsDto } from './system-settings.controller';
@@ -34,6 +34,18 @@ export type SettingDefinition = {
   required?: boolean;
 };
 
+/**
+ * Every key the server will accept, and the screen that edits it.
+ *
+ * `localization.locale` and `localization.dateFormat` were removed rather than left in
+ * place. They had no reader anywhere in the backend or the frontend, and the theme tab
+ * already owns locale and date format — so they were a second, unwritten source of truth
+ * for the same two facts, which is the condition this catalogue exists to prevent.
+ *
+ * `company.email` and `company.taxId` were the opposite case and are now on the form:
+ * both are printed on documents, both were already writable, and neither had an input.
+ * A setting that can be written but never edited is where values go to be lost.
+ */
 export const SETTING_CATALOGUE: readonly SettingDefinition[] = [
   { key: 'company.name', label: 'اسم الشركة', category: 'company', valueType: 'string', defaultValue: '', required: true },
   { key: 'company.address', label: 'العنوان', category: 'company', valueType: 'string', defaultValue: '' },
@@ -44,8 +56,6 @@ export const SETTING_CATALOGUE: readonly SettingDefinition[] = [
   { key: 'company.currency', label: 'العملة', category: 'company', valueType: 'string', defaultValue: 'EGP', required: true },
   { key: 'operations.defaultUnloadingDuration', label: 'مدة التفريغ الافتراضية (دقيقة)', category: 'operations', valueType: 'number', defaultValue: 60 },
   { key: 'operations.defaultDelayPenalty', label: 'غرامة التأخير الافتراضية', category: 'operations', valueType: 'number', defaultValue: 0 },
-  { key: 'localization.locale', label: 'اللغة', category: 'localization', valueType: 'string', defaultValue: 'ar' },
-  { key: 'localization.dateFormat', label: 'تنسيق التاريخ', category: 'localization', valueType: 'string', defaultValue: 'ar-EG' },
 ];
 
 export type ResolvedSetting = SettingDefinition & {
@@ -92,7 +102,7 @@ export class SystemSettingsService {
     return row ? this.coerce(row.value, definition) : definition.defaultValue;
   }
 
-  async update(dto: UpdateSystemSettingsDto, actorId: string | null) {
+async update(dto: UpdateSystemSettingsDto, actorId: string | null) {
     const incoming = Array.isArray(dto?.settings) ? dto.settings : [];
     if (!incoming.length) {
       throw new BadRequestException('No settings supplied');
@@ -100,7 +110,7 @@ export class SystemSettingsService {
 
     const before = await this.prisma.systemSetting.findMany();
 
-    // Validated as a batch first, so a bad entry cannot leave half the screen
+// Validated as a batch first, so a bad entry cannot leave half the screen
     // written. A settings form that saves some of what you typed is worse than one
     // that refuses and tells you which field.
     const prepared = incoming.map((entry) => {
@@ -116,15 +126,53 @@ export class SystemSettingsService {
       };
     });
 
-    await this.prisma.$transaction(
-      prepared.map((row) =>
-        this.prisma.systemSetting.upsert({
+    // Last-write-wins is how one administrator silently undoes another's company name.
+    // The screen sends the `updatedAt` it read, and the write becomes a compare-and-set:
+    // the update only matches the row version the operator actually saw. If somebody
+    // saved in between, the condition matches nothing, the count is zero, and the whole
+    // transaction is rolled back.
+    //
+    // A check that happens *before* the write and never again would not close this — it
+    // loses exactly the race it exists to catch, which is why the comparison lives in
+    // the `where` clause rather than in a lookup above it.
+    const expectedByKey = new Map(
+      incoming
+        .map((entry, index) => [prepared[index].key, String(entry.expectedUpdatedAt || '').trim()] as const)
+        .filter(([, expected]) => expected),
+    );
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const row of prepared) {
+        const expected = expectedByKey.get(row.key);
+
+        if (expected) {
+          const updatedAt = new Date(expected);
+          if (Number.isNaN(updatedAt.getTime())) {
+            throw new BadRequestException(`${row.label}: the expected version is not a valid date`);
+          }
+          const result = await tx.systemSetting.updateMany({
+            where: { key: row.key, updatedAt },
+            data: { ...row, updatedById: actorId },
+          });
+          if (result.count === 0) {
+            const current = await tx.systemSetting.findUnique({ where: { key: row.key } });
+            throw new ConflictException(
+              `${row.label}: عدّلها مستخدم آخر بعد أن فتحت الشاشة. `
+              + `القيمة الحالية: ${current?.value ?? '(لم تُضبط بعد)'}. `
+              + 'أعد تحميل الصفحة ثم عدّل مجددًا.',
+            );
+          }
+          continue;
+        }
+
+        // No expectation means the operator had never seen a stored value for this key.
+        await tx.systemSetting.upsert({
           where: { key: row.key },
           create: { ...row, updatedById: actorId },
           update: { ...row, updatedById: actorId },
-        }),
-      ),
-    );
+        });
+      }
+    });
 
     const after = await this.prisma.systemSetting.findMany();
     const changed = this.diff(before, after, prepared);

@@ -142,6 +142,7 @@ export const useAppBootstrap = ({
   const setReferenceData = useInventoryStore((state) => state.setReferenceData);
   const setUnloadingRules = useInventoryStore((state) => state.setUnloadingRules);
   const loadInventoryCore = useInventoryStore((state) => state.loadInventoryCore);
+  const loadSystemSettings = useInventoryStore((state) => state.loadSystemSettings);
   const loadTransactions = useInventoryStore((state) => state.loadTransactions);
   const loadUsersAndRoles = useInventoryStore((state) => state.loadUsersAndRoles);
   const currentUserId = currentUser?.id ?? null;
@@ -238,6 +239,12 @@ export const useAppBootstrap = ({
             await loadInventoryCore({ force: true, staleMs: 0 });
             await loadTransactions({ force: true, staleMs: 0 });
             await loadUsersAndRoles({ force: true, staleMs: 0 });
+            // The company identity is printed on every report, so it is read with the
+            // rest of the shell rather than when someone happens to open settings.
+            // Its own failure is not the shell's: a blank company header is a problem,
+            // but a database that will not load is a different and larger one, so this
+            // does not take the bootstrap down with it.
+            await loadSystemSettings({ force: true, staleMs: 0 }).catch(() => undefined);
 
             authenticatedShellCompletedUserId = currentUserId;
             completeBootstrapMetrics({ outcome: 'success' });
@@ -275,5 +282,5 @@ export const useAppBootstrap = ({
     return () => {
       active = false;
     };
-  }, [authReady, currentUserId, loadInventoryCore, loadTransactions, loadUsersAndRoles, setInventoryRouteReady]);
+  }, [authReady, currentUserId, loadInventoryCore, loadTransactions, loadUsersAndRoles, loadSystemSettings, setInventoryRouteReady]);
 };

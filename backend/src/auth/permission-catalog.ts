@@ -134,8 +134,13 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
   { id: 'backup.import', module: 'backup', action: 'import', label: 'استيراد نسخة احتياطية', description: 'إعادة ملف نسخة احتياطية من الخارج إلى القائمة ليصبح قابلاً للاستعادة.', route: 'POST /backup/import' },
 
   // ── settings ─────────────────────────────────────────────────────────────
-  { id: 'settings.view.general', module: 'settings', action: 'view', label: 'عرض الإعدادات العامة', description: 'قراءة البيانات المرجعية وقواعد التفريغ.', route: 'GET /reference-data, GET /unloading-rules' },
-  { id: 'settings.update.system', module: 'settings', action: 'update', label: 'تعديل إعدادات النظام', description: 'إدارة البيانات المرجعية وقواعد التفريغ.', route: 'POST /reference-data/*, POST /unloading-rules, PUT /unloading-rules/:id, POST /unloading-rules/delete' },
+  // These two guard `GET|PUT /system-settings` as well. That was missing from both the
+  // description and the route list, so the permissions matrix — the screen an
+  // administrator uses to decide what to grant — said nothing about the endpoint whose
+  // absence makes the general settings screen unsaveable. A catalogue entry that omits
+  // what it authorises is how a grant looks sufficient and is not.
+  { id: 'settings.view.general', module: 'settings', action: 'view', label: 'عرض الإعدادات العامة', description: 'قراءة هوية الشركة والبيانات المرجعية وقواعد التفريغ.', route: 'GET /system-settings, GET /reference-data, GET /unloading-rules' },
+  { id: 'settings.update.system', module: 'settings', action: 'update', label: 'تعديل إعدادات النظام', description: 'تعديل هوية الشركة (الاسم والعملة والعنوان والهاتف والبريد والرقم الضريبي ورابط الشعار)، وإدارة البيانات المرجعية وقواعد التفريغ.', route: 'PUT /system-settings, POST /reference-data/*, POST /unloading-rules, PUT /unloading-rules/:id, POST /unloading-rules/delete' },
 
   // ── theme ────────────────────────────────────────────────────────────────
   { id: 'theme.view', module: 'theme', action: 'view', label: 'عرض الثيم', description: 'قراءة ثيم مستخدم.', route: 'GET /theme/user/:id' },
