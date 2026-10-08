@@ -36,18 +36,28 @@ export class AppBootstrapService {
 
   async getBootstrapPayload(principal: any) {
     const userId = String(principal?.id || principal?.sub || '').trim();
-    const user = userId
-      ? await this.prisma.user.findUnique({
-          where: { id: userId },
-          include: { role: true },
-        })
-      : null;
 
-    if (userId && (!user || !user.isActive)) {
+    // No anonymous branch. This method used to answer an unauthenticated caller with the
+    // reference dictionary, every unloading rule including `penalty_rate_per_minute`,
+    // and three counts that disclose whether data exists — because the guard returned
+    // `true` on a failed authentication and the service had a branch that handed it all
+    // over. The controller now refuses without a session, and this refuses a principal
+    // that resolves to no user, so the payload cannot be assembled for a stranger even
+    // if a caller reaches the service directly.
+    if (!userId) {
+      throw new UnauthorizedException('A session is required to read the application bootstrap');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { role: true },
+    });
+
+    if (!user || !user.isActive) {
       throw new UnauthorizedException('Authenticated user is inactive or missing');
     }
 
-    const resolvedPermissions = user ? this.parsePermissions(user.role?.permissions) : [];
+    const resolvedPermissions = this.parsePermissions(user.role?.permissions);
 
     const includeInactiveUnloadingRules =
       this.hasPermission(resolvedPermissions, 'settings.view.general') ||
@@ -63,26 +73,6 @@ export class AppBootstrapService {
       this.prisma.transaction.count(),
       this.prisma.openingBalance.count(),
     ]);
-
-    if (!user) {
-      return {
-        session: null,
-        resolvedPermissions: [],
-        referenceData,
-        unloadingRules: unloadingRuleRows.map((row) => ({
-          id: row.id,
-          rule_name: row.ruleName,
-          allowed_duration_minutes: row.allowedDurationMinutes,
-          penalty_rate_per_minute: row.penaltyRatePerMinute.toNumber(),
-          is_active: row.isActive,
-        })),
-        startupFlags: {
-          hasItems: itemsCount > 0,
-          hasTransactions: transactionsCount > 0,
-          hasOpeningBalances: openingBalancesCount > 0,
-        },
-      };
-    }
 
     const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
 

@@ -194,6 +194,66 @@ describe('FC-SEC-005 role matrix as a non-wildcard session', () => {
     expect(allowed.response.status).toBe(200);
   });
 
+  it('holding users.view does not grant a single mutating action', async () => {
+    // The distinction the module-level test above cannot make: `users.view` opens the
+    // IAM screen, and that screen carries delete, lock, role-assignment and
+    // reset-password controls. If the API answered those on the strength of `users.view`,
+    // every read-only account in the system could delete users. The controller declares
+    // `@Permissions('users.delete')`, `@Permissions('users.lock')` and
+    // `@Permissions('users.update')` per route, and this is the request that proves those
+    // decorators are read rather than merely present.
+    //
+    // Target is a second throwaway account, never a real one: these are expected to be
+    // refused, and a test that could delete a person if the guard failed is not a test to
+    // leave lying around.
+    const adminCookie = await adminLogin();
+    const viewer = await createUserWithPermissions(adminCookie, 'viewonly', ['users.view']);
+    const victim = await createUserWithPermissions(adminCookie, 'victim', ['users.view']);
+    const cookie = await login(viewer.username, PASSWORD);
+
+    const listing = await request('/users', { headers: { Cookie: cookie } });
+    expect(listing.response.status).toBe(200);
+
+    // The full path per action: lock and reset-password are their own routes, and a probe
+    // that guesses `/users/:id` gets a 404 from the router without the guard ever
+    // running — which reads as "refused" while testing nothing.
+    const attempts: Array<[string, string, RequestInit]> = [
+      ['delete a user', `/users/${victim.userId}`, {
+        method: 'DELETE',
+        headers: { Cookie: cookie },
+      }],
+      ['lock a user', `/users/${victim.userId}/lock`, {
+        method: 'POST',
+        headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ locked: true, durationMinutes: 60, reason: 'probe' }),
+      }],
+      ['update a user', `/users/${victim.userId}`, {
+        method: 'PUT',
+        headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ firstName: 'renamed' }),
+      }],
+      ['reset another password', `/users/${victim.userId}/reset-password`, {
+        method: 'POST',
+        headers: { Cookie: cookie },
+      }],
+    ];
+
+    for (const [what, path, options] of attempts) {
+      const result = await request(path, options);
+      // 403 is the answer that proves the guard. A 404 would mean the path was wrong and
+      // the assertion passed by accident, so it is called out rather than accepted.
+      expect(result.response.status, `${what} must not be allowed by users.view`).toBe(403);
+    }
+
+    // And the victim is still there, which is the part a 403 alone does not prove: a guard
+    // that refused for an unrelated reason would look identical from the response alone.
+    // Read through the list route, because there is no per-id GET to read through.
+    const survivors = await request('/users', { headers: { Cookie: adminCookie } });
+    expect(survivors.response.status).toBe(200);
+    const listed = JSON.stringify(data(survivors.body));
+    expect(listed).toContain(victim.username);
+  });
+
   it('a role change takes effect on the live session without re-login', async () => {
     const adminCookie = await adminLogin();
     const built = await createUserWithPermissions(adminCookie, 'live', ['items.view']);

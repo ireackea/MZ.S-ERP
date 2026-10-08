@@ -140,6 +140,40 @@ test('offline queue is owner-bound and service worker cannot replay it', () => {
   assert.doesNotMatch(permissions, /ROLE_BASED_FALLBACK_PERMISSIONS|resolveRoleFallbackPermissions/);
 });
 
+test('the application bootstrap is not a public endpoint (#17)', () => {
+  // This guard used to be blessed *by name* in the sweep above, as "a deliberate
+  // surface". It returned `true` even when authentication threw, and
+  // `AppBootstrapService` had a branch that assembled the payload for `request.user
+  // === undefined`. Measured against the running server with no credentials at all:
+  // HTTP 200, the reference dictionary, every unloading rule with its
+  // `penalty_rate_per_minute`, and three counts disclosing whether data exists.
+  //
+  // The comment that excused it was the defect's best disguise: a hole with a rationale
+  // reads as a decision, and nobody re-opens a decision.
+  const controller = read('backend/src/app-bootstrap/app-bootstrap.controller.ts');
+  const service = read('backend/src/app-bootstrap/app-bootstrap.service.ts');
+
+  // Matched on the decorator, not the bare name: the controller's comment explains why
+  // this guard is the wrong one, and a check that reads prose is a check that can be
+  // satisfied by an explanation instead of by code.
+  assert.doesNotMatch(controller, /@UseGuards\([^)]*OptionalJwtAuthGuard/,
+    'this guard authenticates nothing: it returns true on a failed authentication');
+  assert.match(controller, /@UseGuards\(JwtAuthGuard\)/);
+
+  // And the service must refuse a missing principal on its own, so a future caller that
+  // reaches it without the guard cannot assemble the payload for a stranger.
+  assert.match(service, /if \(!userId\)[\s\S]{0,200}UnauthorizedException/);
+
+  // The guard must not be reintroduced anywhere under a new name either.
+  const optional = globSync(resolve(root, 'backend/src/**/*.ts'))
+    .filter((file) => /@UseGuards\([^)]*OptionalJwtAuthGuard/.test(readFileSync(file, 'utf8')));
+  assert.deepEqual(
+    optional.map((file) => file.replace(root, '.')),
+    [],
+    'OptionalJwtAuthGuard returns true when authentication fails; a route behind it is unguarded',
+  );
+});
+
 test('PDF rendering is bounded and blocks external requests', () => {
   const dto = read('backend/src/report/dto/print-report.dto.ts');
   const service = read('backend/src/report/report.service.ts');

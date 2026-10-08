@@ -5,7 +5,6 @@
 import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { DatabaseBackup, FileText, Globe2, LayoutGrid, Package, RefreshCcw, Settings2, Shield, Users } from 'lucide-react';
 import { usePermissions } from '@hooks/usePermissions';
-import { hasGrantedPermission } from '@services/permissionMatcher';
 import type { ReportColumnConfig, SystemSettings, User } from '../../../types';
 
 const GeneralSettings = lazy(() => import('../components/GeneralSettings'));
@@ -41,11 +40,6 @@ type SettingsTabKey =
   | 'printing'
   | 'theme';
 
-const normalizePermissions = (permissions: unknown): string[] => {
-  if (!Array.isArray(permissions)) return [];
-  return [...new Set(permissions.filter((entry): entry is string => typeof entry === 'string'))];
-};
-
 const SettingsPage: React.FC<SettingsPageProps> = ({
   settings,
   onUpdateSettings,
@@ -70,15 +64,20 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     { key: 'theme' as const, label: 'الثيم واللغة', permission: 'theme.view', icon: Globe2 },
   ]), []);
 
-  const effectivePermissions = useMemo(() => {
-    // FC-SEC-005 — fail-closed. This used to substitute a hand-written
-    // SuperAdmin/Admin grant list whenever the server sent an empty permission
-    // array, so a session with zero permissions rendered admin tabs the API
-    // would then refuse. An empty list now means no tabs.
-    const currentUserPermissions = normalizePermissions(currentUser?.permissions);
-    return [...new Set([...permissions, ...currentUserPermissions])];
-  }, [currentUser?.permissions, permissions]);
-  const visibleTabs = tabs.filter((tab) => hasPermission(tab.permission) || hasGrantedPermission(effectivePermissions, tab.permission));
+  // FC-SEC-005 / #14 — one source of truth: the session.
+  //
+  // This was a union of the session's permissions and `currentUser.permissions`. The
+  // union is the fail-*open* direction, which is why it was wrong even though the two
+  // usually agree: remove a permission from a role, and the session still carries it
+  // until the next sign-in, so the union keeps a tab visible whose every API call
+  // returns 403. The comment above it claimed fail-closed while the union sat right
+  // underneath — the assertion and the code described different things.
+  //
+  // They converge without the merge: `App.tsx` writes the reconciled user back to the
+  // auth session (`setAuthUser`) when the users list changes, and `usePermissions`
+  // reads that session. So a revoked permission disappears as soon as the refresh that
+  // carried its removal arrives, and no second source can outlive the first.
+  const visibleTabs = tabs.filter((tab) => hasPermission(tab.permission));
   const grantedPermissionsPreview = useMemo(
     () => permissions.slice().sort().slice(0, 8),
     [permissions],

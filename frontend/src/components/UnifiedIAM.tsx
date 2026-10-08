@@ -5,6 +5,7 @@
 // UTF-8 Encoding Fixed - Arabic Text Restored
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { usePermissions } from '@hooks/usePermissions';
 import {
   Users,
   Shield,
@@ -67,6 +68,22 @@ import {
 type UpdateUserPayload = Parameters<typeof updateUser>[1];
 
 const UnifiedIAM: React.FC = () => {
+  // #13 — the screen was gated on `users.view` and then offered delete, lock,
+  // bulk-delete, bulk role assignment and permission-matrix saving to whoever could see
+  // it. The API enforces each of those separately (`users.delete`, `users.lock`,
+  // `users.update`) — verified live: a `users.view` account gets 403 on all four. So this
+  // was never a hole, it was a screen offering buttons that can only fail.
+  //
+  // Which is its own kind of lie, and an expensive one to debug: an administrator
+  // concludes their role is broken, or worse, grants themselves `users.delete` to make a
+  // button work. Hiding a control the caller cannot use is not security theatre — it is
+  // the UI telling the truth about what the session may do.
+  const { hasPermission } = usePermissions();
+  const canCreate = hasPermission('users.create');
+  const canUpdate = hasPermission('users.update');
+  const canDelete = hasPermission('users.delete');
+  const canLock = hasPermission('users.lock');
+
   const [users, setUsers] = useState<UserDto[]>([]);
   const [roles, setRoles] = useState<RoleDto[]>([]);
   const [loading, setLoading] = useState(false);
@@ -518,7 +535,9 @@ const UnifiedIAM: React.FC = () => {
                 <div className="mb-4">
                   <ChangeMyPassword />
                 </div>
-                {/* Create User Form */}
+                {/* Create User Form — `users.create`, the same key POST /users is behind. */}
+                {canCreate && (
+                <>
             <motion.div
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
@@ -625,10 +644,12 @@ const UnifiedIAM: React.FC = () => {
                     إنشاء دعوة
                   </button>
                 </div>
-              </form>
+</form>
             </motion.div>
+                </>
+                )}
 
-            {/* FC-SEC-006 — the invitation deliverable. Shown, copyable, and
+                {/* FC-SEC-006 — the invitation deliverable. Shown, copyable, and
                 explicit that nothing was emailed. */}
             {pendingInvitation && (
               <motion.div
@@ -746,7 +767,7 @@ const UnifiedIAM: React.FC = () => {
                 </select>
                 <button
                   onClick={handleBulkAssignRole}
-                  disabled={!selectedIds.length}
+                  disabled={!canUpdate || !selectedIds.length}
                   className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
                 >
                   <Shield className="w-4 h-4 inline ml-1" />
@@ -754,7 +775,7 @@ const UnifiedIAM: React.FC = () => {
                 </button>
                 <button
                   onClick={handleBulkDelete}
-                  disabled={!selectedIds.length}
+                  disabled={!canDelete || !selectedIds.length}
                   className="rounded-lg border border-red-300 bg-white px-3 py-1.5 text-sm font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
                 >
                   <Trash2 className="w-4 h-4 inline ml-1" />
@@ -906,6 +927,7 @@ const UnifiedIAM: React.FC = () => {
                           </td>
                           <td className="p-3">
                             <div className="flex gap-1">
+                              {canLock && (
                               <button
                                 onClick={() => handleLockUser(user.id, !user.isActive)}
                                 className={`p-2 rounded-lg transition ${
@@ -917,13 +939,22 @@ const UnifiedIAM: React.FC = () => {
                               >
                                 {user.isActive ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
                               </button>
+                            )}
+                            {canDelete && (
                               <button
                                 onClick={() => handleDeleteUser(user.id)}
                                 className="p-2 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 transition"
                                 title="حذف"
                               >
-                                <Trash2 className="w-4 h-4" />
+<Trash2 className="w-4 h-4" />
                               </button>
+                            )}
+                            {/* Nothing to show when the session may not mutate users at all —
+                                an empty cell reads as "no actions apply here" rather than
+                                advertising buttons that would 403. */}
+                            {!canLock && !canDelete && (
+                              <span className="text-xs text-slate-400">عرض فقط</span>
+                            )}
                             </div>
                           </td>
                         </tr>
@@ -973,7 +1004,11 @@ const UnifiedIAM: React.FC = () => {
                 <Shield className="w-6 h-6 text-emerald-600" />
                 مصفوفة الصلاحيات
               </h3>
-              <div className="flex items-center gap-2">
+<div className="flex items-center gap-2">
+                {/* The keys the server checks: POST /users/roles is `users.create`,
+                    and both DELETE /users/roles/:id and PUT .../permissions are
+                    `users.update` — role deletion is not `users.delete`. */}
+                {canCreate && (
                 <button
                   onClick={() => setShowRoleModal(true)}
                   className="rounded-xl border border-emerald-600 text-emerald-600 px-4 py-2 font-bold hover:bg-emerald-50 transition flex items-center gap-2"
@@ -981,9 +1016,11 @@ const UnifiedIAM: React.FC = () => {
                   <Plus className="w-4 h-4" />
                   إنشاء دور
                 </button>
+                )}
                 <select
                   value={selectedRoleId}
                   onChange={(e) => setSelectedRoleId(e.target.value)}
+                  aria-label="الدور المعروض"
                   className="rounded-xl border border-slate-200 px-4 py-2"
                 >
                     {roles.map((role) => (
@@ -992,6 +1029,7 @@ const UnifiedIAM: React.FC = () => {
                       </option>
                     ))}
                   </select>
+                  {canUpdate && (
                   <button
                     type="button"
                     onClick={handleDeleteRole}
@@ -1001,13 +1039,16 @@ const UnifiedIAM: React.FC = () => {
                     <Trash2 className="w-4 h-4" />
                     حذف الدور
                   </button>
+                  )}
+                  {canUpdate && (
                   <button
                     onClick={handleSaveMatrix}
-                  className="rounded-xl bg-emerald-600 text-white px-4 py-2 font-bold hover:bg-emerald-700 transition flex items-center gap-2"
-                >
-                  <Save className="w-4 h-4" />
-                  حفظ
-                </button>
+                    className="rounded-xl bg-emerald-600 text-white px-4 py-2 font-bold hover:bg-emerald-700 transition flex items-center gap-2"
+                  >
+                    <Save className="w-4 h-4" />
+                    حفظ
+                  </button>
+                  )}
               </div>
             </div>
 
