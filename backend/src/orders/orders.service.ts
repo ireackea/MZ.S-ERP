@@ -5,6 +5,7 @@ import { AuditService } from '../audit/audit.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { TimeService } from '../common/time/time.service';
 import { executeIdempotently } from '../common/idempotency';
+import { assertItemIsNotArchived } from '../common/item-guard';
 import { CreateOrderDto, UpdateOrderDto } from './dto/order.dto';
 
 @Injectable()
@@ -25,10 +26,13 @@ export class OrdersService {
     const numeric = normalized.map(Number).filter(Number.isInteger);
     const items = await client.item.findMany({
       where: { OR: [{ publicId: { in: normalized } }, ...(numeric.length ? [{ id: { in: numeric } }] : [])] },
-      select: { id: true, publicId: true, unit: true },
+      select: { id: true, publicId: true, unit: true, name: true, isArchived: true },
     });
     const result = new Map<string, { id: number; unit: string | null }>();
     items.forEach((item) => {
+      // An order line is a commitment to move goods, so a retired item cannot carry one —
+      // the same rule the movement and stocktaking paths now share.
+      assertItemIsNotArchived(item);
       result.set(String(item.id), { id: item.id, unit: item.unit });
       if (item.publicId) result.set(item.publicId, { id: item.id, unit: item.unit });
     });
@@ -109,10 +113,23 @@ export class OrdersService {
     return execution.value;
   }
 
-  async update(id: string, dto: UpdateOrderDto, actorId = 'system', actorUsername = 'system', idempotencyKey?: string) {
+  async update(id: string, dto: UpdateOrderDto, actorId = 'system', actorUsername = 'system', idempotencyKey?: string, scope = 'default') {
     const execution = await executeIdempotently(this.prisma, actorId, 'orders.update', idempotencyKey, { id, dto }, async (tx) => {
-      const existing = await tx.order.findUnique({ where: { id }, select: { id: true } });
+      const existing = await tx.order.findUnique({ where: { id }, select: { id: true, warehouseId: true } });
       if (!existing) throw new NotFoundException(`Order not found: ${id}`);
+      // The scope check `remove` already had, and `update` did not.
+      //
+      // Measured: a session holding only `sales.update.orders` cancelled an order in a
+      // warehouse it is not scoped to — and the same session is refused when it tries to
+      // *delete* that order. One controller, two answers for one caller, and the
+      // difference is which verb it used.
+      //
+      // Editing is the softer of the two and that is exactly why it needs the check:
+      // cancelling a sale in someone else's warehouse is not visible as a deletion, it
+      // shows up as a status change somebody has to notice.
+      if (scope !== 'all' && existing.warehouseId !== scope) {
+        throw new ForbiddenException('Order is outside the permitted warehouse scope');
+      }
       if (dto.partnerId) {
         const partner = await tx.partner.findUnique({ where: { id: dto.partnerId }, select: { id: true } });
         if (!partner) throw new NotFoundException(`Partner not found: ${dto.partnerId}`);
@@ -151,8 +168,14 @@ export class OrdersService {
 
   async complete(id: string, warehouseId: string | undefined, actorId = 'system', actorUsername = 'system', idempotencyKey?: string) {
     const execution = await executeIdempotently(this.prisma, actorId, 'orders.complete', idempotencyKey, { id, warehouseId }, async (tx) => {
-      const existing = await tx.order.findUnique({ where: { id }, select: { status: true } });
+      const existing = await tx.order.findUnique({ where: { id }, select: { status: true, warehouseId: true } });
       if (!existing) throw new NotFoundException(`Order not found: ${id}`);
+      // Completing a sale commits it, so it carries the same scope check as update and
+      // delete. `warehouseId` was previously only *written* here, never compared against
+      // the order being completed.
+      if (warehouseId !== 'all' && existing.warehouseId !== warehouseId) {
+        throw new ForbiddenException('Order is outside the permitted warehouse scope');
+      }
       if (existing.status === 'cancelled') throw new ConflictException('Cancelled orders cannot be completed');
       const row = await tx.order.update({ where: { id }, data: { status: 'completed', warehouseId: warehouseId || undefined }, include: this.include() });
       return this.mapOrder(row);

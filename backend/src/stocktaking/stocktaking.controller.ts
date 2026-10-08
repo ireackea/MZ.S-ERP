@@ -27,24 +27,24 @@ export class StocktakingController {
   @Permissions('inventory.update.stocktaking')
   @Put(':id/entries')
   upsertEntry(@Param('id') id: string, @Body() dto: UpsertStocktakingEntryDto, @Headers('idempotency-key') key: string | undefined, @Req() req: any) {
-    return this.stocktakingService.upsertEntry(id, dto, req.user?.sub || req.user?.id, req.user?.username, key, req.user?.role === 'SuperAdmin' ? 'all' : 'default');
+    return this.stocktakingService.upsertEntry(id, dto, req.user?.sub || req.user?.id, req.user?.username, key, resolveWarehouseScope(req.user?.role));
   }
 
   @Permissions('inventory.update.stocktaking')
   @Post(':id/entries/:entryId/resolve')
   resolveEntry(@Param('id') id: string, @Param('entryId') entryId: string, @Body() dto: UpsertStocktakingEntryDto, @Headers('idempotency-key') key: string | undefined, @Req() req: any) {
-    return this.stocktakingService.resolveEntry(id, entryId, dto, req.user?.sub || req.user?.id, req.user?.username, key, req.user?.role === 'SuperAdmin' ? 'all' : 'default');
+    return this.stocktakingService.resolveEntry(id, entryId, dto, req.user?.sub || req.user?.id, req.user?.username, key, resolveWarehouseScope(req.user?.role));
   }
 
   @Permissions('inventory.update.stocktaking')
   @Post(':id/reopen')
   reopen(@Param('id') id: string, @Headers('idempotency-key') key: string | undefined, @Req() req: any) {
-    return this.stocktakingService.reopen(id, req.user?.sub || req.user?.id, req.user?.username, key, req.user?.role === 'SuperAdmin' ? 'all' : 'default');
+    return this.stocktakingService.reopen(id, req.user?.sub || req.user?.id, req.user?.username, key, resolveWarehouseScope(req.user?.role));
   }
 
   @Permissions('inventory.close.stocktaking')
   @Post(':id/close')
   close(@Param('id') id: string, @Body() dto: CloseStocktakingDto, @Headers('idempotency-key') key: string | undefined, @Req() req: any) {
-    return this.stocktakingService.close(id, dto, req.user?.sub || req.user?.id, req.user?.username, key, req.user?.role === 'SuperAdmin' ? 'all' : 'default');
+    return this.stocktakingService.close(id, dto, req.user?.sub || req.user?.id, req.user?.username, key, resolveWarehouseScope(req.user?.role));
   }
 }

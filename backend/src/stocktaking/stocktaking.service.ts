@@ -4,6 +4,7 @@ import { AuditService } from '../audit/audit.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { TransactionService } from '../transaction/transaction.service';
 import { executeIdempotently } from '../common/idempotency';
+import { assertItemIsNotArchived } from '../common/item-guard';
 import { CreateStocktakingSessionDto, CloseStocktakingDto, UpsertStocktakingEntryDto } from './dto/stocktaking.dto';
 
 @Injectable()
@@ -20,9 +21,13 @@ export class StocktakingService {
     const numeric = Number(normalized);
     const item = await client.item.findFirst({
       where: { OR: [{ publicId: normalized }, ...(Number.isInteger(numeric) ? [{ id: numeric }] : [])] },
-      select: { id: true, publicId: true, name: true, unit: true },
+      select: { id: true, publicId: true, name: true, unit: true, isArchived: true },
     });
     if (!item) throw new NotFoundException(`Item not found: ${identifier}`);
+    // Counting a retired item is as wrong as moving one, and closing the session then
+    // posts a variance against it — so the rule is applied where the count is recorded,
+    // not where the stock is corrected.
+    assertItemIsNotArchived(item, normalized);
     return item;
   }
 
