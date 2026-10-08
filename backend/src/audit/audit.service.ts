@@ -99,7 +99,11 @@ export type AuditAction =
   | 'PASSWORD_CHANGED'
   | 'PASSWORD_CHANGE_REJECTED'
   | 'PASSWORD_RESET_BY_ADMIN'
-  | 'PERMISSION_CHECK';
+  | 'PERMISSION_CHECK'
+  // #19 — a theme write to another account is a change to somebody's settings, and
+  // "who changed my settings" has to have an answer. Registered here rather than
+  // smuggled in as a cast, so the action list stays the one authority for audit filters.
+  | 'THEME_UPDATED';
 
 export interface AuditLogEntry {
   id: string;

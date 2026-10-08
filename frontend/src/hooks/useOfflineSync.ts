@@ -12,7 +12,19 @@ import { stopRealtimeSync, startRealtimeSync } from '../services/realtimeSync';
 type OfflineSyncSnapshot = {
   isOffline: boolean;
   isSyncing: boolean;
+  /**
+   * Tasks genuinely waiting to be sent: `pending` plus `processing`.
+   *
+   * This used to be the queue's `total`, so a task the server *refused* was counted as
+   * waiting to be sent. The two answers point an operator at opposite actions — "let it
+   * sync" versus "your permission was refused, this will never sync" — and only one of
+   * them is actionable by waiting.
+   */
   pendingCount: number;
+  /** Refused by the server with 401/403. Retrying cannot help; a permission must change. */
+  blockedCount: number;
+  /** Everything in the queue, whatever its state. */
+  totalCount: number;
   conflictCount: number;
   failedCount: number;
   deadLetterCount: number;
@@ -27,6 +39,8 @@ let snapshot: OfflineSyncSnapshot = {
   isOffline: typeof navigator !== 'undefined' ? !navigator.onLine : false,
   isSyncing: false,
   pendingCount: 0,
+  blockedCount: 0,
+  totalCount: 0,
   conflictCount: 0,
   failedCount: 0,
   deadLetterCount: 0,
@@ -72,7 +86,9 @@ const refreshPendingCount = async () => {
   try {
     const stats = await mutationQueueService.getQueueStats();
     setSnapshot({
-      pendingCount: stats.total,
+      pendingCount: stats.pending + stats.processing,
+      blockedCount: stats.blocked,
+      totalCount: stats.total,
       conflictCount: stats.conflicts,
       failedCount: stats.failed,
       deadLetterCount: stats.deadLetter,

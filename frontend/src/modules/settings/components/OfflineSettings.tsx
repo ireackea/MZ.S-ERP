@@ -11,7 +11,11 @@ interface OfflineSettingsProps {
 
 const OfflineSettings: React.FC<OfflineSettingsProps> = ({ }) => {
   const { hasPermission } = usePermissions();
-  const { isOffline, isSyncing, pendingCount, conflictCount, failedCount, deadLetterCount, retryFailed } = useOfflineSync();
+  const { isOffline, isSyncing, pendingCount, blockedCount, totalCount, conflictCount, failedCount, deadLetterCount, retryFailed } = useOfflineSync();
+  // The button retries `failed`, `conflicts` and `dead-letter`. A queue holding only
+  // `blocked` tasks has nothing retryable in it, so an enabled button here promised an
+  // action and silently did none — the worst state for a button labelled "retry all".
+  const retryableCount = conflictCount + failedCount + deadLetterCount;
   const lastLoadedAt = useInventoryStore((state) => state.lastLoadedAt);
   const syncing = useInventoryStore((state) => state.syncing);
   // Gate 4.7 - the inventory store's error is a *load* failure (a failed items or
@@ -49,17 +53,24 @@ const OfflineSettings: React.FC<OfflineSettingsProps> = ({ }) => {
           <div>
             <div className="font-black text-slate-900">طابور العمليات غير الملتزم</div>
             <div className="mt-2 text-sm text-slate-500">
-              {pendingCount} إجمالاً، {conflictCount} تعارض، {failedCount} فشل، {deadLetterCount} dead-letter
+              {totalCount} مهمة في الطابور: {pendingCount} بانتظار الإرسال، {conflictCount} تعارض، {failedCount} فشل، {deadLetterCount} متوقفة نهائيًا
             </div>
+            {blockedCount > 0 && (
+              <div className="mt-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+                <strong>{blockedCount}</strong> مهمة رفضها الخادم (صلاحية غير متوفرة).
+                لن تُرسل بإعادة المحاولة — يلزم تغيير الصلاحية أولاً، وإلا فستبقى محفوظة بانتظار قرار.
+              </div>
+            )}
           </div>
           <button
             type="button"
             onClick={() => void retryFailed()}
-            disabled={isSyncing || pendingCount === 0}
+            disabled={isSyncing || retryableCount === 0}
+            title={retryableCount === 0 ? 'لا توجد مهام قابلة لإعادة المحاولة' : undefined}
             className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
           >
             <RefreshCw size={16} />
-            إعادة محاولة الكل
+            إعادة محاولة الكل ({retryableCount})
           </button>
         </div>
       </div>

@@ -390,7 +390,10 @@ export const mutationQueueService = {
       }
     }
 
-    summary.pending = (await this.getQueue(ownerUserId)).length;
+    // Counted, not assumed: `pending` used to be the queue length, so a run that only hit
+    // 403s reported its refusals as work still waiting to go out. `summarize` already
+    // separates the states, so the number here means what its name says.
+    summary.pending = summarize(await this.getQueue(ownerUserId)).pending;
     return summary;
   },
 

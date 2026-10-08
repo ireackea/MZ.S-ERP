@@ -46,7 +46,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, onLogout }) => {
   const [conflictModalItem, setConflictModalItem] = useState<any>(null);
 
   const location = useLocation();
-  const { isOffline, pendingCount, conflictCount, failedCount, deadLetterCount } = useOfflineSync();
+  const { isOffline, pendingCount, blockedCount, conflictCount, failedCount, deadLetterCount } = useOfflineSync();
 
   useEffect(() => {
     const handleConflictEvent = (e: any) => {
@@ -152,6 +152,14 @@ const Layout: React.FC<LayoutProps> = ({ children, currentUser, onLogout }) => {
                   <span className="text-xs font-bold text-orange-500 flex items-center gap-1">
                     <CloudOff size={14} />
                     {pendingCount} عمليات معلقة
+                  </span>
+                )}
+                {/* Blocked is its own badge, not folded into "pending". A refused
+                    mutation is not waiting for the network, and an operator who cannot
+                    see it has no reason to go and look at the offline queue at all. */}
+                {blockedCount > 0 && (
+                  <span className="text-xs font-bold text-red-600" title="رفضها الخادم — يلزم تغيير الصلاحية">
+                    {blockedCount} مرفوضة
                   </span>
                 )}
                 {conflictCount > 0 && <span className="text-xs font-bold text-amber-600">{conflictCount} تعارض</span>}
