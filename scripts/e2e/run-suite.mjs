@@ -36,8 +36,25 @@ import process from 'node:process';
 const repoRoot = process.cwd();
 const e2eDir = join(repoRoot, 'tests', 'e2e');
 
+// Must match the specs, not the container.
+//
+// This was `http://localhost:3001` — the port the backend listens on *inside* its
+// container, which is not published to the host (`docker compose ps` shows
+// `8080->3001`). The specs resolve their own base URL in
+// `tests/e2e/support/runtimeConfig.ts`, which defaults to 8080, so the two halves
+// of the runner disagreed about which host to talk to.
+//
+// The consequence was not "the warmup does nothing". The login budget is keyed by
+// client address, so a warmup aimed at a port nothing is listening on clears the
+// bucket for a connection that never happens, and the specs go on exhausting the
+// real one: sixteen of thirty-two files failed on 429, and `rbac-matrix` took 364s
+// because it was waiting out the limiter rather than asserting. A harness that
+// produces failures which look like product defects is worse than one that stops.
+//
+// Defaults are now identical to the spec helper's, and `E2E_BASE_URL` still
+// overrides both for a runner inside the compose network.
 const backendUrl =
-  String(process.env.E2E_BASE_URL || 'http://localhost:3001').replace(/\/+$/, '');
+  String(process.env.E2E_BASE_URL || 'http://localhost:8080').replace(/\/+$/, '');
 const username = String(process.env.E2E_USERNAME || 'superadmin').trim();
 const password = String(process.env.E2E_PASSWORD || 'SecurePassword2026!');
 
