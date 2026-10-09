@@ -104,6 +104,43 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ }) => {
   const loadInFlightRef = useRef<Promise<void> | null>(null);
   const facetsLoadedRef = useRef(false);
 
+  /**
+   * Gate 3.9 — what the server is asked for, and why it lives in a ref.
+   *
+   * `loadAuditLogs` is memoised with an empty dependency list so that its identity
+   * never changes: the effect at `:189` keys on the raw filter state and re-runs on
+   * each change, and a callback that re-identified on every keystroke would make
+   * the effect above it re-fire too, doubling the request.
+   *
+   * That memoisation is also what broke it. A function created once keeps the
+   * `page` and filter values from the first render, so the effect re-requested the
+   * same first page with no filters, forever. Advancing to page 3 fetched page 1;
+   * picking `LOGIN_FAILED` fetched everything. The comment above the effect
+   * described that symptom as the thing being prevented.
+   *
+   * A ref holds the query for the render that is on screen. It is written during
+   * render rather than in an effect because an effect runs after the loader effect
+   * would already have read it — the two are ordered by declaration, and a promise
+   * is a poor thing to depend on ordering.
+   */
+  const buildAuditQuery = () => {
+    const query: Record<string, unknown> = {
+      limit: PAGE_SIZE,
+      offset: (page - 1) * PAGE_SIZE,
+    };
+    if (filterAction !== 'all') query.action = filterAction;
+    if (filterEntity !== 'all') query.entityType = filterEntity;
+    if (filterStatus !== 'all') query.status = filterStatus;
+    if (dateRangeStart) query.from = new Date(dateRangeStart).toISOString();
+    if (dateRangeEnd) query.to = new Date(`${dateRangeEnd}T23:59:59.999`).toISOString();
+    if (searchTerm.trim()) query.search = searchTerm.trim();
+    return query;
+  };
+
+  const currentQuery = buildAuditQuery();
+  const currentQueryRef = useRef(currentQuery);
+  currentQueryRef.current = currentQuery;
+
   const loadAuditLogs = useCallback(async (options?: { force?: boolean; background?: boolean }) => {
     const now = Date.now();
     if (!options?.force && now - lastLoadedAtRef.current < 30_000) {
@@ -125,18 +162,7 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ }) => {
         // for last quarter's LOGIN_FAILED events was shown an incomplete answer
         // and would have concluded there were none.
         const response = await apiClient.get('/audit/logs', {
-          params: {
-            limit: PAGE_SIZE,
-            offset: (page - 1) * PAGE_SIZE,
-            ...(filterAction !== 'all' ? { action: filterAction } : {}),
-            ...(filterEntity !== 'all' ? { entityType: filterEntity } : {}),
-            ...(filterStatus !== 'all' ? { status: filterStatus } : {}),
-            ...(dateRangeStart ? { from: new Date(dateRangeStart).toISOString() } : {}),
-            ...(dateRangeEnd
-              ? { to: new Date(`${dateRangeEnd}T23:59:59.999`).toISOString() }
-              : {}),
-            ...(searchTerm.trim() ? { search: searchTerm.trim() } : {}),
-          },
+          params: currentQueryRef.current,
         });
 
         const payload = (response.data ?? {}) as Partial<AuditLogsPage>;
@@ -237,6 +263,11 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ }) => {
       const response = await apiClient.get('/audit/logs/export', {
         params: {
           ...(filterAction !== 'all' ? { action: filterAction } : {}),
+          // Gate 3.9 — the list query sends this and the export did not, so the row
+          // count the "exported N of total" warning compares against was the count
+          // of a different result set than the file holds. An auditor filtering by
+          // entity exported every entity and was told the file was complete.
+          ...(filterEntity !== 'all' ? { entityType: filterEntity } : {}),
           ...(filterStatus !== 'all' ? { status: filterStatus } : {}),
           ...(dateRangeStart ? { from: new Date(dateRangeStart).toISOString() } : {}),
           ...(dateRangeEnd
