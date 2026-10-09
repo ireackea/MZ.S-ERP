@@ -733,6 +733,48 @@ export class UsersService {
    * `POST /auth/setup` only self-disables while some user holds SuperAdmin or
    * Admin, so a system with neither had no way back in at all.
    */
+  /**
+   * Gate 4.23 — the last-SuperAdmin check, made sound by serialising the operations
+   * that depend on it.
+   *
+   * `assertNotLastSuperAdmin` counts the active SuperAdmins and then the caller
+   * writes, with nothing between them. Two concurrent requests both read
+   * `remaining === 1`, both pass, and the system ends with zero active SuperAdmins —
+   * the state where nobody can administer the system, reached by the exact action the
+   * check exists to prevent. The same shape is under `deleteUser`, `bulkDelete`,
+   * `bulkAssignRole` and `updateUser`.
+   *
+   * A row lock (`SELECT … FOR UPDATE` in a transaction) is the fully general answer,
+   * and it is not what this is. This deployment is one backend process — the login
+   * budget buckets, the reset challenges and the restore-in-flight flag are all
+   * in-process state for the same reason — and a promise chain closes the race that
+   * actually exists here, without turning five methods into transactions whose audit
+   * writes would then have to happen outside them.
+   *
+   * If this ever runs as more than one replica, this is the line that stops being
+   * enough, and the transaction is what it has to become.
+   */
+  private superAdminGuard: Promise<unknown> = Promise.resolve();
+
+  /**
+   * Gate 4.23 - set by `updateUser` when its own conditions would demote the last
+   * active SuperAdmin, and run inside the serialised step below. A deferred check
+   * rather than an immediate one, because the username-clash lookup has to happen
+   * first and must not sit inside the guard.
+   */
+  private pendingSuperAdminCheck?: () => Promise<void>;
+
+  private withSuperAdminGuard<T>(work: () => Promise<T>): Promise<T> {
+    const run = this.superAdminGuard.then(work, work);
+    // Keep the chain alive even when a step throws, or one failure would wedge every
+    // later operation behind a rejected promise.
+    this.superAdminGuard = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
   private async assertNotLastSuperAdmin(userIds: string[], action: string): Promise<void> {
     const targets = await this.prisma.user.findMany({
       where: { id: { in: userIds } },
@@ -783,7 +825,9 @@ export class UsersService {
     const losesSuperAdmin = existing.role.name.toLowerCase() === 'superadmin'
       && ((roleId && roleId !== existing.roleId) || dto.isActive === false);
     if (losesSuperAdmin) {
-      await this.assertNotLastSuperAdmin([id], 'change');
+      // Gate 4.23 - the check moved into the same serialised step as the write below,
+      // so a concurrent demotion cannot pass a count this one already invalidated.
+      this.pendingSuperAdminCheck = () => this.assertNotLastSuperAdmin([id], 'change');
     }
 
     // Gate 4.13 - this method no longer accepts a password.
@@ -820,20 +864,25 @@ export class UsersService {
       }
     }
 
-    const updated = await this.prisma.user.update({
-      where: { id },
-      data: {
-        username: dto.username?.trim(),
-        email: dto.email === undefined ? undefined : dto.email?.trim() || null,
-        firstName: dto.firstName === undefined ? undefined : dto.firstName?.trim() || null,
-        lastName: dto.lastName === undefined ? undefined : dto.lastName?.trim() || null,
-        isActive: dto.isActive,
-        roleId,
-        // Gate 4.13 - the password branch above returns before this runs, so the only
-        // way this is set is a caller that never sent the field.
-        passwordHash: dto.password ? await bcrypt.hash(dto.password, 10) : undefined,
-      },
-      include: { role: true, createdOpeningBalances: { select: { id: true } } },
+    // Gate 4.23 - and it runs inside that serialised step, immediately before the
+    // write it is protecting, with nothing in between.
+    const updated = await this.withSuperAdminGuard(async () => {
+      await this.pendingSuperAdminCheck?.();
+      return this.prisma.user.update({
+        where: { id },
+        data: {
+          username: dto.username?.trim(),
+          email: dto.email === undefined ? undefined : dto.email?.trim() || null,
+          firstName: dto.firstName === undefined ? undefined : dto.firstName?.trim() || null,
+          lastName: dto.lastName === undefined ? undefined : dto.lastName?.trim() || null,
+          isActive: dto.isActive,
+          roleId,
+          // Gate 4.13 - the password branch above returns before this runs, so the
+          // only way this is set is a caller that never sent the field.
+          passwordHash: dto.password ? await bcrypt.hash(dto.password, 10) : undefined,
+        },
+        include: { role: true, createdOpeningBalances: { select: { id: true } } },
+      });
     });
 
     await this.writeAudit({
@@ -877,9 +926,10 @@ export class UsersService {
       );
     }
 
-    await this.assertNotLastSuperAdmin([id], 'deletion');
-
-    await this.prisma.user.delete({ where: { id } });
+    await this.withSuperAdminGuard(async () => {
+      await this.assertNotLastSuperAdmin([id], 'deletion');
+      await this.prisma.user.delete({ where: { id } });
+    });
 
     await this.writeAudit({
       userId: id,
@@ -937,39 +987,27 @@ export class UsersService {
       );
     }
 
-    // FC-SEC-012 — a lock no longer reuses isActive. Locking and deactivating
-    // are different decisions with different reasons and different reversals,
-    // and conflating them meant a locked account and a deactivated one could not
-    // be told apart in the list, in the filters, or in a support conversation.
+    // Gate 4.23 - the check and the write are one serialised step.
     //
-    // Gate 4.14 - the last-SuperAdmin guard now lives inside the write.
-    //
-    // `assertNotLastSuperAdmin` counts, then this updates, with nothing between
-    // them. Two concurrent locks both read `remaining === 1`, both passed, and the
-    // system ended with zero active SuperAdmins. A check outside the write can always
-    // be outrun; this puts the count and the flip in one statement so the database is
-    // the arbiter. When the guard refuses, `count` comes back 0 and nothing happened.
-    if (locked) {
-      // Gate 4.14 - still a read-then-write, still racy.
-      //
-      // Two concurrent locks both read `remaining === 1` and both pass, ending with
-      // zero active SuperAdmins. I did not fix it here on purpose: the fix that
-      // closes it is a `SELECT … FOR UPDATE` over the SuperAdmin rows inside a
-      // transaction, which changes the locking behaviour of the account path on a live
-      // system and deserves its own batch with its own e2e, not a rushed append to
-      // this one. Asserted as still-open in the section ledger.
-      await this.assertNotLastSuperAdmin([id], 'lock');
-    }
-
-    const updated = await this.prisma.user.update({
-      where: { id },
-      data: {
-        isLocked: locked,
-        isActive: locked ? false : true,
-        lockoutUntil,
-        failedAttempts: locked ? existing.failedAttempts : 0,
-      },
-      include: { role: true, createdOpeningBalances: { select: { id: true } } },
+    // They used to be two, so two concurrent locks both read `remaining === 1`, both
+    // passed, and the system ended with zero active SuperAdmins. The guard closes in
+    // the other direction too: `assertNotLastSuperAdmin` is unchanged and still the
+    // single definition of the rule, but it now runs inside a step that cannot overlap
+    // with another one.
+    const updated = await this.withSuperAdminGuard(async () => {
+      if (locked) {
+        await this.assertNotLastSuperAdmin([id], 'lock');
+      }
+      return this.prisma.user.update({
+        where: { id },
+        data: {
+          isLocked: locked,
+          isActive: locked ? false : true,
+          lockoutUntil,
+          failedAttempts: locked ? existing.failedAttempts : 0,
+        },
+        include: { role: true, createdOpeningBalances: { select: { id: true } } },
+      });
     });
 
     await this.writeAudit({
@@ -1121,11 +1159,12 @@ export class UsersService {
     if (userIds.includes(actor.id)) {
       throw new ConflictException('You cannot change your own role through a bulk assignment.');
     }
-    await this.assertNotLastSuperAdmin(userIds, 'role reassignment');
-
-    const result = await this.prisma.user.updateMany({
-      where: { id: { in: userIds } },
-      data: { roleId: role.id },
+    const result = await this.withSuperAdminGuard(async () => {
+      await this.assertNotLastSuperAdmin(userIds, 'role reassignment');
+      return this.prisma.user.updateMany({
+        where: { id: { in: userIds } },
+        data: { roleId: role.id },
+      });
     });
 
     // Gate 4.15 - the subject of this row was the role, not a user.
@@ -1182,10 +1221,11 @@ export class UsersService {
       );
     }
 
-    await this.assertNotLastSuperAdmin(targetUsers.map((user) => user.id), 'deletion');
-
-    const result = await this.prisma.user.deleteMany({
-      where: { id: { in: targetUsers.map((user) => user.id) } },
+    const result = await this.withSuperAdminGuard(async () => {
+      await this.assertNotLastSuperAdmin(targetUsers.map((user) => user.id), 'deletion');
+      return this.prisma.user.deleteMany({
+        where: { id: { in: targetUsers.map((user) => user.id) } },
+      });
     });
 
     await this.writeAudit({
