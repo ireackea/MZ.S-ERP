@@ -373,6 +373,16 @@ export const useOfflineSync = () => {
     if (!readSnapshot().isOffline) await syncQueue();
   };
 
-  return { ...state, executeWithSync, retryFailed };
+  /**
+   * Gate 4.8 — the queue's actual contents, for the screen that tells an operator a
+   * permission is missing.
+   *
+   * Counts are not an answer to "which permission?". A blocked task names the URL
+   * and the method that were refused, and the panel used to render neither, so the
+   * operator was told to change a permission with no way to find out which one.
+   */
+  const queueTasks = async () => mutationQueueService.getQueue();
+
+  return { ...state, executeWithSync, retryFailed, queueTasks };
 };
 

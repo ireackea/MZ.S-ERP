@@ -335,7 +335,12 @@ export const mutationQueueService = {
       .map((task) => writeTask(db, {
         ...task,
         status: 'pending',
-        attempts: 0,
+        // Deliberately NOT reset to zero. A dead-letter task has already spent
+        // MAX_MUTATION_ATTEMPTS on this payload, and zeroing the counter handed it a
+        // fresh full budget on every press — so "retry all" turned a rejected
+        // mutation into an unbounded retry loop the operator could drive by hand,
+        // and the dead-letter ceiling stopped meaning anything. One retry, then the
+        // ceiling applies again, which is what the number is for.
         leaseUntil: undefined,
         nextRetryAt: undefined,
         lastError: undefined,
