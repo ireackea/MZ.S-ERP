@@ -5,6 +5,18 @@ export type ReferenceDataPayload = {
   units: string[];
 };
 
+/**
+ * Gate 4.4 — the panel used to count usage from the loaded catalogue, which is
+ * capped at 1000 rows. Past that a referenced value looked unreferenced and its
+ * Delete button was enabled next to a banner claiming it was unused. The count
+ * comes from the database instead, so it is the same number the server deletes
+ * against.
+ */
+export type ReferenceDataUsageCounts = {
+  categories: Record<string, number>;
+  units: Record<string, number>;
+};
+
 const unwrapData = <T,>(payload: any): T => (payload?.data ?? payload) as T;
 
 const normalizePayload = (payload: any): ReferenceDataPayload => ({
@@ -49,6 +61,34 @@ export const fetchReferenceData = async (): Promise<ReferenceDataPayload> => {
   try {
     const response = await apiClient.get('/reference-data');
     return normalizePayload(unwrapData<any>(response.data));
+  } catch (error) {
+    throw handleApiError(error);
+  }
+};
+
+const normalizeUsageCounts = (payload: any): ReferenceDataUsageCounts => {
+  const read = (raw: unknown): Record<string, number> => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+    const counts: Record<string, number> = {};
+    for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+      const normalizedKey = String(key ?? '').trim().toLowerCase();
+      const count = Number(value);
+      if (!normalizedKey || !Number.isFinite(count) || count <= 0) continue;
+      counts[normalizedKey] = count;
+    }
+    return counts;
+  };
+
+  return {
+    categories: read(payload?.categories),
+    units: read(payload?.units),
+  };
+};
+
+export const fetchReferenceDataUsageCounts = async (): Promise<ReferenceDataUsageCounts> => {
+  try {
+    const response = await apiClient.get('/reference-data/usage-counts');
+    return normalizeUsageCounts(unwrapData<any>(response.data));
   } catch (error) {
     throw handleApiError(error);
   }

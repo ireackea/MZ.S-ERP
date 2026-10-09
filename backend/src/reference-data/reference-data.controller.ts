@@ -16,6 +16,12 @@ export class ReferenceDataController {
     return { data: await this.referenceDataService.findAll() };
   }
 
+  @Permissions('settings.view.general')
+  @Get('usage-counts')
+  async usageCounts() {
+    return { data: await this.referenceDataService.getUsageCounts() };
+  }
+
   @Permissions('settings.update.system')
   @Post('categories')
   @HttpCode(HttpStatus.OK)

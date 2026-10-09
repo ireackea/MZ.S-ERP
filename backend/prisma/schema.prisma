@@ -107,6 +107,23 @@ model AuditLog {
   // Gate 2.8 - `targetUserId` was unindexed while being the only filter
   // GET /users/:id/audit uses, and it is written on every user-management action.
   @@index([targetUserId])
+  // Gate 2.9 — declared so the diff engine stops proposing to drop them. The
+  // audit list orders by timestamp descending on every page; the ascending index
+  // above cannot serve that without a sort, and the free-text search is five
+  // `ILIKE '%…%'` predicates that need the trigram operator class.
+  //
+  // Until these were in the datamodel they were objects Prisma did not own, and
+  // the next generated migration would have dropped the index that keeps that
+  // search off a sequential scan — silently, because nothing in the migration
+  // said "this also removes a search index".
+  //
+  // `map` is not optional here. Prisma derives an index name from the *field*
+  // name, and the searched column is `details`, mapped to `message`. Without it
+  // the datamodel would own a differently-named index and still want the live one
+  // dropped — the declaration would have fixed nothing.
+  @@index([timestamp(sort: Desc)], map: "audit_logs_timestamp_desc_idx")
+  @@index([actorUsername(ops: raw("gin_trgm_ops"))], type: Gin, map: "audit_logs_actorUsername_trgm_idx")
+  @@index([details(ops: raw("gin_trgm_ops"))], type: Gin, map: "audit_logs_message_trgm_idx")
   @@map("audit_logs")
 }
 
@@ -137,7 +154,10 @@ model IdempotencyRecord {
   actorId     String
   operation   String
   key         String
-  requestHash String
+  // Gate 2.9 — bare `String` means `text`; the column is char(64), which is also
+  // what a fixed-width digest should be. Queued as an ALTER TYPE on every
+  // generated migration until the datamodel said so.
+  requestHash String @db.Char(64)
   response    Json
   createdAt   DateTime @default(now())
   actor       User     @relation(fields: [actorId], references: [id], onDelete: Cascade)
@@ -180,7 +200,13 @@ model Item {
   minLimit        Decimal          @default(0)
   maxLimit        Decimal          @default(1000)
   orderLimit      Decimal?
-  packageWeight   Decimal?
+  // Gate 2.9 — bare `Decimal` means DECIMAL(65,30), and the column is numeric(12,3).
+  // The mismatch made every generated migration carry
+  // `ALTER TABLE "Item" ALTER COLUMN "packageWeight" SET DATA TYPE DECIMAL(65,30)`
+  // — a rewrite of the main items table under an ACCESS EXCLUSIVE lock, and a
+  // silent change of scale from three decimal places to thirty. Declaring what the
+  // column has always been removes it without touching a single row.
+  packageWeight   Decimal? @db.Decimal(12, 3)
   currentStock    Decimal          @default(0)
   description     String?
   /// The English name. This column did not exist until migration
@@ -344,6 +370,16 @@ model ItemOrderEntry {
 
 model Partner {
   id           String   @id @default(uuid())
+  // Gate 2.9 — the unique index on this column has existed in every deployment
+  // since the business-domains migration, which named it `Partner_name_key`.
+  // The datamodel declared a plain `@@index`, so the diff engine classified the
+  // live unique index as a foreign object: the next generated migration would
+  // have replaced it with a non-unique index and let duplicate partner names in.
+  //
+  // Declared as `@@unique` with an explicit `map` rather than `@unique` on the
+  // field, because Prisma derives the name from `@@map("partners")` and would
+  // have queued a rename to `partners_name_key`. The block form lets the
+  // declaration keep the name the index has actually had since it was created.
   name         String
   type         String
   phone        String
@@ -355,7 +391,7 @@ model Partner {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  @@index([name])
+  @@unique([name], map: "Partner_name_key")
   @@index([type])
   @@map("partners")
 }

@@ -1,9 +1,10 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, FileSpreadsheet, Info, Package, Plus, Ruler, ShieldAlert, Trash2, Upload } from 'lucide-react';
 import { usePermissions } from '@hooks/usePermissions';
 import { toast } from '@services/toastService';
 import { exportSheetsToExcel, readWorkbookSheets, type ExcelPrimitive, type ExcelWorkbookSheet } from '../../../utils/excelWorkbook';
 import { useInventoryStore } from '../../../store/useInventoryStore';
+import { fetchReferenceDataUsageCounts } from '../../../services/referenceDataService';
 import type { UnloadingRuleDraft } from '../../../types';
 import UnloadingRulesPanel from './UnloadingRulesPanel';
 
@@ -137,7 +138,6 @@ const importTotal = (summary: ImportSummary, field: keyof ImportCounts) => (
 
 const ReferenceDataSettings: React.FC<ReferenceDataSettingsProps> = ({ }) => {
   const { hasPermission } = usePermissions();
-  const items = useInventoryStore((state) => state.items);
   const categories = useInventoryStore((state) => state.categories);
   const units = useInventoryStore((state) => state.units);
   const unloadingRules = useInventoryStore((state) => state.unloadingRules);
@@ -154,29 +154,48 @@ const ReferenceDataSettings: React.FC<ReferenceDataSettingsProps> = ({ }) => {
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [excelBusy, setExcelBusy] = useState<ExcelBusyAction>(null);
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
+  const [usageCounts, setUsageCounts] = useState<{ categories: Record<string, number>; units: Record<string, number> }>({
+    categories: {},
+    units: {},
+  });
   const categoryInputRef = useRef<HTMLInputElement | null>(null);
   const unitInputRef = useRef<HTMLInputElement | null>(null);
   const excelFileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const categoryUsage = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const item of items) {
-      const key = normalizeKey(item.category);
-      if (!key) continue;
-      map.set(key, (map.get(key) || 0) + 1);
-    }
-    return map;
-  }, [items]);
+  /**
+   * Gate 4.4 — usage comes from the server, not from the loaded catalogue.
+   *
+   * The failure branch deliberately does NOT fall back to zero. An empty map
+   * would say "not in use" about every value and re-enable every Delete button —
+   * the exact false statement this replaced, arrived at through a different path.
+   * So an unknown count stays unknown: `usageKnown` stays false and the
+   * destructive control stays disabled until the real number arrives.
+   */
+  const [usageState, setUsageState] = useState<'loading' | 'ready' | 'failed'>('loading');
+  const usageKnown = usageState === 'ready';
 
-  const unitUsage = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const item of items) {
-      const key = normalizeKey(item.unit);
-      if (!key) continue;
-      map.set(key, (map.get(key) || 0) + 1);
+  const loadUsageCounts = useCallback(async () => {
+    if (!canView) return;
+    setUsageState('loading');
+    try {
+      setUsageCounts(await fetchReferenceDataUsageCounts());
+      setUsageState('ready');
+    } catch {
+      setUsageState('failed');
     }
-    return map;
-  }, [items]);
+  }, [canView]);
+
+  useEffect(() => {
+    void loadUsageCounts();
+  }, [loadUsageCounts]);
+
+  const categoryUsage = usageCounts.categories;
+  const unitUsage = usageCounts.units;
+  const usageCaption = (usage: number) => (
+    !usageKnown
+      ? usageState === 'failed' ? 'تعذّر التحقق من الاستخدام' : 'جار التحقق من الاستخدام'
+      : usage > 0 ? `مستخدم في ${usage} صنف` : 'غير مستخدم حاليًا'
+  );
 
   const sortedCategories = useMemo(() => [...categories].sort((left, right) => left.localeCompare(right, 'ar')), [categories]);
   const sortedUnits = useMemo(() => [...units].sort((left, right) => left.localeCompare(right, 'ar')), [units]);
@@ -275,7 +294,11 @@ const ReferenceDataSettings: React.FC<ReferenceDataSettingsProps> = ({ }) => {
       return;
     }
 
-    const count = categoryUsage.get(normalizeKey(category)) || 0;
+    const count = categoryUsage[normalizeKey(category)] || 0;
+    if (!usageKnown) {
+      toast.error('تعذّر التحقق من استخدام هذا القسم. أعد المحاولة قبل الحذف.');
+      return;
+    }
     if (count > 0) {
       toast.error(`لا يمكن حذف قسم مستخدم في ${count} صنف.`);
       return;
@@ -299,7 +322,11 @@ const ReferenceDataSettings: React.FC<ReferenceDataSettingsProps> = ({ }) => {
       return;
     }
 
-    const count = unitUsage.get(normalizeKey(unit)) || 0;
+    const count = unitUsage[normalizeKey(unit)] || 0;
+    if (!usageKnown) {
+      toast.error('تعذّر التحقق من استخدام وحدة القياس هذه. أعد المحاولة قبل الحذف.');
+      return;
+    }
     if (count > 0) {
       toast.error(`لا يمكن حذف وحدة مستخدمة في ${count} صنف.`);
       return;
@@ -598,7 +625,7 @@ const ReferenceDataSettings: React.FC<ReferenceDataSettingsProps> = ({ }) => {
           </div>
         </div>
         <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <div className="flex items-start gap-2"><Info size={16} className="mt-0.5 shrink-0" /><span>لا يمكن حذف أي قيمة مستخدمة فعليًا داخل الأصناف الحالية، حتى لا تتكسر المراجع المستخدمة في النظام.</span></div>
+          <div className="flex items-start gap-2"><Info size={16} className="mt-0.5 shrink-0" /><span>لا يمكن حذف أي قيمة تشير إليها أصناف غير مؤرشفة، حتى لا تتكسر المراجع المستخدمة في النظام. عدّ الاستخدام يُحسب من قاعدة البيانات مباشرة، لا من الأصناف المحمّلة في الشاشة.</span></div>
         </div>
       </div>
 
@@ -669,17 +696,17 @@ const ReferenceDataSettings: React.FC<ReferenceDataSettingsProps> = ({ }) => {
               <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">لا توجد أقسام مسجلة حاليًا.</div>
             ) : (
               sortedCategories.map((category) => {
-                const usage = categoryUsage.get(normalizeKey(category)) || 0;
+                const usage = categoryUsage[normalizeKey(category)] || 0;
                 return (
                   <div key={category} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 px-4 py-3">
                     <div>
                       <div className="font-bold text-slate-800">{category}</div>
-                      <div className="mt-1 text-xs text-slate-500">{usage > 0 ? `مستخدم في ${usage} صنف` : 'غير مستخدم حاليًا'}</div>
+                      <div className="mt-1 text-xs text-slate-500">{usageCaption(usage)}</div>
                     </div>
                     <button
                       type="button"
                       onClick={() => handleDeleteCategory(category)}
-                      disabled={!canEdit || usage > 0 || isBusy}
+                      disabled={!canEdit || !usageKnown || usage > 0 || isBusy}
                       className="inline-flex items-center gap-2 rounded-xl border border-red-300 px-3 py-2 text-sm font-bold text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       <Trash2 size={14} /> {pendingAction === `category:delete:${category}` ? 'جار الحذف' : 'حذف'}
@@ -721,17 +748,17 @@ const ReferenceDataSettings: React.FC<ReferenceDataSettingsProps> = ({ }) => {
               <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">لا توجد وحدات قياس مسجلة حاليًا.</div>
             ) : (
               sortedUnits.map((unit) => {
-                const usage = unitUsage.get(normalizeKey(unit)) || 0;
+const usage = unitUsage[normalizeKey(unit)] || 0;
                 return (
                   <div key={unit} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 px-4 py-3">
                     <div>
                       <div className="font-bold text-slate-800">{unit}</div>
-                      <div className="mt-1 text-xs text-slate-500">{usage > 0 ? `مستخدمة في ${usage} صنف` : 'غير مستخدمة حاليًا'}</div>
+                      <div className="mt-1 text-xs text-slate-500">{usageCaption(usage)}</div>
                     </div>
                     <button
                       type="button"
                       onClick={() => handleDeleteUnit(unit)}
-                      disabled={!canEdit || usage > 0 || isBusy}
+                      disabled={!canEdit || !usageKnown || usage > 0 || isBusy}
                       className="inline-flex items-center gap-2 rounded-xl border border-red-300 px-3 py-2 text-sm font-bold text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       <Trash2 size={14} /> {pendingAction === `unit:delete:${unit}` ? 'جار الحذف' : 'حذف'}
