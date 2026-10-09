@@ -5,7 +5,6 @@ import { usePermissions } from '@hooks/usePermissions';
 import { toast } from '@services/toastService';
 import type { ReportColumnConfig } from '../../../types';
 import { OPENING_BALANCE_COLUMNS, STOCK_CARD_COLUMNS, mergeColumns } from '@services/reportColumns';
-
 interface PrintingTemplatesProps {
   reportConfig: ReportColumnConfig[];
   onUpdateReportConfig: (config: ReportColumnConfig[]) => void;
@@ -21,16 +20,27 @@ const PrintingTemplates: React.FC<PrintingTemplatesProps> = ({
   }) => {
   const { hasPermission } = usePermissions();
   /**
-   * Gate 3.5 - both lists are seeded from the shared catalogue.
+   * Gate 4.6 - may this session change which columns print.
    *
-   * They used to be seeded from the store, which holds `[]`, so both rendered zero
-   * rows: there were no checkboxes to tick, and the Save button reported success
-   * while writing an empty list back. `getReportConfig()` in storage.ts existed to
-   * hydrate it and had no call sites.
+   * The tab that carries this panel is visible on `settings.view.general`, and the
+   * panel used to gate itself on `settings.update.system`. So a holder of exactly
+   * the tab's permission opened a tab that could only show them a red wall saying
+   * no. Every other panel in this section renders itself read-only for a viewer,
+   * which is what this does now: the columns are there to read, and inert to edit.
+   */
+  const canEditColumns = hasPermission('settings.update.system');
+  /**
+   * Gate 4.5 — the save writes where the reports read from.
    *
-   * `mergeColumns` folds any stored selection onto the catalogue, so a column added
-   * to a report later appears with its default instead of vanishing from the list,
-   * and a key from an older release cannot linger as a row the report never renders.
+   * `save()` called two store setters and a toast. The setters wrote to state only,
+   * and the store initialises `reportConfig` to `[]`, so the selection was gone on
+   * the next load — and `Reports.tsx`, which sends the visible columns to the
+   * server, held `[]` and got its request refused. The toast said "saved
+   * successfully" over both.
+   *
+   * The `save*` helpers persist, and the setters that now persist too, so this is a
+   * single write path rather than two. The props remain the store's current value,
+   * which is what the rest of the app renders from.
    */
   const [localReports, setLocalReports] = useState<ReportColumnConfig[]>(() =>
     mergeColumns(STOCK_CARD_COLUMNS, reportConfig),
@@ -44,15 +54,6 @@ const PrintingTemplates: React.FC<PrintingTemplatesProps> = ({
     () => setLocalOpening(mergeColumns(OPENING_BALANCE_COLUMNS, openingBalanceReportConfig)),
     [openingBalanceReportConfig],
   );
-
-  if (!hasPermission('settings.update.system')) {
-    return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
-        <div className="mb-2 flex items-center gap-2 font-bold"><ShieldAlert size={18} />لا تملك صلاحية تعديل قوالب الطباعة</div>
-        <div>تحتاج إلى الصلاحية <code>settings.update.system</code>.</div>
-      </div>
-    );
-  }
 
   const toggle = (setter: React.Dispatch<React.SetStateAction<ReportColumnConfig[]>>, key: string) => {
     setter((current) => current.map((entry) => entry.key === key ? { ...entry, isVisible: !entry.isVisible } : entry));
@@ -77,7 +78,7 @@ const PrintingTemplates: React.FC<PrintingTemplatesProps> = ({
             {localReports.map((column) => (
               <label key={column.key} className="flex items-center justify-between rounded-xl border border-slate-100 px-3 py-2 text-sm">
                 <span>{column.label}</span>
-                <input type="checkbox" checked={column.isVisible} onChange={() => toggle(setLocalReports, column.key)} />
+                <input type="checkbox" checked={column.isVisible} disabled={!canEditColumns} onChange={() => toggle(setLocalReports, column.key)} />
               </label>
             ))}
           </div>
@@ -88,14 +89,14 @@ const PrintingTemplates: React.FC<PrintingTemplatesProps> = ({
             {localOpening.map((column) => (
               <label key={column.key} className="flex items-center justify-between rounded-xl border border-slate-100 px-3 py-2 text-sm">
                 <span>{column.label}</span>
-                <input type="checkbox" checked={column.isVisible} onChange={() => toggle(setLocalOpening, column.key)} />
+                <input type="checkbox" checked={column.isVisible} disabled={!canEditColumns} onChange={() => toggle(setLocalOpening, column.key)} />
               </label>
             ))}
           </div>
         </div>
       </div>
       <div className="flex justify-end">
-        <button onClick={save} className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white"><Save size={16} /> حفظ القوالب</button>
+        <button onClick={save} disabled={!canEditColumns} className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white"><Save size={16} /> حفظ القوالب</button>
       </div>
     </div>
   );

@@ -48,6 +48,15 @@ import { normalizeUsers } from '../services/iamService';
 import {
   getOperationPrintConfig,
   getOperationPrintTemplates,
+  // Gate 4.5 — the column configs are hydrated here like the print configs above
+  // were. They used to start `[]` and nothing filled them, so `Reports.tsx` and
+  // `OpeningBalancePage.tsx` read an empty list and sent `columns: []` to the
+  // server, which refuses it. The settings tab was configuring a document that was
+  // already broken, and reporting success.
+  getReportConfig,
+  getOpeningBalanceReportConfig,
+  saveReportConfig,
+  saveOpeningBalanceReportConfig,
   getStocktakingPrintConfig,
   getStocktakingPrintTemplates,
   saveOperationPrintConfig,
@@ -811,8 +820,9 @@ export const useInventoryStore = create<Store>()(
       roles: [],
       systemSettings: DEFAULT_SYSTEM_SETTINGS,
       unloadingRules: [],
-      reportConfig: [],
-      openingBalanceReportConfig: [],
+      // Gate 4.5 — hydrated from the persisted selection, not left `[]`.
+      reportConfig: getReportConfig(),
+      openingBalanceReportConfig: getOpeningBalanceReportConfig(),
       formulas: [],
       units: [],
       categories: [],
@@ -1218,11 +1228,20 @@ export const useInventoryStore = create<Store>()(
         set({ unloadingRules: normalizeUnloadingRulesCollection(rules), unloadingRulesLoadedAt: Date.now() });
       },
 
+      /**
+       * Gate 4.5 — persisting here as well as in state.
+       *
+       * The setter wrote to state only, which is why a saved selection survived a
+       * re-render and not a reload: the store is rebuilt from this object on every
+       * load, so an in-memory-only write is a write that vanishes.
+       */
       setReportConfig: (config) => {
+        saveReportConfig(config);
         set({ reportConfig: [...config] });
       },
 
       setOpeningBalanceReportConfig: (config) => {
+        saveOpeningBalanceReportConfig(config);
         set({ openingBalanceReportConfig: [...config] });
       },
 

@@ -17,6 +17,7 @@ import type {
 } from '../types';
 import { canonicalizeOperationType } from '../utils/operationTypes';
 import { assertStorageKeyAllowed } from './storageOwnership';
+import { mergeColumns, OPENING_BALANCE_COLUMNS, STOCK_CARD_COLUMNS } from './reportColumns';
 
 const INVENTORY_STORE_KEY = 'ff_inventory_store_v1';
 const TRANSACTIONS_KEY = 'feed_factory_transactions';
@@ -94,27 +95,6 @@ const defaultAppearance = (): OperationAppearance[] => ([
 	{ type: 'انتاج', color: '#3b82f6', fontSize: 'medium' },
 	{ type: 'هالك', color: '#f59e0b', fontSize: 'medium' },
 	{ type: 'مرتجع', color: '#0ea5e9', fontSize: 'medium' },
-]);
-
-const defaultReportConfig = (): ReportColumnConfig[] => ([
-	{ key: 'date', label: 'التاريخ', isVisible: true },
-	{ key: 'warehouseInvoice', label: 'رقم إذن المخزن', isVisible: true },
-	{ key: 'code', label: 'الكود', isVisible: true },
-	{ key: 'item', label: 'الصنف', isVisible: true },
-	{ key: 'type', label: 'نوع الحركة', isVisible: true },
-	{ key: 'quantity', label: 'الكمية', isVisible: true },
-	{ key: 'unit', label: 'الوحدة', isVisible: true },
-	{ key: 'partner', label: 'المورد أو المستلم', isVisible: true },
-	{ key: 'notes', label: 'ملاحظات', isVisible: true },
-]);
-
-const defaultOpeningBalanceReportConfig = (): ReportColumnConfig[] => ([
-	{ key: 'item', label: 'الصنف', isVisible: true },
-	{ key: 'quantity', label: 'الكمية', isVisible: true },
-	{ key: 'unitCost', label: 'تكلفة الوحدة', isVisible: true },
-	{ key: 'unit', label: 'الوحدة', isVisible: true },
-	{ key: 'category', label: 'التصنيف', isVisible: true },
-	{ key: 'code', label: 'الكود', isVisible: true },
 ]);
 
 const parseGridConfig = (value?: string): GridColumnPreference[] => {
@@ -234,7 +214,16 @@ export const saveAppearanceSettings = (settings: OperationAppearance[]) => write
 	settings.map((setting) => ({ ...setting, type: canonicalizeOperationType(setting.type) })),
 );
 
-export const getReportConfig = (): ReportColumnConfig[] => readJson<ReportColumnConfig[]>(REPORT_CONFIG_KEY, defaultReportConfig());
+/**
+ * Gate 4.5 — folded onto the catalogue on the way out, not on the way in.
+ *
+ * This returned the stored array raw, so a key written by an older release reached
+ * the caller and the panel rendered it as a checkbox for a column the report cannot
+ * draw. `mergeColumns` also de-duplicates first, which is what repairs a save that
+ * was corrupted into holding a key twice.
+ */
+export const getReportConfig = (): ReportColumnConfig[] =>
+	mergeColumns(STOCK_CARD_COLUMNS, readJson<ReportColumnConfig[] | undefined>(REPORT_CONFIG_KEY, undefined));
 export const saveReportConfig = (config: ReportColumnConfig[]) => writeJson(REPORT_CONFIG_KEY, config);
 
 export const getOperationPrintConfig = (): Record<string, unknown> => readJson<Record<string, unknown>>(OPERATION_PRINT_CONFIG_KEY, {});
@@ -249,16 +238,9 @@ export const saveStocktakingPrintConfig = (config: Record<string, unknown>) => w
 export const getStocktakingPrintTemplates = (): Array<Record<string, unknown>> => readJson<Array<Record<string, unknown>>>(STOCKTAKING_PRINT_TEMPLATES_KEY, []);
 export const saveStocktakingPrintTemplates = (templates: Array<Record<string, unknown>>) => writeJson(STOCKTAKING_PRINT_TEMPLATES_KEY, templates);
 
-export const getOpeningBalanceReportConfig = (): ReportColumnConfig[] => {
-	const defaults = defaultOpeningBalanceReportConfig();
-	const stored = readJson<ReportColumnConfig[]>(OPENING_BALANCE_REPORT_CONFIG_KEY, defaults);
-	if (!Array.isArray(stored) || stored.length === 0) return defaults;
-
-	const allowed = new Set(defaults.map((column) => column.key));
-	const filtered = stored.filter((column) => allowed.has(column.key));
-	const missing = defaults.filter((column) => !filtered.some((entry) => entry.key === column.key));
-	return [...filtered, ...missing];
-};
+/** Same shape, for the valuation report. Kept apart from the movement report above. */
+export const getOpeningBalanceReportConfig = (): ReportColumnConfig[] =>
+	mergeColumns(OPENING_BALANCE_COLUMNS, readJson<ReportColumnConfig[] | undefined>(OPENING_BALANCE_REPORT_CONFIG_KEY, undefined));
 
 export const saveOpeningBalanceReportConfig = (config: ReportColumnConfig[]) => writeJson(OPENING_BALANCE_REPORT_CONFIG_KEY, config);
 

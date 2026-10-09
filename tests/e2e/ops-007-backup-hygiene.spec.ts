@@ -309,8 +309,25 @@ describeLive('B14 — schema drift is known at boot, not at restore time', () =>
     }
 
     // `schemaDrift` is attached, not folded into the verdict: an intact, readable
-    // archive is not "unhealthy" because a different image would be needed to restore it.
-    expect(data?.data?.verdict).toMatch(/healthy|degraded|unhealthy/);
+    // archive is not "unhealthy" because a different image would be needed to
+    // restore it.
+    //
+    // The assertion used to be `/healthy|degraded|unhealthy/`, and `unhealthy`
+    // contains the substring `healthy`, so one of the four verdicts the payload can
+    // actually carry — the only one the expression accepts — was the one it was
+    // matching against. `ok`, `stale` and `none` all failed it. So the check passed
+    // whenever it happened to be `unhealthy` and failed whenever it was not, which
+    // is not a test of the invariant above but of the state an earlier spec left
+    // the schedule in.
+    const verdicts = ['ok', 'stale', 'unhealthy', 'none'];
+    expect(verdicts, `verdict was ${data?.data?.verdict}`).toContain(data?.data?.verdict);
+
+    // The invariant, stated as itself: drift alone must not push the verdict to
+    // `unhealthy`. 3-2-1 is a warning and yields `stale`, which is the honest
+    // answer, so `stale` is allowed here.
+    if (drift.severity !== 'error') {
+      expect(['ok', 'stale', 'none']).toContain(data?.data?.verdict);
+    }
   }, 240_000);
 });
 
