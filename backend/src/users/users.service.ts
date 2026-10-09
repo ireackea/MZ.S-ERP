@@ -786,8 +786,25 @@ export class UsersService {
       await this.assertNotLastSuperAdmin([id], 'change');
     }
 
-    if (dto.password) {
-      this.assertPasswordPolicy(dto.password);
+    // Gate 4.13 - this method no longer accepts a password.
+    //
+    // It used to, which made `PUT /users/:id` the only way in this system to change
+    // a credential with nothing to prove the caller was entitled to: no current
+    // password, no self-check, and an audit row that reads "Updated user <name>", so
+    // a password set through the admin edit form was indistinguishable in the trail
+    // from a name change. `changePassword` verifies the current password,
+    // `resetPassword` refuses self-service and revokes the sessions, and this had
+    // neither.
+    //
+    // POST /users/:id/reset-password is the path that is guarded properly, so it is
+    // named in the refusal rather than left to be found. The DTO still carries the
+    // field so an older client gets this answer instead of a validation error that
+    // would send it looking for a spelling mistake.
+    if (dto.password !== undefined) {
+      throw new BadRequestException(
+        'Password cannot be changed through this endpoint. Use POST /users/:id/reset-password, '
+        + 'which revokes the account\'s sessions and forces the holder to set a new one.',
+      );
     }
 
     // FC-SEC-004 + P2002 — a duplicate username must surface as a 409 with a
@@ -812,6 +829,8 @@ export class UsersService {
         lastName: dto.lastName === undefined ? undefined : dto.lastName?.trim() || null,
         isActive: dto.isActive,
         roleId,
+        // Gate 4.13 - the password branch above returns before this runs, so the only
+        // way this is set is a caller that never sent the field.
         passwordHash: dto.password ? await bcrypt.hash(dto.password, 10) : undefined,
       },
       include: { role: true, createdOpeningBalances: { select: { id: true } } },

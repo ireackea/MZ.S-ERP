@@ -22,6 +22,7 @@ import {
   UserCog,
   Monitor,
   Activity,
+  KeyRound,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -43,6 +44,8 @@ import {
   type UserAuditDto,
   type UsersStatusFilter,
 } from '@services/usersService';
+import { resetUserPassword } from '@services/passwordService';
+import { useSession } from '@hooks/useSession';
 import UnifiedIamRoleModal from './unified-iam/RoleModal';
 import ChangeMyPassword from './unified-iam/ChangeMyPassword';
 import { formatDateTime } from '@services/dateFormat';
@@ -87,6 +90,15 @@ const UnifiedIAM: React.FC = () => {
   // Save button to every default Admin that could only come back 403, with nothing
   // saying why. `isSuper` is the session's own `*`, which is what SuperAdmin holds.
   const canManageRoles = canUpdate && isSuper;
+  // Gate 4.13 - resetting somebody else's password is `users.update` plus
+  // `POST /users/:id/reset-password`, which refuses self-service. The button is
+  // disabled on the actor's own row because the endpoint will refuse it anyway, and
+  // telling them why beats a 403 that reads as a bug.
+  const canResetPassword = canUpdate;
+  // The row the actor is sitting in: the endpoint refuses self-service, so the button
+  // is disabled there rather than left to explain a 403.
+  const { data: currentSession } = useSession();
+  const sessionUserId = currentSession?.user?.id;
   // Gate 4.12 - creation has its own permission on top of the role requirement.
   // Gating it on `canManageRoles` alone would hand a SuperAdmin without
   // `users.create` a button the server refuses: `POST /users/roles` is
@@ -348,6 +360,34 @@ const UnifiedIAM: React.FC = () => {
       void loadUsers(true);
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, 'فشل حذف المستخدم'));
+    }
+  };
+
+  /**
+   * Gate 4.13 - reset another user's password through the guarded endpoint.
+   *
+   * This action existed in `passwordService.ts` and had no UI at all, because the
+   * only way to change a credential was `PUT /users/:id` with a `password` field —
+   * no current password, no self-check, and audited as a generic "Updated user".
+   * The server now refuses that field and points here.
+   *
+   * The new password is generated rather than typed: the caller does not need to
+   * choose one, and a temporary value that must be changed is safer than a value
+   * somebody invents once and reuses.
+   */
+  const handleResetPassword = async (id: string, username: string) => {
+    const generated = Math.random().toString(36).slice(-10) + 'A1!';
+    if (!window.confirm(
+      `سيُعيّن لكلمة مرور ${username} كلمة مؤقتة جديدة، وتُبطل كل جلساته، ويُلزم بتغييرها عند أول دخول.\n\n`
+      + `الكلمة المؤقتة (انسخها الآن، لن تُعرض مرة أخرى):\n\n    ${generated}`,
+    )) return;
+
+    try {
+      await resetUserPassword(id, generated);
+      toast.success('تمت إعادة تعيين كلمة المرور. الكلمة المؤقتة معروضة في نافذة التأكيد.');
+      void loadUsers(true);
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, 'فشل إعادة تعيين كلمة المرور'));
     }
   };
 
@@ -947,6 +987,16 @@ const UnifiedIAM: React.FC = () => {
                           </td>
                           <td className="p-3">
                             <div className="flex gap-1">
+                              {canResetPassword && (
+                                <button
+                                  onClick={() => handleResetPassword(user.id, user.username)}
+                                  className="p-2 rounded-lg bg-slate-50 text-slate-700 hover:bg-slate-100 transition"
+                                  title="إعادة تعيين كلمة المرور (تُبطل جلساته ويُلزمه بتغييرها)"
+                                  disabled={user.id === sessionUserId}
+                                >
+                                  <KeyRound className="w-4 h-4" />
+                                </button>
+                              )}
                               {canLock && (
                               <button
                                 onClick={() => handleLockUser(user.id, !user.isActive)}

@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   listUsers: vi.fn(),
   listRoles: vi.fn(),
   fetchUserAudit: vi.fn(),
+  resetUserPassword: vi.fn(),
+  session: { data: { user: { id: 'actor-1' } } },
 }));
 
 /**
@@ -22,6 +24,14 @@ vi.mock('@hooks/usePermissions', () => ({
     permissions: mocks.permissions,
     isSuper: mocks.permissions.includes('*'),
   }),
+}));
+
+vi.mock('@/services/passwordService', () => ({
+  resetUserPassword: mocks.resetUserPassword,
+}));
+
+vi.mock('@/hooks/useSession', () => ({
+  useSession: () => mocks.session,
 }));
 
 vi.mock('@/services/usersService', async () => {
@@ -70,6 +80,8 @@ beforeEach(() => {
   mocks.listUsers.mockResolvedValue({ data: [user], total: 1, page: 1 });
   mocks.listRoles.mockResolvedValue([{ id: 'r1', name: 'Viewer', permissions: [] }]);
   mocks.fetchUserAudit.mockResolvedValue({ rows: [], total: 0 });
+  mocks.resetUserPassword.mockResolvedValue({ reset: true, username: 'target', mustChangePassword: true });
+  window.confirm = vi.fn(() => true);
 });
 
 // Switches to the permissions-matrix tab and waits for its heading. It deliberately
@@ -183,5 +195,41 @@ describe('#13 the IAM screen shows the controls the session may use', () => {
 
     expect(screen.queryByText('إنشاء دور')).toBeNull();
     expect(screen.queryByText('حذف الدور')).toBeNull();
+  });
+});
+/**
+ * Gate 4.13 - the guarded password path had no UI at all.
+ *
+ * `resetUserPassword` existed in passwordService and nothing called it, because the
+ * only way to change a credential was `PUT /users/:id` with a `password` field —
+ * no current password, no self-check, and audited as a generic "Updated user". The
+ * server now refuses that field and points at this endpoint, so the button is what
+ * makes the refusal an answer rather than a dead end.
+ */
+describe('the password reset is reachable from the screen', () => {
+  it('offers the reset to a users.update session', async () => {
+    mocks.permissions = ['users.view', 'users.update'];
+    render(<UnifiedIAM />);
+    await screen.findByText('someone');
+
+    expect(screen.getByTitle(/إعادة تعيين كلمة المرور/)).toBeInTheDocument();
+  });
+
+  it('does not offer it to a session that cannot update users', async () => {
+    mocks.permissions = ['users.view'];
+    render(<UnifiedIAM />);
+    await screen.findByText('someone');
+
+    expect(screen.queryByTitle(/إعادة تعيين كلمة المرور/)).toBeNull();
+  });
+
+  it('disables it on the actor\'s own row, because the endpoint refuses self-service', async () => {
+    mocks.permissions = ['users.view', 'users.update'];
+    // The fixture user is u1, not the session's actor-1, so point the session at them.
+    mocks.session = { data: { user: { id: 'u1' } } };
+    render(<UnifiedIAM />);
+    await screen.findByText('someone');
+
+    expect((screen.getByTitle(/إعادة تعيين كلمة المرور/) as HTMLButtonElement).disabled).toBe(true);
   });
 });

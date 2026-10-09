@@ -113,8 +113,18 @@ describe('#25 a dirty panel is not unmounted without asking', () => {
       ['settings.view.general', 'users.view'].includes(permission));
   });
 
+  /**
+   * The panel is lazily loaded, so under a busy runner the query outlives the default
+   * one-second timeout and the test fails with "label not found" on a screen that is
+   * merely still loading. Named here rather than left to flake: this file failed one
+   * run in three before this, which is the shape of defect that teaches people to
+   * re-run until it passes.
+   */
+  const findByCompanyName = () =>
+    screen.findByLabelText(/اسم الشركة/, {}, { timeout: 10_000 });
+
   const dirtyTheForm = async () => {
-    const nameInput = await screen.findByLabelText(/اسم الشركة/);
+    const nameInput = await findByCompanyName();
     fireEvent.change(nameInput, { target: { value: 'اسم جديد' } });
   };
 
@@ -148,7 +158,7 @@ describe('#25 a dirty panel is not unmounted without asking', () => {
     const confirmSpy = vi.spyOn(window, 'confirm');
     renderPage(<SettingsPage {...baseProps()} />);
     // Wait for the form so the click is not racing the load.
-    await screen.findByLabelText(/اسم الشركة/);
+    await findByCompanyName();
 
     fireEvent.click(screen.getByRole('tab', { name: TABS['users.view'] }));
 
