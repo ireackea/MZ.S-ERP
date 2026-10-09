@@ -47,8 +47,8 @@ const snapshot = (over: Partial<SystemSettings> = {}) => ({
   },
 });
 
-const setup = () =>
-  render(<GeneralSettings settings={emptyProps} onUpdateSettings={vi.fn()} />);
+const setup = (over: Partial<React.ComponentProps<typeof GeneralSettings>> = {}) =>
+  render(<GeneralSettings settings={emptyProps} onUpdateSettings={vi.fn()} {...over} />);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -195,5 +195,75 @@ describe('GeneralSettings', () => {
     await screen.findByDisplayValue('د.ل');
     expect(screen.getByLabelText(/البريد الإلكتروني/)).toBeInTheDocument();
     expect(screen.getByLabelText(/الرقم الضريبي/)).toBeInTheDocument();
+  });
+});
+/**
+ * Gate 4.9 — a write conflict was dressed as a read failure.
+ *
+ * `loadError` was one state for two unrelated events. A 409 — somebody else saved
+ * while this screen was open — set it, and the banner it drives says "the fields
+ * below may show default values and not the saved ones" and disables Save forever
+ * until a re-read. Both are false: the read succeeded, those are the stored values
+ * plus what the operator typed, and the only exit was a re-read that threw their
+ * edits away.
+ *
+ * It fails safe — the concurrent write is never overwritten — so this is about the
+ * screen lying about its own state, not about data being lost silently.
+ */
+describe('a write conflict is not reported as a read failure', () => {
+  const conflict409 = () => {
+    const conflict = Object.assign(new Error('عدّلها مستخدم آخر'), {
+      response: { status: 409, data: { message: 'اسم الشركة: عدّلها مستخدم آخر بعد أن فتحت الشاشة.' } },
+    });
+    mocks.saveSystemSettings.mockRejectedValue(conflict);
+  };
+
+  it('names the conflict without claiming the fields may be defaults', async () => {
+    conflict409();
+    setup();
+    await screen.findByDisplayValue('د.ل');
+
+    fireEvent.change(screen.getByDisplayValue('د.ل'), { target: { value: 'ج.م' } });
+    fireEvent.click(screen.getByRole('button', { name: /حفظ الإعدادات العامة/ }));
+
+    expect(await screen.findByText(/عدّلها مستخدم آخر/)).toBeInTheDocument();
+    expect(screen.queryByText(/تعذّر قراءة الإعدادات المحفوظة/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/قد تعرض قيمًا افتراضية/)).not.toBeInTheDocument();
+  });
+
+  it('offers a way to keep the edits instead of forcing a re-read', async () => {
+    conflict409();
+    setup();
+    await screen.findByDisplayValue('د.ل');
+
+    fireEvent.change(screen.getByDisplayValue('د.ل'), { target: { value: 'ج.م' } });
+    fireEvent.click(screen.getByRole('button', { name: /حفظ الإعدادات العامة/ }));
+
+    expect(await screen.findByText(/عدّلها مستخدم آخر/)).toBeInTheDocument();
+    // The operator's own value is still in the field, so the screen must not imply
+    // that it is gone.
+    expect(screen.getByDisplayValue('ج.م')).toBeInTheDocument();
+  });
+});
+/**
+ * Gate 4.10 — leaving by tab switch threw the edits away silently.
+ *
+ * The screen guarded `beforeunload` and nothing else, but these panels are unmounted
+ * by a tab switch inside a single-page app. So the one exit that had no confirmation
+ * of its own was the one nobody was guarding: type a company name, open another tab,
+ * come back, and it is gone with no message at any point.
+ */
+describe('the form tells the tab owner when it is dirty', () => {
+  it('reports dirty when the operator types and clean again after a save', async () => {
+    const onDirtyChange = vi.fn();
+    const done = setup({ onDirtyChange });
+    await screen.findByDisplayValue('د.ل');
+
+    fireEvent.change(screen.getByDisplayValue('د.ل'), { target: { value: 'ج.م' } });
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true));
+
+    fireEvent.click(screen.getByRole('button', { name: /حفظ الإعدادات العامة/ }));
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false));
+    done.unmount();
   });
 });

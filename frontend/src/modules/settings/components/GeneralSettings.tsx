@@ -19,9 +19,19 @@ import type { SystemSettings } from '../../../types';
 interface GeneralSettingsProps {
   settings: SystemSettings;
   onUpdateSettings: (settings: SystemSettings) => void;
+  /**
+   * Gate 4.10 — told whenever the form becomes dirty or clean.
+   *
+   * The screen guards the browser being closed (`beforeunload`) and nothing else, but
+   * these panels are unmounted by a tab switch inside a single-page app — so leaving
+   * by clicking another tab threw the edits away silently while the guard covered the
+   * one exit that already had its own confirmation. The owner of the tabs needs to
+   * know, and it cannot read this component's state.
+   */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
-const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, onUpdateSettings }) => {
+const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, onUpdateSettings, onDirtyChange }) => {
   const { hasPermission } = usePermissions();
   const canView = hasPermission('settings.view.general');
   const canEdit = hasPermission('settings.update.system');
@@ -33,6 +43,18 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, onUpdateSet
   const [baseline, setBaseline] = useState<SystemSettings>(settings);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  /**
+   * Gate 4.9 — a 409, kept separate from a read failure.
+   *
+   * `loadError` was one state for two unrelated events. A write conflict set it, and
+   * the banner that reads it then claimed "the fields below may show default values
+   * and not the saved ones" and disabled Save until a re-read. Both are false: the
+   * read succeeded, those are the stored values plus what the operator typed, and
+   * the only exit was a re-read that threw their edits away. It fails safe — the
+   * concurrent write is never overwritten — so what was wrong is the screen lying
+   * about its own state, which is the one thing a form must not do.
+   */
+  const [conflictError, setConflictError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [issues, setIssues] = useState<FieldIssue[]>([]);
   const [reason, setReason] = useState('');
@@ -119,6 +141,14 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, onUpdateSet
     return () => window.removeEventListener('beforeunload', handler);
   }, [dirty, saving]);
 
+  // Gate 4.10 - and the tab owner is told, so switching tabs asks instead of silently
+  // dropping what was typed. Fired from an effect rather than from `update()`, because
+  // the number of setters that can make a form dirty is the number of fields, and
+  // this way there is one place.
+  useEffect(() => {
+    onDirtyChange?.(dirty && !saving);
+  }, [dirty, saving, onDirtyChange]);
+
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!canEdit || saving || loading) return;
@@ -140,6 +170,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, onUpdateSet
       setBaseline((current) => ({ ...current, ...snapshot.form }));
       setReason('');
       setIssues([]);
+      setConflictError(null);
       touchedFields.current.clear();
       setServerArrivedAfterTyping(false);
       // The store is what the report headers read, so it is updated from the server's
@@ -149,9 +180,10 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, onUpdateSet
       const status = error?.response?.status;
       const serverMessage = error?.response?.data?.message || error?.message;
       if (status === 409) {
-        // Somebody else saved while this screen was open. Applying over the top would
-        // discard their change invisibly, so this says what to do about it.
-        setLoadError(serverMessage || 'عدّلها مستخدم آخر. أعد تحميل الصفحة.');
+        // Somebody else saved while this screen was open, so applying over the top
+        // would discard their change invisibly. This branch says what to do about it
+        // rather than falling through to a generic failure.
+        setConflictError(serverMessage || 'عدّلها مستخدم آخر. أعد تحميل الصفحة ثم عدّل مجددًا.');
         toast.error(serverMessage || 'عدّلها مستخدم آخر. أعد تحميل الصفحة ثم عدّل مجددًا.');
         return;
       }
@@ -204,6 +236,32 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, onUpdateSet
       {loading && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           جارٍ قراءة الإعدادات المحفوظة من الخادم…
+        </div>
+      )}
+
+      {conflictError && (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+          <div className="flex items-start gap-2">
+            <AlertCircle size={18} className="mt-0.5 shrink-0" />
+            <div>
+              <div className="font-bold">تعارض الحفظ: عدّل هذا الإعداد مستخدم آخر.</div>
+              <p className="mt-1">{conflictError}</p>
+              <p className="mt-1">
+                ما في الحقول أدناه هو القيم المحفوظة مضافًا إليها ما كتبته أنت — لم تُفقد.
+                حدّث الشاشة لترى ما كتبه الآخر، أو عدّل ثم أعد الحفظ.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setConflictError(null);
+                  reloadFromServer();
+                }}
+                className="mt-2 rounded-xl border border-amber-400 bg-white px-3 py-1.5 text-xs font-bold"
+              >
+                حدّث الشاشة
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -313,7 +371,11 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, onUpdateSet
         <button
           type="submit"
           disabled={saving || loading || !canEdit || !dirty || Boolean(loadError)}
-          title={loadError ? 'لا يمكن الحفظ قبل نجاح قراءة الإعدادات المحفوظة.' : undefined}
+          title={loadError
+            ? 'لا يمكن الحفظ قبل نجاح قراءة الإعدادات المحفوظة.'
+            : conflictError
+              ? 'هناك تعارض مع حفظ آخر. راجع الملاحظة أعلاه ثم أعد المحاولة.'
+              : undefined}
           className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
         >
           <Save size={16} /> {saving ? 'جارٍ الحفظ…' : 'حفظ الإعدادات العامة'}

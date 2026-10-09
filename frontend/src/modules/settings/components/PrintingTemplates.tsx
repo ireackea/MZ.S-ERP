@@ -1,5 +1,5 @@
 // ENTERPRISE FIX: Phase 2 – التناسق والإعدادات العالمية - 2026-03-13
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Save, ShieldAlert } from 'lucide-react';
 import { usePermissions } from '@hooks/usePermissions';
 import { toast } from '@services/toastService';
@@ -10,6 +10,8 @@ interface PrintingTemplatesProps {
   onUpdateReportConfig: (config: ReportColumnConfig[]) => void;
   openingBalanceReportConfig: ReportColumnConfig[];
   onUpdateOpeningBalanceReportConfig: (config: ReportColumnConfig[]) => void;
+  /** Gate 4.10 - reported so a tab switch asks instead of silently unmounting edits. */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 const PrintingTemplates: React.FC<PrintingTemplatesProps> = ({
@@ -17,6 +19,7 @@ const PrintingTemplates: React.FC<PrintingTemplatesProps> = ({
   onUpdateReportConfig,
   openingBalanceReportConfig,
   onUpdateOpeningBalanceReportConfig,
+  onDirtyChange,
   }) => {
   const { hasPermission } = usePermissions();
   /**
@@ -54,6 +57,26 @@ const PrintingTemplates: React.FC<PrintingTemplatesProps> = ({
     () => setLocalOpening(mergeColumns(OPENING_BALANCE_COLUMNS, openingBalanceReportConfig)),
     [openingBalanceReportConfig],
   );
+
+  // Gate 4.10 - the unsaved-changes guard for a panel that previously had none at
+  // all: it held its edits in local state, and a tab switch unmounted it. Only one of
+  // the two lists differing from what was loaded counts, because saving writes both.
+  const dirty = useMemo(
+    () =>
+      localReports.some((column) => {
+        const loaded = reportConfig.find((entry) => entry.key === column.key);
+        return loaded ? loaded.isVisible !== column.isVisible : true;
+      })
+      || localOpening.some((column) => {
+        const loaded = openingBalanceReportConfig.find((entry) => entry.key === column.key);
+        return loaded ? loaded.isVisible !== column.isVisible : true;
+      }),
+    [localReports, localOpening, reportConfig, openingBalanceReportConfig],
+  );
+
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
 
   const toggle = (setter: React.Dispatch<React.SetStateAction<ReportColumnConfig[]>>, key: string) => {
     setter((current) => current.map((entry) => entry.key === key ? { ...entry, isVisible: !entry.isVisible } : entry));

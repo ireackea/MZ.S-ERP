@@ -29,6 +29,17 @@ interface SettingsPageProps {
   currentUser?: User;
 }
 
+/**
+ * Gate 4.10 — which tab is carrying unsaved edits, keyed by tab.
+ *
+ * `switch (resolvedActiveTab)` unmounts whichever panel was open, so a panel with
+ * typed-in edits loses them the moment another tab is clicked — and the browser's
+ * `beforeunload` guard covers closing the window, which is the one exit that already
+ * had its own confirmation. The screen that unmounts the panel has to be the one to
+ * ask, and it can only ask if the panel tells it.
+ */
+type DirtyTabs = Partial<Record<SettingsTabKey, boolean>>;
+
 type SettingsTabKey =
   | 'general'
   | 'reference-data'
@@ -84,6 +95,9 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     [permissions],
   );
   const [activeTab, setActiveTab] = useState<SettingsTabKey>(visibleTabs[0]?.key || 'general');
+  const [dirtyTabs, setDirtyTabs] = useState<DirtyTabs>({});
+  const markDirty = (key: SettingsTabKey, dirty: boolean) =>
+    setDirtyTabs((current) => (current[key] === dirty ? current : { ...current, [key]: dirty }));
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Gate 3.6 — the tab is in the URL.
@@ -111,7 +125,20 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     }
   }, [requestedTab, visibleTabs, activeTab, searchParams, setSearchParams]);
 
+  /**
+   * Gate 4.10 - ask before unmounting a panel that is holding typed-in edits.
+   *
+   * The confirm is deliberately the only standing between an operator and their own
+   * discarded work; a panel left mid-edit is lost with no trace otherwise, and the
+   * guard that exists covers closing the browser rather than moving around this page.
+   */
+  const confirmLeaving = (from: SettingsTabKey | undefined, to: SettingsTabKey) => {
+    if (!from || from === to || !dirtyTabs[from]) return true;
+    return window.confirm('لديك تعديلات غير محفوظة في هذا القسم. هل تريد الانتقال وفقدانها؟');
+  };
+
   const selectTab = (key: SettingsTabKey) => {
+    if (!confirmLeaving(resolvedActiveTab, key)) return;
     setActiveTab(key);
     const next = new URLSearchParams(searchParams);
     next.set('tab', key);
@@ -129,7 +156,13 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   const renderTab = () => {
     switch (resolvedActiveTab) {
       case 'general':
-        return <GeneralSettings settings={settings} onUpdateSettings={onUpdateSettings} />;
+        return (
+          <GeneralSettings
+            settings={settings}
+            onUpdateSettings={onUpdateSettings}
+            onDirtyChange={(dirty) => markDirty('general', dirty)}
+          />
+        );
       case 'reference-data':
         return <ReferenceDataSettings />;
       case 'users':
@@ -151,6 +184,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
             onUpdateReportConfig={onUpdateReportConfig}
             openingBalanceReportConfig={openingBalanceReportConfig}
             onUpdateOpeningBalanceReportConfig={onUpdateOpeningBalanceReportConfig}
+            onDirtyChange={(dirty) => markDirty('printing', dirty)}
           />
         );
       case 'theme':
@@ -214,6 +248,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                     : (index - 1 + visibleTabs.length) % visibleTabs.length;
                 const next = visibleTabs[nextIndex];
                 if (!next) return;
+                if (!confirmLeaving(resolvedActiveTab, next.key)) return;
                 selectTab(next.key);
                 document.getElementById(`settings-tab-${next.key}`)?.focus();
               }}

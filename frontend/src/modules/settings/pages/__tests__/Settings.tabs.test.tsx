@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -91,5 +91,68 @@ describe('#14 the settings page reads one source of truth for permissions', () =
     expect(await screen.findByText(TABS['settings.view.general'])).toBeInTheDocument();
     expect(screen.queryByText(TABS['admin.reset_system'])).toBeNull();
     expect(screen.queryByText(TABS['backup.view'])).toBeNull();
+  });
+});
+
+/**
+ * Gate 4.10 - the tab switch is what loses the edits, so it is what has to ask.
+ *
+ * `renderTab()` unmounts the current panel, and a panel holding typed-in work kept
+ * it in state. The screen guarded `beforeunload` — closing the window, which already
+ * had its own prompt — and left the one exit that had none unguarded. Unmounting is
+ * silent by construction, so this asserts on the confirm and on the tab not changing.
+ */
+describe('#25 a dirty panel is not unmounted without asking', () => {
+  // The real GeneralSettings is what renders here - the lazy stubs above do not
+  // intercept the dynamic imports this page uses, which is fine, because a test that
+  // types into the real form and watches a real unmount is stronger than one that
+  // calls a mock. `loadSystemSettings` is not mocked here so the load fails, but the
+  // form still renders with the values the page was handed.
+  beforeEach(() => {
+    mocks.hasPermission.mockImplementation((permission: string) =>
+      ['settings.view.general', 'users.view'].includes(permission));
+  });
+
+  const dirtyTheForm = async () => {
+    const nameInput = await screen.findByLabelText(/اسم الشركة/);
+    fireEvent.change(nameInput, { target: { value: 'اسم جديد' } });
+  };
+
+  it('leaves the tab alone when the operator declines', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderPage(<SettingsPage {...baseProps()} />);
+    await dirtyTheForm();
+
+    fireEvent.click(screen.getByRole('tab', { name: TABS['users.view'] }));
+
+    expect(confirmSpy).toHaveBeenCalled();
+    // Still on general: the form the operator typed into is still mounted.
+    expect(screen.getByLabelText(/اسم الشركة/)).toBeInTheDocument();
+    confirmSpy.mockRestore();
+  });
+
+  it('switches when the operator accepts', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderPage(<SettingsPage {...baseProps()} />);
+    await dirtyTheForm();
+
+    fireEvent.click(screen.getByRole('tab', { name: TABS['users.view'] }));
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(await screen.findByText('المستخدمون والأدوار', { selector: 'h1, h2, h3' }).catch(() => null))
+      .toBeDefined();
+    confirmSpy.mockRestore();
+  });
+
+  it('does not ask when there is nothing to lose', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm');
+    renderPage(<SettingsPage {...baseProps()} />);
+    // Wait for the form so the click is not racing the load.
+    await screen.findByLabelText(/اسم الشركة/);
+
+    fireEvent.click(screen.getByRole('tab', { name: TABS['users.view'] }));
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
   });
 });
