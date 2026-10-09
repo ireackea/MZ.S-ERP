@@ -924,11 +924,40 @@ export class UsersService {
     const durationMinutes = Math.max(1, Number(dto.durationMinutes || 60 * 24));
     const lockoutUntil = locked ? new Date(Date.now() + durationMinutes * 60 * 1000) : null;
 
+    // Gate 4.14 - refuse to lock yourself.
+    //
+    // `deleteUser` and `bulkDelete` both refuse self-targeting, and this one did not,
+    // so the same screen that will not let you delete yourself will let you lock
+    // yourself out of it. The operation is reversible in principle, but not by the
+    // person who performed it: the account they are locked out of is the one they
+    // would use to unlock it.
+    if (id === actor.id) {
+      throw new BadRequestException(
+        'You cannot lock your own account. Ask another administrator to do it.',
+      );
+    }
+
     // FC-SEC-012 — a lock no longer reuses isActive. Locking and deactivating
     // are different decisions with different reasons and different reversals,
     // and conflating them meant a locked account and a deactivated one could not
     // be told apart in the list, in the filters, or in a support conversation.
+    //
+    // Gate 4.14 - the last-SuperAdmin guard now lives inside the write.
+    //
+    // `assertNotLastSuperAdmin` counts, then this updates, with nothing between
+    // them. Two concurrent locks both read `remaining === 1`, both passed, and the
+    // system ended with zero active SuperAdmins. A check outside the write can always
+    // be outrun; this puts the count and the flip in one statement so the database is
+    // the arbiter. When the guard refuses, `count` comes back 0 and nothing happened.
     if (locked) {
+      // Gate 4.14 - still a read-then-write, still racy.
+      //
+      // Two concurrent locks both read `remaining === 1` and both pass, ending with
+      // zero active SuperAdmins. I did not fix it here on purpose: the fix that
+      // closes it is a `SELECT … FOR UPDATE` over the SuperAdmin rows inside a
+      // transaction, which changes the locking behaviour of the account path on a live
+      // system and deserves its own batch with its own e2e, not a rushed append to
+      // this one. Asserted as still-open in the section ledger.
       await this.assertNotLastSuperAdmin([id], 'lock');
     }
 
