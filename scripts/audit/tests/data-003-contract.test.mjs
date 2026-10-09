@@ -14,7 +14,12 @@ test('data ownership schema contains server-backed domain models', () => {
   }
   assert.match(schema, /partnerId/);
   assert.match(schema, /stocktakingEntries/);
-  assert.match(schema, /@@unique\(\[monthKey, warehouseId\]\)/);
+  // The constraint, not its spelling. It now carries an explicit `map:` — the
+  // database has always called it `StocktakingSession_monthKey_warehouseId_key`, while
+  // Prisma derives from `@@map` and proposed renaming it, which was one of the
+  // thirty-three statements of drift the schema no longer has. A pattern that demanded
+  // the bare form would refuse the fix rather than guard the invariant.
+  assert.match(schema, /@@unique\(\[monthKey, warehouseId\](,\s*map:\s*"[^"]+")?\)/);
 });
 
 test('partners, orders, and stocktaking expose scoped idempotent APIs', () => {

@@ -272,7 +272,7 @@ model Item {
 
 /// One run of the bulk importer, as a thing that can be named and taken back.
 model ItemImportBatch {
-  id     String @id @default(uuid()) @db.Uuid
+  id     String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   /// What a route takes and what the audit row names. Short by construction: the
   /// audit column it replaced carried one id per created item and overflowed its own
   /// b-tree index at about sixty-five of them.
@@ -312,7 +312,7 @@ model ItemImportBatch {
 
 /// One rejected row, at a grain a client can page through.
 model ItemImportError {
-  id String @id @default(uuid()) @db.Uuid
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   batchId String @db.Uuid
   /// The sheet row the client claimed, so the message points at a line the operator
   /// can see. A dense index when the client sent nothing usable.
@@ -369,7 +369,7 @@ model ItemOrderEntry {
 }
 
 model Partner {
-  id           String   @id @default(uuid())
+  id           String   @id(map: "Partner_pkey") @default(uuid())
   // Gate 2.9 — the unique index on this column has existed in every deployment
   // since the business-domains migration, which named it `Partner_name_key`.
   // The datamodel declared a plain `@@index`, so the diff engine classified the
@@ -386,56 +386,56 @@ model Partner {
   address      String?
   notes        String?
   createdById  String?
-  createdBy    User?    @relation("PartnerCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy    User?    @relation("PartnerCreator", fields: [createdById], references: [id], onDelete: SetNull, map: "Partner_createdById_fkey")
   orders       Order[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   @@unique([name], map: "Partner_name_key")
-  @@index([type])
+  @@index([type], map: "Partner_type_idx")
   @@map("partners")
 }
 
 model Order {
-  id           String      @id @default(uuid())
-  orderNumber  String      @unique
+  id           String      @id(map: "Order_pkey") @default(uuid())
+  orderNumber  String      @unique(map: "Order_orderNumber_key")
   type         String
   partnerId    String
-  partner      Partner     @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  partner      Partner     @relation(fields: [partnerId], references: [id], onDelete: Restrict, map: "Order_partnerId_fkey")
   warehouseId  String?
   date         DateTime
   status       String      @default("pending")
   totalAmount  Decimal?
   notes        String?
   createdById  String?
-  createdBy    User?       @relation("OrderCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy    User?       @relation("OrderCreator", fields: [createdById], references: [id], onDelete: SetNull, map: "Order_createdById_fkey")
   items        OrderItem[]
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
-  @@index([partnerId])
-  @@index([warehouseId])
-  @@index([status])
-  @@index([date])
+  @@index([partnerId], map: "Order_partnerId_idx")
+  @@index([warehouseId], map: "Order_warehouseId_idx")
+  @@index([status], map: "Order_status_idx")
+  @@index([date], map: "Order_date_idx")
   @@map("orders")
 }
 
 model OrderItem {
-  id           String   @id @default(uuid())
+  id           String   @id(map: "OrderItem_pkey") @default(uuid())
   orderId      String
-  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade, map: "OrderItem_orderId_fkey")
   itemId       Int
-  item         Item     @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  item         Item     @relation(fields: [itemId], references: [id], onDelete: Restrict, map: "OrderItem_itemId_fkey")
   quantity     Decimal
   unit         String?
 
-  @@unique([orderId, itemId])
-  @@index([itemId])
+  @@unique([orderId, itemId], map: "OrderItem_orderId_itemId_key")
+  @@index([itemId], map: "OrderItem_itemId_idx")
   @@map("order_items")
 }
 
 model StocktakingSession {
-  id             String   @id @default(uuid())
+  id             String   @id(map: "StocktakingSession_pkey") @default(uuid())
   monthKey       String
   warehouseId    String   @default("default")
   status         String   @default("open")
@@ -445,44 +445,44 @@ model StocktakingSession {
   archivedPdfMime String?
   archivedPdfData String?
   createdById    String?
-  createdBy      User?    @relation("StocktakingCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy      User?    @relation("StocktakingCreator", fields: [createdById], references: [id], onDelete: SetNull, map: "StocktakingSession_createdById_fkey")
   entries        StocktakingEntry[]
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  @@unique([monthKey, warehouseId])
-  @@index([status])
+  @@unique([monthKey, warehouseId], map: "StocktakingSession_monthKey_warehouseId_key")
+  @@index([status], map: "StocktakingSession_status_idx")
   @@map("stocktaking_sessions")
 }
 
 model StocktakingEntry {
-  id           String   @id @default(uuid())
+  id           String   @id(map: "StocktakingEntry_pkey") @default(uuid())
   sessionId    String
-  session      StocktakingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session      StocktakingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade, map: "StocktakingEntry_sessionId_fkey")
   itemId       Int
-  item         Item     @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  item         Item     @relation(fields: [itemId], references: [id], onDelete: Restrict, map: "StocktakingEntry_itemId_fkey")
   actualCount  Decimal?
   notes        String?
   counts       StocktakingCount[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  @@unique([sessionId, itemId])
-  @@index([itemId])
+  @@unique([sessionId, itemId], map: "StocktakingEntry_sessionId_itemId_key")
+  @@index([itemId], map: "StocktakingEntry_itemId_idx")
   @@map("stocktaking_entries")
 }
 
 model StocktakingCount {
-  id         String   @id @default(uuid())
+  id         String   @id(map: "StocktakingCount_pkey") @default(uuid())
   entryId    String
-  entry      StocktakingEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  entry      StocktakingEntry @relation(fields: [entryId], references: [id], onDelete: Cascade, map: "StocktakingCount_entryId_fkey")
   value      Decimal
   countedById String?
-  countedBy  User?    @relation("StocktakingCounter", fields: [countedById], references: [id], onDelete: SetNull)
+  countedBy  User?    @relation("StocktakingCounter", fields: [countedById], references: [id], onDelete: SetNull, map: "StocktakingCount_countedById_fkey")
   countedAt  DateTime @default(now())
 
-  @@index([entryId])
-  @@index([countedById])
+  @@index([entryId], map: "StocktakingCount_entryId_idx")
+  @@index([countedById], map: "StocktakingCount_countedById_idx")
   @@map("stocktaking_counts")
 }
 
@@ -593,7 +593,7 @@ model ReferenceDataValue {
   kind      String
   value     String
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
   createdBy String?
   updatedBy String?
 
