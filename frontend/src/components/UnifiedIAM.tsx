@@ -78,11 +78,25 @@ const UnifiedIAM: React.FC = () => {
   // concludes their role is broken, or worse, grants themselves `users.delete` to make a
   // button work. Hiding a control the caller cannot use is not security theatre — it is
   // the UI telling the truth about what the session may do.
-  const { hasPermission } = usePermissions();
+  const { hasPermission, isSuper } = usePermissions();
   const canCreate = hasPermission('users.create');
   const canUpdate = hasPermission('users.update');
+  // Gate 4.12 - the service enforces the SuperAdmin role on every role write
+  // (`assertSuperAdmin`), which is stricter than the `users.create` / `users.update`
+  // permission the route decorators name. Gating on the permission alone showed a
+  // Save button to every default Admin that could only come back 403, with nothing
+  // saying why. `isSuper` is the session's own `*`, which is what SuperAdmin holds.
+  const canManageRoles = canUpdate && isSuper;
+  // Gate 4.12 - creation has its own permission on top of the role requirement.
+  // Gating it on `canManageRoles` alone would hand a SuperAdmin without
+  // `users.create` a button the server refuses: `POST /users/roles` is
+  // `users.create`, while editing and deleting are `users.update`.
+  const canCreateRoles = canCreate && isSuper;
   const canDelete = hasPermission('users.delete');
   const canLock = hasPermission('users.lock');
+  // Gate 4.12 - the per-user audit reader. `GET /users/:id/audit` requires it, and
+  // the tab that renders it did not check it at all.
+  const canAudit = hasPermission('users.audit');
 
   const [users, setUsers] = useState<UserDto[]>([]);
   const [roles, setRoles] = useState<RoleDto[]>([]);
@@ -512,18 +526,24 @@ const UnifiedIAM: React.FC = () => {
               <Table2 className="w-4 h-4 inline ml-1" />
               مصفوفة الصلاحيات
             </button>
-            <button
-              onClick={() => setActiveTab('audit')}
-              className={`px-4 py-2 rounded-xl text-sm font-bold transition ${
-                activeTab === 'audit'
-                  ? 'bg-emerald-600 text-white'
-                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              <History className="w-4 h-4 inline ml-1" />
-              سجل التدقيق
-            </button>
-          </div>
+            {/* Gate 4.12 - `GET /users/:id/audit` is `users.audit`, but this tab was
+                rendered for anyone holding `users.view`, which is the whole screen's
+                gate. So a viewer clicked it, saw the selector, picked a user, and got
+                a 403 rendered as a toast. The tab is now shown only to those the
+                endpoint will answer. */}
+            {canAudit && (
+              <button
+                onClick={() => setActiveTab('audit')}
+                className={`px-4 py-2 rounded-xl text-sm font-bold transition ${
+                  activeTab === 'audit'
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <History className="w-4 h-4 inline ml-1" />
+                سجل التدقيق
+              </button>
+            )}          </div>
         </div>
 
             {/* Users Tab */}
@@ -1008,15 +1028,21 @@ const UnifiedIAM: React.FC = () => {
                 {/* The keys the server checks: POST /users/roles is `users.create`,
                     and both DELETE /users/roles/:id and PUT .../permissions are
                     `users.update` — role deletion is not `users.delete`. */}
-                {canCreate && (
-                <button
-                  onClick={() => setShowRoleModal(true)}
-                  className="rounded-xl border border-emerald-600 text-emerald-600 px-4 py-2 font-bold hover:bg-emerald-50 transition flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  إنشاء دور
-                </button>
-                )}
+            {/* Gate 4.12 - the route decorators are `users.create` for creating a
+                role and `users.update` for editing or deleting one, but the service
+                additionally requires the SuperAdmin role itself. The default Admin
+                role holds both permissions, so every Admin on a default install saw
+                a Save button that could only ever come back 403, with no indication
+                of why. The screen now shows what the server actually requires. */}
+            {canCreateRoles && (
+              <button
+                onClick={() => setShowRoleModal(true)}
+                className="rounded-xl border border-emerald-600 text-emerald-600 px-4 py-2 font-bold hover:bg-emerald-50 transition flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                إنشاء دور
+              </button>
+            )}
                 <select
                   value={selectedRoleId}
                   onChange={(e) => setSelectedRoleId(e.target.value)}
@@ -1029,7 +1055,7 @@ const UnifiedIAM: React.FC = () => {
                       </option>
                     ))}
                   </select>
-                  {canUpdate && (
+                  {canManageRoles && (
                   <button
                     type="button"
                     onClick={handleDeleteRole}
@@ -1040,7 +1066,7 @@ const UnifiedIAM: React.FC = () => {
                     حذف الدور
                   </button>
                   )}
-                  {canUpdate && (
+                  {canManageRoles && (
                   <button
                     onClick={handleSaveMatrix}
                     className="rounded-xl bg-emerald-600 text-white px-4 py-2 font-bold hover:bg-emerald-700 transition flex items-center gap-2"

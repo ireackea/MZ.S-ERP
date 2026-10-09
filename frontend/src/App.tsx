@@ -670,6 +670,23 @@ const AppContent = () => {
     <Suspense fallback={<RouteLoadingFallback />}>{element}</Suspense>
   );
 
+  /**
+   * Gate 4.11 — the settings screen's props, built once.
+   *
+   * Four routes now render the same screen, each behind its own gate. Spreading the
+   * same object is what keeps them honest: a prop added later appears on all four at
+   * once, and there is no fourth copy of the company settings to fall out of date.
+   */
+  const settingsPageProps = {
+    settings: systemSettings,
+    onUpdateSettings: handleUpdateSettings,
+    reportConfig,
+    onUpdateReportConfig: handleUpdateReportConfig,
+    openingBalanceReportConfig,
+    onUpdateOpeningBalanceReportConfig: setOpeningBalanceReportConfig,
+    currentUser,
+  };
+
   // ENTERPRISE FIX: Phase 1 - Dual Mode Implementation - Offline Indicator
   const OfflineBanner = () => {
     if (!isOffline && !isSyncing) return null;
@@ -779,22 +796,50 @@ const AppContent = () => {
         <Route path="/reports" element={renderProtectedRoute('reports.view', 'reports', withLazyFallback(<ReportsPage />))} />
         <Route path="/formulation" element={renderProtectedRoute('formulation.view', 'formulation', withLazyFallback(<FormulationPage />))} />
         <Route path="/opening-balance" element={renderProtectedRoute('opening-balances.view', 'opening-balance', withLazyFallback(<OpeningBalanceRoutePage />))} />
+        {/**
+         * Gate 4.11 — dedicated gates for the tabs whose permission is not
+         * `settings.view.general`.
+         *
+         * `/settings` carries all ten tabs behind one permission, so the tabs that
+         * needed something stronger were unreachable by the very people holding it: a
+         * role granted only `admin.reset_system` could not open the reset screen at
+         * all, and the only way through was to grant `settings.view.general` as well —
+         * a read permission used to unlock a destructive one.
+         *
+         * Each route below is gated on the tab's own permission and opens that tab
+         * directly, so `?tab=` still works and the least-privilege route is a real way
+         * in. `SettingsPage` reads the query parameter it already supports.
+         */}
+        <Route
+          path="/settings/reset"
+          element={renderProtectedRoute(
+            'admin.reset_system',
+            'settings-reset',
+            withLazyFallback(<SettingsPage {...settingsPageProps} />),
+          )}
+        />
+        <Route
+          path="/settings/audit"
+          element={renderProtectedRoute(
+            'users.audit',
+            'settings-audit',
+            withLazyFallback(<SettingsPage {...settingsPageProps} />),
+          )}
+        />
+        <Route
+          path="/settings/theme"
+          element={renderProtectedRoute(
+            'theme.view',
+            'settings-theme',
+            withLazyFallback(<SettingsPage {...settingsPageProps} />),
+          )}
+        />
         <Route
           path="/settings"
           element={renderProtectedRoute(
             'settings.view.general',
             'settings',
-            withLazyFallback(
-              <SettingsPage
-                settings={systemSettings}
-                onUpdateSettings={handleUpdateSettings}
-                reportConfig={reportConfig}
-                onUpdateReportConfig={handleUpdateReportConfig}
-                openingBalanceReportConfig={openingBalanceReportConfig}
-                onUpdateOpeningBalanceReportConfig={setOpeningBalanceReportConfig}
-                currentUser={currentUser}
-              />
-            )
+            withLazyFallback(<SettingsPage {...settingsPageProps} />)
           )}
         />
         <Route

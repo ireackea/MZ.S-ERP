@@ -3,15 +3,24 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   permissions: [] as string[],
+  isSuper: false,
   listUsers: vi.fn(),
   listRoles: vi.fn(),
   fetchUserAudit: vi.fn(),
 }));
 
+/**
+ * Mirrors `hasGrantedPermission` for the two shapes this spec needs: an explicit
+ * list, or `*` which grants everything. `isSuper` is NOT treated as a wildcard
+ * here — a separate flag that grants everything would make "a SuperAdmin without
+ * `users.create`" untestable, and that pairing is exactly what gate 4.12 is about.
+ */
 vi.mock('@hooks/usePermissions', () => ({
   usePermissions: () => ({
-    hasPermission: (permission: string) => mocks.permissions.includes(permission),
+    hasPermission: (permission: string) =>
+      mocks.permissions.includes(permission) || mocks.permissions.includes('*'),
     permissions: mocks.permissions,
+    isSuper: mocks.permissions.includes('*'),
   }),
 }));
 
@@ -129,20 +138,50 @@ describe('#13 the IAM screen shows the controls the session may use', () => {
     expect(screen.queryByText('حذف الدور')).toBeNull();
   });
 
-  it('lets a users.update session save the matrix and delete a role', async () => {
-    mocks.permissions = ['users.view', 'users.update'];
+  /**
+   * Gate 4.12 — the route decorators are `users.update`, but the service calls
+   * `assertSuperAdmin` under them, so the two are not the same gate and the screen
+   * was showing the looser one.
+   *
+   * The default Admin role holds `users.*`, so on a stock install every Admin saw
+   * "حفظ" and "حذف الدور" and got a 403 for their trouble, with no hint that a role
+   * rather than a permission was what they lacked. These tests now assert the screen
+   * matches the server, which is the only version of "the UI tells the truth" that
+   * means anything.
+   */
+  it('offers no role control to a users.update session that is not SuperAdmin', async () => {
+    mocks.permissions = ['users.view', 'users.update', 'users.create'];
     render(<UnifiedIAM />);
     await openMatrix();
-    expect(screen.getByText('حذف الدور')).toBeInTheDocument();
-    expect(screen.getByText('حفظ', { exact: true })).toBeInTheDocument();
-    // Role creation is `users.create`, not `users.update`.
+
+    expect(screen.queryByText('حذف الدور')).toBeNull();
+    expect(screen.queryByText('حفظ', { exact: true })).toBeNull();
     expect(screen.queryByText('إنشاء دور')).toBeNull();
   });
 
-  it('offers role creation only with users.create', async () => {
+  it('offers role controls to a SuperAdmin', async () => {
+    mocks.permissions = ['users.view', '*'];
+    render(<UnifiedIAM />);
+    await openMatrix();
+
+    expect(screen.getByText('حذف الدور')).toBeInTheDocument();
+    expect(screen.getByText('حفظ', { exact: true })).toBeInTheDocument();
+    expect(screen.getByText('إنشاء دور')).toBeInTheDocument();
+  });
+
+  it('offers no role creation to a users.create session that is not SuperAdmin', async () => {
+    // Reachable and the real near-miss: an account that may create *users* is not
+    // thereby allowed to create *roles*. `POST /users/roles` is `users.create` and
+    // the service additionally requires SuperAdmin, so both halves must hold.
+    //
+    // A SuperAdmin without `users.create` is not a state this can test, because `*`
+    // grants everything by definition — that pairing is defensive in the component,
+    // not observable here.
     mocks.permissions = ['users.view', 'users.create'];
     render(<UnifiedIAM />);
     await openMatrix();
-    expect(screen.getByText('إنشاء دور')).toBeInTheDocument();
+
+    expect(screen.queryByText('إنشاء دور')).toBeNull();
+    expect(screen.queryByText('حذف الدور')).toBeNull();
   });
 });

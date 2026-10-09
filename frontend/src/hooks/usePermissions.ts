@@ -96,9 +96,15 @@ export const usePermissions = () => {
       hasAny,
       hasAll,
       can,
+      // Exposed for callers that must match a *role*, not a permission. The user
+      // service gates role writes on SuperAdmin while the route decorators ask only
+      // for `users.create` / `users.update`, so a screen gated on the permission
+      // alone shows a Save button only the server can refuse. `*` is what SuperAdmin
+      // holds, and it is already computed here for the matcher.
+      isSuper: permissionState.isSuper,
       isAuthenticated: Boolean(session?.isAuthenticated),
     }),
-    [normalizedPermissions, hasPermission, hasAny, hasAll, can, session?.isAuthenticated],
+    [normalizedPermissions, hasPermission, hasAny, hasAll, can, permissionState, session?.isAuthenticated],
   );
 };
 

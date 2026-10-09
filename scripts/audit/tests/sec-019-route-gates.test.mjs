@@ -11,9 +11,19 @@ const layout = readFileSync(join(repoRoot, 'frontend/src/components/Layout.tsx')
 const mirror = readFileSync(join(repoRoot, 'frontend/src/services/permissionsCatalog.ts'), 'utf8');
 const matcher = readFileSync(join(repoRoot, 'frontend/src/services/permissionMatcher.ts'), 'utf8');
 
-/** Ids the catalog declares, from the frontend mirror the contract test ties to the backend. */
+/**
+ * Ids the catalog declares, from the frontend mirror the contract test ties to the
+ * backend.
+ *
+ * `_` in the character class is not decoration. The class was `[a-zA-Z0-9.*\-]`, so
+ * `admin.reset_system` matched nothing at all and the id was silently absent from
+ * this set. A route gate naming it therefore passed the check below — which is the
+ * one assertion in this file that exists to stop a gate from refusing everyone —
+ * because the id it had to reject was invisible to the regex. The first route to use
+ * an underscore id found it.
+ */
 const catalogIds = new Set(
-  [...mirror.matchAll(/id:\s*'([a-zA-Z0-9.*\-]+)'/g)].map((m) => m[1]),
+  [...mirror.matchAll(/id:\s*'([a-zA-Z0-9.*_-]+)'/g)].map((m) => m[1]),
 );
 
 /** Source with comments removed, so a guard cannot be satisfied or tripped by prose. */

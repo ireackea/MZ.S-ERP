@@ -125,7 +125,7 @@ describe('#25 a dirty panel is not unmounted without asking', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: TABS['users.view'] }));
 
-    expect(confirmSpy).toHaveBeenCalled();
+    await waitFor(() => expect(confirmSpy).toHaveBeenCalled());
     // Still on general: the form the operator typed into is still mounted.
     expect(screen.getByLabelText(/اسم الشركة/)).toBeInTheDocument();
     confirmSpy.mockRestore();
@@ -154,5 +154,45 @@ describe('#25 a dirty panel is not unmounted without asking', () => {
 
     expect(confirmSpy).not.toHaveBeenCalled();
     confirmSpy.mockRestore();
+  });
+});
+/**
+ * Gate 4.11 - the tab's declared permission is the one its panel enforces.
+ *
+ * The permissions matrix reads through `users.view`, and both the matrix and
+ * `GET /users/roles` accept exactly that, but the tab was declared `users.update`.
+ * The result is a screen nobody can reach with the permission it actually needs, and
+ * the workaround — handing out a write permission for read-only visibility — is
+ * exactly the kind of grant that gets made once and never revisited.
+ */
+describe('#26 a tab is gated on what its panel requires', () => {
+  it('shows the permissions matrix to a users.view-only session', async () => {
+    mocks.hasPermission.mockImplementation((permission: string) =>
+      ['settings.view.general', 'users.view'].includes(permission));
+
+    renderPage(<SettingsPage {...baseProps()} />);
+
+    expect(await screen.findByRole('tab', { name: 'مصفوفة الصلاحيات' })).toBeInTheDocument();
+  });
+
+  it('hides the reset tab from a session that cannot reset', async () => {
+    mocks.hasPermission.mockImplementation((permission: string) => permission === 'settings.view.general');
+
+    renderPage(<SettingsPage {...baseProps()} />);
+
+    expect(await screen.findByRole('tab', { name: 'الإعدادات العامة' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'إعادة الضبط' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'سجلات التدقيق' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'الثيم واللغة' })).toBeNull();
+  });
+
+  it('shows the reset and audit tabs to the sessions that own them', async () => {
+    mocks.hasPermission.mockImplementation((permission: string) =>
+      ['settings.view.general', 'admin.reset_system', 'users.audit'].includes(permission));
+
+    renderPage(<SettingsPage {...baseProps()} />);
+
+    expect(await screen.findByRole('tab', { name: 'إعادة الضبط' })).toBeInTheDocument();
+    expect(screen.findByRole('tab', { name: 'سجلات التدقيق' })).toBeDefined();
   });
 });

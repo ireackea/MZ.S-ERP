@@ -63,12 +63,33 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
 }) => {
   const { hasPermission, permissions } = usePermissions();
 
+  /**
+   * Gate 4.11 — each tab is gated on what its panel actually requires.
+   *
+   * Two of these disagreed with the panel underneath, and both disagreements bit:
+   * the permissions tab demanded `users.update` while the matrix it renders reads
+   * through `users.view` — so the only permission that could open the screen was one
+   * nobody would grant for read-only visibility, and the workaround was to hand out a
+   * write permission. The printing tab demands `settings.update.system` while sitting
+   * behind `settings.view.general`, which is the same hole in the other direction.
+   *
+   * The rule this list now follows: the tab's permission is the permission its panel
+   * requires to be useful, and nothing about the panel is looser than it.
+   */
   const tabs = useMemo(() => ([
     { key: 'general' as const, label: 'الإعدادات العامة', permission: 'settings.view.general', icon: Settings2 },
     { key: 'reference-data' as const, label: 'الأقسام ووحدات القياس', permission: 'settings.view.general', icon: Package },
     { key: 'users' as const, label: 'المستخدمون والأدوار', permission: 'users.view', icon: Users },
-    { key: 'permissions' as const, label: 'مصفوفة الصلاحيات', permission: 'users.update', icon: Shield },
+    // The matrix is a read-only view over the roles; its panel gates on `users.view`
+    // and `GET /users/roles` requires exactly that.
+    { key: 'permissions' as const, label: 'مصفوفة الصلاحيات', permission: 'users.view', icon: Shield },
     { key: 'backup' as const, label: 'النسخ الاحتياطي', permission: 'backup.view', icon: DatabaseBackup },
+    // `reset`, `audit` and `theme` keep the permission their panel enforces. They are
+    // also reachable through dedicated routes — see `App.tsx` — because the single
+    // `/settings` gate is `settings.view.general`, which a holder of exactly one of
+    // these may not have. Without those routes a role granted only `admin.reset_system`
+    // could never reach the screen it was granted, and the workaround was to hand out
+    // the settings-view permission as well.
     { key: 'reset' as const, label: 'إعادة الضبط', permission: 'admin.reset_system', icon: RefreshCcw },
     { key: 'audit' as const, label: 'سجلات التدقيق', permission: 'users.audit', icon: FileText },
     { key: 'offline' as const, label: 'إعدادات الأوفلاين', permission: 'settings.view.general', icon: LayoutGrid },
