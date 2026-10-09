@@ -32,6 +32,15 @@ export type SettingDefinition = {
   defaultValue: string | number | boolean;
   /** A value the server refuses to blank. It is printed on every document. */
   required?: boolean;
+  /**
+   * Gate 4.16 - the length the server will accept.
+   *
+   * The form already enforced these as input limits. They were not declared here, so
+   * a request that never went through the form could store any length into a TEXT
+   * column and have it appear on every document header — which is why a limit only
+   * the browser enforces is not a limit.
+   */
+  maxLength?: number;
 };
 
 /**
@@ -47,13 +56,13 @@ export type SettingDefinition = {
  * A setting that can be written but never edited is where values go to be lost.
  */
 export const SETTING_CATALOGUE: readonly SettingDefinition[] = [
-  { key: 'company.name', label: 'اسم الشركة', category: 'company', valueType: 'string', defaultValue: '', required: true },
-  { key: 'company.address', label: 'العنوان', category: 'company', valueType: 'string', defaultValue: '' },
-  { key: 'company.phone', label: 'الهاتف', category: 'company', valueType: 'string', defaultValue: '' },
-  { key: 'company.email', label: 'البريد الإلكتروني', category: 'company', valueType: 'string', defaultValue: '' },
-  { key: 'company.taxId', label: 'الرقم الضريبي', category: 'company', valueType: 'string', defaultValue: '' },
-  { key: 'company.logoUrl', label: 'رابط الشعار', category: 'company', valueType: 'string', defaultValue: '' },
-  { key: 'company.currency', label: 'العملة', category: 'company', valueType: 'string', defaultValue: 'EGP', required: true },
+  { key: 'company.name', label: 'اسم الشركة', category: 'company', valueType: 'string', defaultValue: '', required: true, maxLength: 120 },
+  { key: 'company.address', label: 'العنوان', category: 'company', valueType: 'string', defaultValue: '', maxLength: 240 },
+  { key: 'company.phone', label: 'الهاتف', category: 'company', valueType: 'string', defaultValue: '', maxLength: 40 },
+  { key: 'company.email', label: 'البريد الإلكتروني', category: 'company', valueType: 'string', defaultValue: '', maxLength: 120 },
+  { key: 'company.taxId', label: 'الرقم الضريبي', category: 'company', valueType: 'string', defaultValue: '', maxLength: 40 },
+  { key: 'company.logoUrl', label: 'رابط الشعار', category: 'company', valueType: 'string', defaultValue: '', maxLength: 500 },
+  { key: 'company.currency', label: 'العملة', category: 'company', valueType: 'string', defaultValue: 'EGP', required: true, maxLength: 16 },
   { key: 'operations.defaultUnloadingDuration', label: 'مدة التفريغ الافتراضية (دقيقة)', category: 'operations', valueType: 'number', defaultValue: 60 },
   { key: 'operations.defaultDelayPenalty', label: 'غرامة التأخير الافتراضية', category: 'operations', valueType: 'number', defaultValue: 0 },
 ];
@@ -262,7 +271,43 @@ async update(dto: UpdateSystemSettingsDto, actorId: string | null) {
     if (definition.required && !text.trim()) {
       throw new BadRequestException(`${definition.label} is required and cannot be left blank`);
     }
-    return text;
+
+    // Gate 4.16 - the length and shape of a printed value are enforced here, not only
+    // in the form.
+    //
+    // `maxLength` existed as client-side input limits and nothing else, so a request
+    // that skipped the form could store a five-thousand-character company name into a
+    // TEXT column and have it appear on every document header. The server is the
+    // authority on what it accepts; a limit the browser enforces and the API does not
+    // is a limit with no meaning.
+    const trimmed = text.trim();
+    if (definition.maxLength && trimmed.length > definition.maxLength) {
+      throw new BadRequestException(
+        `${definition.label} must not exceed ${definition.maxLength} characters`,
+      );
+    }
+
+    // The logo URL is stored and then fetched by the browser from an <img>, so the
+    // scheme is a security decision and not a formatting one. `data:` and
+    // `javascript:` were reachable through any non-form write path.
+    if (definition.key === 'company.logoUrl' && trimmed) {
+      if (!/^https?:\/\//i.test(trimmed)) {
+        throw new BadRequestException(`${definition.label} must be an http or https URL`);
+      }
+    }
+
+    // Printed on every document and read by people. Nothing checked it was an address,
+    // so a typo was stored and shipped.
+    if (definition.key === 'company.email' && trimmed) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+        throw new BadRequestException(`${definition.label} must be an email address`);
+      }
+    }
+
+    // Trimmed before storing, not only before validating: `" اكتب "` was persisted with
+    // its padding, and the compare-and-set below then compared padded strings, so the
+    // audit row recorded the padded value too.
+    return trimmed;
   }
 
   private coerce(stored: string | null, definition: SettingDefinition): string | number | boolean {

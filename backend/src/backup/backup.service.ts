@@ -1971,12 +1971,29 @@ export class BackupService implements OnModuleDestroy {
     if (!isPostgresUrl(databaseUrl)) {
       throw new BadRequestException('Restore needs a PostgreSQL DATABASE_URL');
     }
+
+    // Gate 4.18 - the same exclusion the base64 path has always had.
+    //
+    // v3 is the default write format, so this is the path most restores take, and it
+    // carried neither guard: two concurrent restores ran two `pg_restore` children
+    // against one database with a live connection pool, and a scheduled backup could
+    // start underneath a `--clean` and record itself with a green integrity badge.
+    this.assertNoRestoreOrSchedulerInFlight();
+    this.restoreInFlight = true;
+    // Release the pool so the restore is not fighting live connections.
+    await this.prisma.$disconnect();
+
     // Awaited here rather than handed over: the member read opens the file, and doing
     // that inside `pg_restore`'s lifetime would leave a stream open across the spawn.
-    return await restorePostgresFromStream(databaseUrl, await source(), {
-      tables: tables ? [...tables] : undefined,
-      singleTransaction: true,
-    });
+    try {
+      return await restorePostgresFromStream(databaseUrl, await source(), {
+        tables: tables ? [...tables] : undefined,
+        singleTransaction: true,
+      });
+    } finally {
+      this.restoreInFlight = false;
+      await this.prisma.$connect();
+    }
   }
 
   /**
@@ -2647,28 +2664,35 @@ export class BackupService implements OnModuleDestroy {
    */
   private restoreInFlight = false;
 
+  /**
+   * Gate 4.18 — one exclusion, every restore path.
+   *
+   * These two checks lived inside `restoreDatabaseFromBase64` only, which meant the
+   * v3 stream path — the default write format — had neither. The checks are extracted
+   * here so the next restore path cannot be added without them.
+   */
+  private assertNoRestoreOrSchedulerInFlight() {
+    if (this.restoreInFlight) {
+      throw new ConflictException('Another restore is already running. Wait for it to finish.');
+    }
+    if (this.schedulerRunning) {
+      throw new ConflictException(
+        'A scheduled backup is being taken right now. Try the restore again in a moment.',
+      );
+    }
+  }
+
   private async restoreDatabaseFromBase64(dbBase64: string, tables?: readonly string[] | null) {
     const databaseUrl = String(process.env.DATABASE_URL || '').trim();
     if (!isPostgresUrl(databaseUrl)) {
       throw new BadRequestException('Database restore is only supported for PostgreSQL deployments');
     }
 
-    if (this.restoreInFlight) {
-      throw new ConflictException('Another restore is already running. Wait for it to finish.');
-    }
-    // B3 — the other half of the same exclusion. A scheduled backup that starts
-    // while a restore is mid-`pg_restore` is not a slower backup, it is a different
-    // failure: `--clean` is dropping and recreating tables underneath it, so the
-    // dump captures a half-rebuilt schema, and the archive it produces is written to
-    // the manifest with a checksum and a green integrity badge as though it were a
-    // point-in-time picture. It would also hold the table locks the restore is
-    // trying to acquire. Refusing the restore instead is the honest answer: it is
-    // retriable, and the operator is told why.
-    if (this.schedulerRunning) {
-      throw new ConflictException(
-        'A scheduled backup is being taken right now. Try the restore again in a moment.',
-      );
-    }
+    // B3 — the exclusion is mutual, and the flag is claimed only after both halves
+    // have been checked: setting it before would hide the second check from a
+    // concurrent caller entirely.
+    this.assertNoRestoreOrSchedulerInFlight();
+
     this.restoreInFlight = true;
 
     // Release the pool so the restore is not fighting live connections.
@@ -3230,6 +3254,20 @@ export class BackupService implements OnModuleDestroy {
 
     let restoredConfigFiles = 0;
     if (payload.type !== 'config') {
+      // Gate 4.18 - the exclusion applies to whichever path the archive took.
+      //
+      // `restoreInFlight` and `schedulerRunning` were checked inside
+      // `restoreDatabaseFromBase64` and nowhere else, and v3 — the default write
+      // format — reaches `restoreDatabaseFromStream`, which had neither check. So two
+      // concurrent restores of a v3 archive ran two `pg_restore` children against one
+      // database with a live connection pool, and a scheduled backup could start
+      // mid-restore: `--clean` dropping and recreating tables underneath a dump that
+      // then records itself with a checksum and a green integrity badge.
+      //
+      // Each preview takes its own snapshot and mints its own one-time token, so
+      // nothing upstream prevented the second one. The guard is shared now rather than
+      // duplicated, so a fourth restore path cannot appear without it.
+      await this.assertNoRestoreOrSchedulerInFlight();
       if (payload.dbBase64) {
         await this.restoreDatabaseFromBase64(payload.dbBase64, payload.partialTables);
       } else if (opened.databaseStream) {

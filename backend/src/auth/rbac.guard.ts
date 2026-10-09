@@ -100,8 +100,24 @@ export class RbacGuard implements CanActivate {
       // missing: the cookie path also lands here, and treating a session cookie
       // as a service token is what handed every signed-in user the whole backup
       // surface.
+      //
+      // Gate 4.17 - and the wildcard is narrower than it was.
+      //
+      // `['backup.*']` included `backup.restore`, `backup.delete` and `backup.import`,
+      // so a single shared secret reached every destructive action on the backup
+      // surface: replace the database, delete every archive, or import one from a file.
+      // The token exists for a scheduler that creates and reads backups. Restore and
+      // delete keep requiring a session — `POST /backup/restore` already adds
+      // `JwtAuthGuard` and rejects `actor.type !== 'user'` for the same reason.
+      //
+      // Deliberately a list and not a wildcard-minus: a new `backup.*` permission
+      // added later is denied to the token until somebody decides it should have it,
+      // which is the direction that leaks less.
       if (String(backupActor.type || '') === 'system') {
-        return { role, permissions: ['backup.*'] };
+        return {
+          role,
+          permissions: ['backup.view', 'backup.create', 'backup.schedule', 'backup.health'],
+        };
       }
 
       // Everyone else is authorized by what their role actually grants. An empty

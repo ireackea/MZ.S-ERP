@@ -22,7 +22,6 @@ import {
 } from 'lucide-react';
 import { usePermissions } from '@hooks/usePermissions';
 import { useSession } from '@hooks/useSession';
-import { hasGrantedPermission } from '@services/permissionMatcher';
 import { toast } from '@services/toastService';
 import {
   systemResetService,
@@ -132,11 +131,6 @@ const PROGRESS_STEPS = [
 const stageOrder: StageKey[] = ['gate', 'scope', 'reason', 'challenge', 'confirm', 'progress', 'done'];
 const RESET_PERMISSION = 'admin.reset_system';
 
-const normalizePermissions = (permissions: unknown): string[] => {
-  if (!Array.isArray(permissions)) return [];
-  return [...new Set(permissions.filter((entry): entry is string => typeof entry === 'string'))];
-};
-
 const formatRemaining = (ms: number): string => {
   const total = Math.max(0, Math.floor(ms / 1000));
   const m = Math.floor(total / 60).toString().padStart(2, '0');
@@ -149,15 +143,17 @@ const SystemReset: React.FC<SystemResetProps> = ({ currentUser }) => {
   const { data: session } = useSession();
 
   const effectiveRole = String(currentUser?.role || session?.user?.role || '').trim();
-  const currentUserPermissions = normalizePermissions(currentUser?.permissions);
-  const sessionUserPermissions = normalizePermissions(session?.user?.permissions);
-  // FC-SEC-005 — fail-closed. The role-name fallback used to hand this screen a
-  // full Admin grant whenever no permission list had arrived yet, which is
-  // exactly the window during bootstrap. The gate now depends only on grants the
-  // server actually issued.
-  const effectivePermissions = [...new Set([...permissions, ...currentUserPermissions, ...sessionUserPermissions])];
   const isSuperAdmin = effectiveRole.toLowerCase() === 'superadmin';
-  const canViewReset = hasPermission(RESET_PERMISSION) || hasGrantedPermission(effectivePermissions, RESET_PERMISSION);
+  // Gate 4.20 - the session, and nothing else.
+  //
+  // This unioned the session's permissions with `currentUser.permissions` and the
+  // session user's own list. That is the fail-open direction: a permission removed
+  // from a role stays visible until the next sign-in while every call returns 403.
+  // `Settings.tsx` carried the same union and was rewritten to read one source —
+  // `App.tsx` writes the reconciled user back when the users list changes — and the
+  // answer here is the same. The SuperAdmin role check below stays, because the
+  // server enforces it and the screen should not offer what the server will refuse.
+  const canViewReset = hasPermission(RESET_PERMISSION);
   const canExecuteReset = canViewReset && isSuperAdmin;
 
   const [stage, setStage] = useState<StageKey>('gate');

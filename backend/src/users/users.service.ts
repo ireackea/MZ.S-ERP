@@ -1128,11 +1128,20 @@ export class UsersService {
       data: { roleId: role.id },
     });
 
+    // Gate 4.15 - the subject of this row was the role, not a user.
+    //
+    // `userId` is a foreign key to `User`, and this passed `role.id`, so every bulk
+    // reassignment pointed its audit row at a Role. `buildAuditRow` normalises an id
+    // that is not a real user, but the row still described the wrong object, and a
+    // reader following `targetUserId` landed on a role.
+    //
+    // The subject is the set of accounts that were reassigned, now in metadata; the
+    // actor stays the actor.
     await this.writeAudit({
-      userId: role.id,
+      userId: actor.id,
       actor,
       action: 'bulk_assign_role',
-      details: `Assigned role ${role.name} to ${result.count} user(s)`,
+      details: `Assigned role ${role.name} to ${result.count} user(s): ${userIds.join(', ')}`,
     });
     await this.auditService.log({
       action: 'BULK_ASSIGN_ROLE',

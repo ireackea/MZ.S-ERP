@@ -169,6 +169,11 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
 
   const [restoreModalOpen, setRestoreModalOpen] = useState(false);
   const [restoreTarget, setRestoreTarget] = useState<BackupHistoryEntry | null>(null);
+  const [restoreBlastRadius, setRestoreBlastRadius] = useState<{
+    replacesDatabase: boolean;
+    replacesIdentity: boolean;
+    tables: string[];
+  } | null>(null);
   const [restoreToken, setRestoreToken] = useState('');
   const [safetySnapshotId, setSafetySnapshotId] = useState('');
   const [restoring, setRestoring] = useState(false);
@@ -447,6 +452,20 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
       setRestoreTarget(entry);
       setRestoreToken(String(preview?.restoreToken || ''));
       setSafetySnapshotId(snapshotId);
+      // Gate 4.23 - the server's own answer to "what does this replace".
+      //
+      // `describeRestoreBlastRadius` computes this from the archive's `partialTables`
+      // rather than from which button was pressed, and the preview has always carried
+      // it. The modal rendered none of it, so the one screen an operator reads before
+      // an irreversible action was the only place in the chain that discarded the
+      // honest answer.
+      setRestoreBlastRadius(preview?.blastRadius
+        ? {
+          replacesDatabase: Boolean(preview.blastRadius.replacesDatabase),
+          replacesIdentity: Boolean(preview.blastRadius.replacesIdentity),
+          tables: Array.isArray(preview.blastRadius.tables) ? preview.blastRadius.tables.map(String) : [],
+        }
+        : null);
       setRestoreModalOpen(true);
       toast.success('أُخذت لقطة أمان قبل الاستعادة. راجع المعاينة قبل التأكيد.');
       await loadData(false);
@@ -475,6 +494,7 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
       });
       toast.success('تم تنفيذ الاستعادة بنجاح. سيتم تحديث الصفحة خلال لحظات.');
       setRestoreModalOpen(false);
+      setRestoreBlastRadius(null);
       await loadData(false);
       setTimeout(() => window.location.reload(), 500);
     } catch (error: any) {
@@ -1082,15 +1102,37 @@ const BackupCenter: React.FC<BackupCenterProps> = ({ currentUser }) => {
               <p>لقطة الأمان المسبقة: <strong>{safetySnapshotId || 'لم يتم الإنشاء بعد'}</strong></p>
             </div>
 
+            {/* Gate 4.23 - the scope of the replacement, from the server. */}
+            {restoreBlastRadius && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900 space-y-1">
+                <p className="font-bold">
+                  {restoreBlastRadius.replacesDatabase
+                    ? 'هذه الاستعادة تستبدل قاعدة البيانات بالكامل.'
+                    : 'هذه الاستعادة تستبدل جداول محددة فقط.'}
+                </p>
+                {restoreBlastRadius.replacesIdentity && (
+                  <p>تشمل استبدال هوية النظام: المستخدمون والجلسات الحالية.</p>
+                )}
+                {restoreBlastRadius.tables.length > 0 && (
+                  <p>الجداول المشمولة: <span className="font-mono" dir="ltr">{restoreBlastRadius.tables.join(', ')}</span></p>
+                )}
+              </div>
+            )}
+
+            {/* Gate 4.23 - and the second factor, named either way. */}
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900 text-sm">
-              <p className="font-semibold inline-flex items-center gap-1"><AlertTriangle size={14} /> سيتم استبدال بيانات النظام الحالية بمحتوى النسخة المحددة بعد إتمام التحقق النهائي.</p>
-              <p className="mt-1">تم إنشاء لقطة أمان تلقائيًا قبل الاستعادة حتى يمكن الرجوع عنها عند الحاجة.</p>
+              {scheduleInfo?.hasRestorePin
+                ? <p className="font-semibold">رمز الاستعادة مُهيّأ على هذا الخادم وسيُطلب قبل التنفيذ.</p>
+                : <p className="font-semibold">
+                    <AlertTriangle size={14} className="inline" /> لم يُهيَّأ رمز استعادة على هذا الخادم، فستُنفَّذ الاستعادة بضغطة واحدة ودون عامل ثانٍ.
+                  </p>}
+              <p className="mt-1">سيتم استبدال بيانات النظام الحالية بمحتوى النسخة المحددة بعد إتمام التحقق النهائي، وقد أُخذت لقطة أمان قبل الاستعادة حتى يمكن الرجوع عنها عند الحاجة.</p>
             </div>
 
             <div className="flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setRestoreModalOpen(false)}
+                onClick={() => { setRestoreModalOpen(false); setRestoreBlastRadius(null); }}
                 className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50"
               >
                 إلغاء

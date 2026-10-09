@@ -42,6 +42,8 @@ type ResetChallenge = {
   actorKey: string;
   expiresAt: number;
   consumed: boolean;
+  /** Gate 4.19 - the scope this challenge was minted for. See `issueResetChallenge`. */
+  scope?: SystemResetScope;
 };
 
 type ResetStage = 'inventory' | 'operational' | 'audit' | 'identity';
@@ -328,6 +330,15 @@ export class MonitoringService {
       actorKey,
       expiresAt: now + MonitoringService.RESET_CHALLENGE_TTL_MS,
       consumed: false,
+      // Gate 4.19 - the scope the operator was looking at, minted into the challenge.
+      //
+      // The request has carried `scope` all along (`POST /admin/reset-system/challenge`
+      // sends it) and this method took it as `_dto` and ignored it. So a challenge
+      // minted while reading the `audit` scope — the narrowest one, which clears a
+      // table and logs everyone out — authorised the `full` reset that clears the
+      // items and the sales documents too. The confirmation ritual was over a
+      // different question than the one answered.
+      scope: _dto?.scope,
     };
     this.resetChallenges.set(challenge.id, challenge);
 
@@ -353,7 +364,10 @@ export class MonitoringService {
     challengeCode: string,
     actorKey: string,
     now: number,
-  ): { ok: true } | { ok: false; reason: 'NOT_FOUND' | 'EXPIRED' | 'MISMATCH' | 'ACTOR_MISMATCH' } {
+    // Gate 4.19 - the scope being executed, so it can be compared with the scope the
+    // challenge was minted for.
+    requestedScope?: SystemResetScope,
+  ): { ok: true } | { ok: false; reason: 'NOT_FOUND' | 'EXPIRED' | 'MISMATCH' | 'ACTOR_MISMATCH' | 'SCOPE_MISMATCH' } {
     const entry = this.resetChallenges.get(challengeId);
     if (!entry) return { ok: false, reason: 'NOT_FOUND' };
     if (entry.consumed || entry.expiresAt <= now) {
@@ -363,6 +377,13 @@ export class MonitoringService {
     if (entry.actorKey !== actorKey) return { ok: false, reason: 'ACTOR_MISMATCH' };
     if (entry.code !== String(challengeCode || '').trim().toUpperCase()) {
       return { ok: false, reason: 'MISMATCH' };
+    }
+    // Gate 4.19 - the point of binding the scope. A challenge minted against a narrow
+    // scope was authorising the widest one, because nothing recorded which was asked.
+    // Older challenges carry no scope, and those keep working rather than being
+    // invalidated by a deployment that adds the field.
+    if (entry.scope && requestedScope && entry.scope !== requestedScope) {
+      return { ok: false, reason: 'SCOPE_MISMATCH' };
     }
     entry.consumed = true;
     this.resetChallenges.delete(challengeId);
@@ -742,6 +763,9 @@ export class MonitoringService {
       String(dto.challengeCode || '').trim(),
       actorKey,
       now,
+      // Gate 4.19 - the scope being executed is what the challenge is now checked
+      // against, rather than being accepted regardless of what it was minted for.
+      dto.scope,
     );
     if (!challengeResult.ok) {
       const failureReason = (challengeResult as { ok: false; reason: string }).reason;

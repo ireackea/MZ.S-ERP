@@ -312,21 +312,35 @@ test('gate 3 the scheduler and a restore exclude each other', () => {
   // And the refusal is mutual. A restore started underneath a running dump would
   // hold the same table locks from the other side, so the restore is the one that
   // has to yield — it is retriable, and it is told why.
+  //
+  // The checks are in a shared helper, because v3 — the default write format —
+  // reaches `restoreDatabaseFromStream` and had neither of them: two concurrent
+  // restores of a v3 archive ran two `pg_restore` children against one database,
+  // and a scheduled backup could start underneath a `--clean`. Asserted on the
+  // helper and on both call sites, so the next restore path cannot appear without
+  // it.
+  const helper = service.slice(service.indexOf('private assertNoRestoreOrSchedulerInFlight'));
+  const helperBody = helper.slice(0, helper.indexOf('\n  }'));
+  assert.match(helperBody, /if \(this\.restoreInFlight\)/, 'the helper refuses a concurrent restore');
+  assert.match(helperBody, /if \(this\.schedulerRunning\)/, 'the helper refuses to start under a dump');
+
+  assert.match(
+    service,
+    /assertNoRestoreOrSchedulerInFlight\(\)[\s\S]{0,200}restorePostgres\(/,
+    'every restore path must run the exclusion before it reaches pg_restore',
+  );
+
   const restore = service.slice(service.indexOf('private async restoreDatabaseFromBase64'));
   const restoreBody = restore.slice(0, restore.search(/\n {2}(?:async |private |public )/));
-  assert.match(
-    restoreBody,
-    /if \(this\.schedulerRunning\)/,
-    'a restore must refuse to start while the scheduler is dumping',
-  );
   assert.ok(
-    restoreBody.indexOf('schedulerRunning') < restoreBody.indexOf('restorePostgres'),
+    restoreBody.indexOf('assertNoRestoreOrSchedulerInFlight') < restoreBody.indexOf('restorePostgres('),
     'the refusal must precede the destructive restore',
   );
   // Setting the flag after the checks is what makes the exclusion mutual rather
   // than one-directional.
   assert.ok(
-    restoreBody.indexOf('this.restoreInFlight = true') > restoreBody.indexOf('schedulerRunning'),
+    restoreBody.indexOf('this.restoreInFlight = true')
+      > restoreBody.indexOf('assertNoRestoreOrSchedulerInFlight'),
     'the restore flag must be claimed only after both exclusions have been checked',
   );
 });

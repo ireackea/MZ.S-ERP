@@ -748,7 +748,14 @@ export class AuthService {
     newPassword: string,
     clientMeta?: { ipAddress?: string; userAgent?: string },
   ) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      // Gate 4.15 - `role` is joined because the audit rows below name it. It was
+      // hardcoded to 'unknown' instead, on the two most security-sensitive events in
+      // the system, because nothing needed it — so the trail recorded that a password
+      // moved and nothing about who was entitled to move it.
+      include: { role: true },
+    });
     if (!user) {
       throw new UnauthorizedException('Account not found');
     }
@@ -762,7 +769,10 @@ export class AuthService {
         action: 'PASSWORD_CHANGE_REJECTED',
         actorId: user.id,
         actorUsername: user.username,
-        actorRole: 'unknown',
+        // Gate 4.15 - the same hardcoded placeholder, and the reason to remove it is
+        // stronger here: a refused password change is a signal that something tried to
+        // move this credential, and the row said nothing about who.
+        actorRole: user.role?.name ?? 'unknown',
         targetUserId: user.id,
         targetResource: 'auth.change-password',
         status: 'failed',
@@ -803,7 +813,12 @@ export class AuthService {
       action: 'PASSWORD_CHANGED',
       actorId: user.id,
       actorUsername: user.username,
-      actorRole: 'unknown',
+      // Gate 4.15 - the role of the account that changed its own password, not a
+      // placeholder. This is the most security-sensitive event in the system and the
+      // row used to hardcode 'unknown', so the trail recorded that a password changed
+      // and nothing about who was entitled to change it. `user.role` is loaded by the
+      // caller for the SuperAdmin check above.
+      actorRole: user.role?.name ?? 'unknown',
       targetUserId: user.id,
       targetResource: 'auth.change-password',
       status: 'success',

@@ -312,7 +312,30 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ settings, onUpdateSet
               <input
                 id={`settings-field-${String(binding.field)}`}
                 value={isText ? String(rawValue ?? '') : Number(rawValue ?? 0)}
-                onChange={(event) => update(binding.field, (isText ? event.target.value : Number(event.target.value)) as never)}
+                onChange={(event) => {
+                  // Gate 4.21 - `Number('')` is 0 and `Number('-')` is NaN.
+                  //
+                  // Both are printed on documents, so an emptied field writing a silent
+                  // 0 is the worse of the two, and a stray dash writing NaN serialises
+                  // to null on the wire and comes back as a bare English 400. The
+                  // server refuses non-finite and negative values, but nothing here
+                  // should be able to produce them for it to refuse.
+                  //
+                  // Unreachable today: no editable binding is numeric. That is exactly
+                  // why it needs the guard before one becomes editable, rather than
+                  // after.
+                  if (!isText) {
+                    const text = event.target.value;
+                    const parsed = text.trim() === '' ? null : Number(text);
+                    if (parsed === null || !Number.isFinite(parsed)) return;
+                    update(
+                      binding.field,
+                      (parsed < 0 ? Math.abs(parsed) : parsed) as never,
+                    );
+                    return;
+                  }
+                  update(binding.field, event.target.value as never);
+                }}
                 required={binding.required}
                 disabled={loading || saving}
                 aria-invalid={issue ? true : undefined}

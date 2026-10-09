@@ -9,7 +9,15 @@ i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
-    debug: true,
+    // Gate 4.22 - was `true`, unconditionally, in a production build.
+    //
+    // `useTranslation` has no call site anywhere in the app, so nothing consumes this
+    // and the debug output was pure console noise in front of operators — the kind
+    // that trains people to ignore the console, which is where real errors go. The
+    // honest options are to delete the initialisation or to switch the flag off and
+    // keep the wiring; the second is the smaller change and keeps the language
+    // detector available if a screen ever wants it.
+    debug: import.meta.env.DEV,
     fallbackLng: 'en',
     interpolation: {
       escapeValue: false, // not needed for react as it escapes by default

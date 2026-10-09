@@ -31,16 +31,33 @@ test('gate 1.1 no principal is granted backup.* without holding it', () => {
   // permissive to be a guard or too strict to survive a reformat.
   const branch = guard.slice(guard.indexOf('const backupActor = request?.backupActor;'));
   const systemCheck = branch.indexOf("=== 'system'");
-  const widening = branch.indexOf("['backup.*']");
+  const systemReturn = branch.search(/^\s*return\s*\{\s*role,\s*permissions:/m);
 
-  assert.ok(systemCheck >= 0, 'the widening must be gated on the actor being a service token');
-  assert.ok(widening > systemCheck, 'the backup.* grant must come after the type check, not before it');
+  assert.ok(systemCheck >= 0, 'the service-token branch must be gated on the actor being a service token');
+  assert.ok(systemReturn > systemCheck, 'the service-token grant must come after the type check');
 
-  const between = branch.slice(systemCheck, widening);
+  // Everything between the type check and the widened return must be the return
+  // statement itself: nothing in between means no other principal reaches this grant.
+  const between = branch.slice(systemCheck, systemReturn + branch.slice(systemReturn).indexOf('}'));
   assert.match(
     between,
     /=== 'system'\)\s*\{\s*return\s*\{\s*role,\s*permissions:/,
     'the type check must immediately guard the widened return, with nothing in between',
+  );
+
+  // The grant itself is an explicit list, never a wildcard: a token that creates and
+  // reads backups must not be able to replace the database, delete every archive, or
+  // import one from a file. A wildcard here is the same bypass in a smaller font.
+  const grant = between.slice(between.indexOf('permissions:'));
+  assert.doesNotMatch(
+    grant,
+    /backup\.\*/,
+    'the service token must not be granted backup.* — restore, delete and import need a session',
+  );
+  assert.match(
+    grant,
+    /'backup\.create'/,
+    'the token keeps the permission it exists for',
   );
 });
 
