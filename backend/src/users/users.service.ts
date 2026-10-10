@@ -367,12 +367,6 @@ export class UsersService {
       include: { role: true, createdOpeningBalances: { select: { id: true } } },
     });
 
-    await this.writeAudit({
-      userId: user.id,
-      actor,
-      action: 'create',
-      details: `Created user ${user.username} with role ${role.name}`,
-    });
     await this.auditService.log({
       action: 'USER_CREATE',
       actorId: actor.id,
@@ -458,12 +452,6 @@ export class UsersService {
       requestedBy: actor.username,
     });
 
-    await this.writeAudit({
-      userId,
-      actor,
-      action: 'invite',
-      details: `Invitation sent to ${email} with role ${role.name}`,
-    });
     await this.auditService.log({
       action: 'INVITATION_SENT',
       actorId: actor.id,
@@ -693,16 +681,6 @@ export class UsersService {
       },
     });
 
-    await this.writeAudit({
-      userId: updated.id,
-      actor: {
-        id: updated.id,
-        username: updated.username,
-        role: updated.role.name,
-      },
-      action: 'accept_invitation',
-      details: `Invitation accepted for ${updated.email || updated.username}`,
-    });
     await this.auditService.log({
       action: 'INVITATION_ACCEPTED',
       actorId: updated.id,
@@ -885,12 +863,6 @@ export class UsersService {
       });
     });
 
-    await this.writeAudit({
-      userId: updated.id,
-      actor,
-      action: 'update',
-      details: `Updated user ${updated.username}`,
-    });
     await this.auditService.log({
       action: 'USER_UPDATE',
       actorId: actor.id,
@@ -931,12 +903,6 @@ export class UsersService {
       await this.prisma.user.delete({ where: { id } });
     });
 
-    await this.writeAudit({
-      userId: id,
-      actor,
-      action: 'delete',
-      details: `Deleted user ${existing.username}`,
-    });
     await this.auditService.log({
       action: 'USER_DELETE',
       actorId: actor.id,
@@ -1010,14 +976,6 @@ export class UsersService {
       });
     });
 
-    await this.writeAudit({
-      userId: id,
-      actor,
-      action: locked ? 'lock' : 'unlock',
-      details: locked
-        ? `Locked account for ${durationMinutes} minute(s). reason=${dto.reason || 'n/a'}`
-        : 'Unlocked account',
-    });
     await this.auditService.log({
       action: locked ? 'USER_LOCK' : 'USER_UNLOCK',
       actorId: actor.id,
@@ -1123,12 +1081,6 @@ export class UsersService {
       return { role: updated };
     });
 
-    await this.writeAudit({
-      userId: roleId,
-      actor,
-      action: 'role_permissions_update',
-      details: `Updated role permissions for ${role.name}`,
-    });
     await this.auditService.log({
       action: 'ROLE_PERMISSIONS_UPDATE',
       actorId: actor.id,
@@ -1175,13 +1127,6 @@ export class UsersService {
     // reader following `targetUserId` landed on a role.
     //
     // The subject is the set of accounts that were reassigned, now in metadata; the
-    // actor stays the actor.
-    await this.writeAudit({
-      userId: actor.id,
-      actor,
-      action: 'bulk_assign_role',
-      details: `Assigned role ${role.name} to ${result.count} user(s): ${userIds.join(', ')}`,
-    });
     await this.auditService.log({
       action: 'BULK_ASSIGN_ROLE',
       actorId: actor.id,
@@ -1228,12 +1173,6 @@ export class UsersService {
       });
     });
 
-    await this.writeAudit({
-      userId: 'bulk',
-      actor,
-      action: 'bulk_delete',
-      details: `Deleted ${result.count} user(s)`,
-    });
     await this.auditService.log({
       action: 'BULK_DELETE_USERS',
       actorId: actor.id,
@@ -1486,24 +1425,6 @@ export class UsersService {
     await fs.writeFile(this.invitationOutboxPath, JSON.stringify(next, null, 2), 'utf8');
   }
 
-  private async writeAudit(params: {
-    userId: string;
-    actor: ActorContext;
-    action: UserAuditLog['action'];
-    details: string;
-  }) {
-    await this.auditService.log({
-      action: this.mapLegacyAction(params.action),
-      actorId: params.actor.id,
-      actorUsername: params.actor.username,
-      actorRole: params.actor.role,
-      targetUserId: params.userId === 'bulk' ? undefined : params.userId,
-      targetResource: 'users.audit',
-      status: 'success',
-      message: params.details,
-    });
-  }
-
   private toUserAuditLog(entry: Awaited<ReturnType<AuditService['listLogs']>>[number], userId: string): UserAuditLog | null {
     const action = this.mapAuditActionToUserAction(entry.action);
     if (!action) return null;
@@ -1547,31 +1468,5 @@ export class UsersService {
     }
   }
 
-  private mapLegacyAction(action: UserAuditLog['action']) {
-    switch (action) {
-      case 'create':
-        return 'USER_CREATE' as const;
-      case 'update':
-        return 'USER_UPDATE' as const;
-      case 'delete':
-        return 'USER_DELETE' as const;
-      case 'lock':
-        return 'USER_LOCK' as const;
-      case 'unlock':
-        return 'USER_UNLOCK' as const;
-      case 'role_permissions_update':
-        return 'ROLE_PERMISSIONS_UPDATE' as const;
-      case 'bulk_assign_role':
-        return 'BULK_ASSIGN_ROLE' as const;
-      case 'bulk_delete':
-        return 'BULK_DELETE_USERS' as const;
-      case 'invite':
-        return 'INVITATION_SENT' as const;
-      case 'accept_invitation':
-        return 'INVITATION_ACCEPTED' as const;
-      default:
-        return 'PERMISSION_CHECK' as const;
-    }
-  }
 }
 

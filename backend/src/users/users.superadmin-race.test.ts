@@ -117,7 +117,6 @@ beforeEach(() => {
   service = new UsersService(prisma as never);
   (service as unknown as { auditService: { log: ReturnType<typeof vi.fn> } }).auditService = audit;
   vi.spyOn(service as never, 'publish').mockImplementation(() => undefined);
-  vi.spyOn(service as never, 'writeAudit').mockResolvedValue(undefined as never);
 });
 
 const lock = (id: string, actor: typeof adminOne) =>

@@ -39,7 +39,6 @@ const service = new UsersService(prisma as never);
   service as unknown as { auditService: { log: ReturnType<typeof vi.fn> } }
 ).auditService = { log: vi.fn().mockResolvedValue(undefined) };
 vi.spyOn(service as never, 'publish').mockImplementation(() => undefined);
-vi.spyOn(service as never, 'writeAudit').mockResolvedValue(undefined as never);
 
 /** A SuperAdmin, so the role guard does not answer before the ones under test. */
 const actor = { id: 'actor-1', userId: 'actor-1', actorUsername: 'super', role: 'SuperAdmin' };
